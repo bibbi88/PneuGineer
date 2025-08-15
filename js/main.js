@@ -1,5 +1,5 @@
 // js/main.js
-// Steg 1+2: Tryck-overlay + Stegning av simulering (Step)
+// Tryck-overlay + Stega + pilotsignaler (12/14) för 5/2-ventil
 
 import { addValve52 }        from './valve52.js';
 import { addCylinderDouble } from './cylinderDouble.js';
@@ -11,14 +11,13 @@ import { addOrValve }        from './orValve.js';
 const compLayer = document.getElementById('compLayer');
 const connLayer = document.getElementById('connLayer');
 
-// wires över komponenter men låt bara själva path:en få klick
 connLayer.style.zIndex = '2';
 compLayer.style.zIndex = '1';
 connLayer.style.pointerEvents = 'none';
 
 /* ---------- App-state ---------- */
-let components = [];    // { id,type,el,x,y, ports:{k:{cx,cy,el}}, ... }
-let connections = [];   // { from:{id,port}, to:{id,port}, pathEl }
+let components = [];
+let connections = [];
 let nextId = 1;
 let pendingPort = null;
 
@@ -28,8 +27,8 @@ let selectedComponent  = null;
 const Modes = { STOP:'stop', PLAY:'play', PAUSE:'pause' };
 let simMode = Modes.STOP;
 
-const DEFAULT_VALVE_STATE = 1; // 5/2 startläge
-const DEFAULT_CYL_POS     = 0; // cylinder helt indragen
+const DEFAULT_VALVE_STATE = 1;
+const DEFAULT_CYL_POS     = 0;
 
 /* ---------- Undo/Redo ---------- */
 const HISTORY_LIMIT = 50;
@@ -46,18 +45,15 @@ function canEdit(){ return simMode === Modes.STOP; }
 function portGlobalPosition(comp, portKey){
   const p = comp.ports?.[portKey];
   if (!p) return { x: comp.x, y: comp.y };
-
-  // Om komponenten ger svgW/svgH + gx/gy så är p.cx/p.cy i lokala SVG-koordinater
-  if (comp.svgW && comp.svgH && (comp.gx !== undefined) && (comp.gy !== undefined)) {
+  if (comp.svgW && comp.svgH && (comp.gx !== undefined) && (comp.gy !== undefined)){
     const svg0x = comp.x - comp.svgW/2;
     const svg0y = comp.y - comp.svgH/2;
     return { x: svg0x + comp.gx + p.cx, y: svg0y + comp.gy + p.cy };
   }
-  // fallback (gamla komponenter)
   return { x: comp.x + p.cx, y: comp.y + p.cy };
 }
 
-/* ---------- Wire-dragning (ortogonal, sista biten vertikal) ---------- */
+/* ---------- Wires (ortogonalt, sista segmentet vertikalt) ---------- */
 function drawWirePath(x1, y1, x2, y2){
   const stub = 14;
   if (x1 === x2) return `M ${x1},${y1} L ${x2},${y2}`;
@@ -90,9 +86,7 @@ function redrawConnections(){
 /* ---------- Val / radering ---------- */
 function selectConnection(conn){
   clearSelectedComponent();
-  if (selectedConnection && selectedConnection!==conn){
-    selectedConnection.pathEl.classList.remove('selected');
-  }
+  if (selectedConnection && selectedConnection!==conn) selectedConnection.pathEl.classList.remove('selected');
   selectedConnection = conn;
   if (selectedConnection) selectedConnection.pathEl.classList.add('selected');
 }
@@ -104,9 +98,7 @@ function clearSelectedConnection(){
 }
 function selectComponent(comp){
   clearSelectedConnection();
-  if (selectedComponent && selectedComponent!==comp){
-    selectedComponent.el.classList.remove('selected');
-  }
+  if (selectedComponent && selectedComponent!==comp) selectedComponent.el.classList.remove('selected');
   selectedComponent = comp;
   if (selectedComponent) selectedComponent.el.classList.add('selected');
 }
@@ -296,7 +288,7 @@ function handlePortClick(comp, portKey, portEl){
 function computePressureSet(){
   const key = (id,port)=> `${id}:${port}`;
 
-  // 1) bygg graf av ledningar (odirigerat)
+  // 1) graf av ledningar
   const adj = new Map();
   const addUndirected = (a,b)=>{
     if (!adj.has(a)) adj.set(a, new Set());
@@ -307,16 +299,16 @@ function computePressureSet(){
     addUndirected(key(conn.from.id, conn.from.port), key(conn.to.id, conn.to.port));
   });
 
-  // 2) startnoder = tryckkällor
+  // 2) start = tryckkällor
   const start = [];
   components.forEach(c=>{
-    if (c.type === 'source'){
+    if (c.type==='source'){
       if (c.ports?.OUT) start.push(key(c.id,'OUT'));
-      if (c.ports?.P)   start.push(key(c.id,'P')); // bakåtkomp
+      if (c.ports?.P)   start.push(key(c.id,'P'));
     }
   });
 
-  // 3) flood från källor via kablage
+  // 3) flood via kablage
   const pressurized = new Set(start);
   const q = [...start];
   while(q.length){
@@ -324,24 +316,20 @@ function computePressureSet(){
     const nbrs = adj.get(cur);
     if (!nbrs) continue;
     for (const n of nbrs){
-      if (!pressurized.has(n)){
-        pressurized.add(n);
-        q.push(n);
-      }
+      if (!pressurized.has(n)){ pressurized.add(n); q.push(n); }
     }
   }
 
-  // 4) komponentlogik (5/2, AND, OR) + flood igen vid förändring
+  // 4) komponentlogik + flood igen vid förändring
   let changed = true;
   while (changed){
     changed = false;
 
     // 5/2: 1 <-> (4 eller 2)
     components.forEach(v=>{
-      if (v.type !== 'valve52') return;
+      if (v.type!=='valve52') return;
       const a = (v.state===0) ? '4' : '2';
-      const n1 = `${v.id}:1`;
-      const na = `${v.id}:${a}`;
+      const n1 = `${v.id}:1`, na = `${v.id}:${a}`;
       const before = pressurized.size;
       if (pressurized.has(n1)) pressurized.add(na);
       if (pressurized.has(na)) pressurized.add(n1);
@@ -350,7 +338,7 @@ function computePressureSet(){
 
     // AND: A & B -> OUT
     components.forEach(av=>{
-      if (av.type !== 'andValve') return;
+      if (av.type!=='andValve') return;
       const nA = `${av.id}:A`, nB = `${av.id}:B`, nO = `${av.id}:OUT`;
       const before = pressurized.size;
       if (pressurized.has(nA) && pressurized.has(nB)) pressurized.add(nO);
@@ -359,14 +347,13 @@ function computePressureSet(){
 
     // OR (shuttle): A || B -> OUT
     components.forEach(ov=>{
-      if (ov.type !== 'orValve') return;
+      if (ov.type!=='orValve') return;
       const nA = `${ov.id}:A`, nB = `${ov.id}:B`, nO = `${ov.id}:OUT`;
       const before = pressurized.size;
       if (pressurized.has(nA) || pressurized.has(nB)) pressurized.add(nO);
       if (pressurized.size !== before) changed = true;
     });
 
-    // Om något nytt blev trycksatt: flood igen via kablage
     if (changed){
       const queue = [...pressurized];
       while(queue.length){
@@ -374,10 +361,7 @@ function computePressureSet(){
         const nbrs = adj.get(cur);
         if (!nbrs) continue;
         for (const n of nbrs){
-          if (!pressurized.has(n)){
-            pressurized.add(n);
-            queue.push(n);
-          }
+          if (!pressurized.has(n)){ pressurized.add(n); queue.push(n); }
         }
       }
     }
@@ -390,17 +374,36 @@ let lastPressure = new Set();
 let stepOnceFlag = false; // ⏭️ ett enstaka sim-tick
 
 function simulate(dt){
-  // "spela" om vi är i PLAY eller om vi ska stega just denna frame
   const playing = (simMode === Modes.PLAY) || stepOnceFlag;
 
-  // 1) beräkna tryckbild när playing; i PAUSE behåll senaste; i STOP nollställ
+  // 1) tryckbild
   if (playing){
     lastPressure = computePressureSet();
   } else if (simMode === Modes.STOP){
     lastPressure = new Set();
-  } // i PAUSE: lämna lastPressure orört (visar senaste läge)
+  }
+  // (i PAUSE behåller vi lastPressure)
 
-  // 2) overlay på portar
+  // 2) pilotstyrning (rising-edge) för 5/2 – luftpuls på 12 eller 14 togglar läge
+  if (playing){
+    components.forEach(v=>{
+      if (v.type!=='valve52') return;
+      // initiera minne om saknas
+      if (v._pilot12Prev === undefined) v._pilot12Prev = false;
+      if (v._pilot14Prev === undefined) v._pilot14Prev = false;
+
+      const p12 = lastPressure.has(`${v.id}:12`);
+      const p14 = lastPressure.has(`${v.id}:14`);
+
+      if (p12 && !v._pilot12Prev) v.toggle();
+      if (p14 && !v._pilot14Prev) v.toggle();
+
+      v._pilot12Prev = p12;
+      v._pilot14Prev = p14;
+    });
+  }
+
+  // 3) overlay på portar
   components.forEach(c=>{
     if (!c.ports) return;
     for (const k of Object.keys(c.ports)){
@@ -410,7 +413,7 @@ function simulate(dt){
     }
   });
 
-  // 3) cylinder-rörelse bara när playing (Step eller Play)
+  // 4) cylinder-rörelse
   if (playing){
     components.filter(c=>c.type==='cylDouble' || c.type==='cylinder').forEach(cyl=>{
       const isPress = (id,port)=> lastPressure.has(`${id}:${port}`);
@@ -438,7 +441,7 @@ function simulate(dt){
     });
   }
 
-  // 4) wires: aktiva (blink) där båda ändar har tryck
+  // 5) wires: aktiva (blink) där båda ändar har tryck
   connections.forEach(conn=>{
     const a = `${conn.from.id}:${conn.from.port}`;
     const b = `${conn.to.id}:${conn.to.port}`;
@@ -446,8 +449,7 @@ function simulate(dt){
     conn.pathEl?.classList.toggle('active', active);
   });
 
-  // rensa step-flag efter ett tick
-  stepOnceFlag = false;
+  stepOnceFlag = false; // rensa stegflagga efter ett tick
 }
 
 /* ---------- RAF-loop ---------- */
@@ -472,7 +474,7 @@ function snapshotProject(){
     from:{ id:conn.from.id, port:conn.from.port },
     to:  { id:conn.to.id,   port:conn.to.port }
   }));
-  return { version: 1, comps, conns };
+  return { version: 2, comps, conns };
 }
 function clearProject(){
   connections.forEach(c=>c.pathEl.remove());
@@ -496,9 +498,12 @@ async function loadProject(data){
     if (sc.type === 'source'){
       comp = addSource(sc.x, sc.y, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
     } else if (sc.type === 'valve52'){
-      comp = addValve52(sc.x, sc.y, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
-      if (typeof sc.state==='number' && typeof comp.setState==='function') comp.setState(sc.state);
-      wrapValveToggleGuard(comp);
+      const v = addValve52(sc.x, sc.y, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
+      if (typeof sc.state==='number' && typeof v.setState==='function') v.setState(sc.state);
+      // init pilotminne
+      v._pilot12Prev = false; v._pilot14Prev = false;
+      wrapValveToggleGuard(v);
+      comp = v;
     } else if (sc.type === 'cylDouble' || sc.type === 'cylinder'){
       comp = addCylinderDouble(sc.x, sc.y, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
       if (typeof sc.pos==='number' && typeof comp.setPos==='function') comp.setPos(sc.pos);
@@ -551,10 +556,7 @@ function undo(){
   const prev = JSON.parse(history[history.length-2]);
   history.pop();
   isRestoring = true;
-  loadProject(prev).then(()=>{
-    isRestoring = false;
-    updateUndoRedoButtons();
-  });
+  loadProject(prev).then(()=>{ isRestoring = false; updateUndoRedoButtons(); });
 }
 function redo(){
   if (future.length === 0) return;
@@ -562,10 +564,7 @@ function redo(){
   const current = snapshotProject();
   history.push(JSON.stringify(current));
   isRestoring = true;
-  loadProject(next).then(()=>{
-    isRestoring = false;
-    updateUndoRedoButtons();
-  });
+  loadProject(next).then(()=>{ isRestoring = false; updateUndoRedoButtons(); });
 }
 
 /* ---------- UI ---------- */
@@ -574,8 +573,7 @@ function ensureButton(id, label, onClick){
   if (!btn){
     const side = document.querySelector('.sidebar') || document.body;
     btn = document.createElement('button');
-    btn.id = id;
-    btn.className = 'btn';
+    btn.id = id; btn.className = 'btn';
     side.appendChild(btn);
   }
   btn.textContent = label;
@@ -595,9 +593,8 @@ function setMode(m){
 function updateModeButtons(){
   ensureButton('btnPlay',  simMode===Modes.PLAY  ? '▶️ Spelar…' : '▶️ Spela', ()=> setMode(Modes.PLAY));
   ensureButton('btnStep',  '⏭️ Stega', ()=>{
-    // kör ett enda sim-tick (t.ex. 20 ms) oavsett mode
     stepOnceFlag = true;
-    simulate(0.02);
+    simulate(0.02); // ett kort tick
   });
   ensureButton('btnPause', simMode===Modes.PAUSE ? '⏸️ Paus'   : '⏸️ Pausa', ()=> setMode(Modes.PAUSE));
   ensureButton('btnStop',  '⏹️ Stoppa & återställ', ()=> resetSystem());
@@ -618,21 +615,17 @@ function updateUndoRedoButtons(){
 function resetSystem(){
   setMode(Modes.STOP);
   components.forEach(c=>{
-    if (c.type === 'valve52' && typeof c.setState === 'function') c.setState(DEFAULT_VALVE_STATE);
-    else if ((c.type === 'cylDouble' || c.type === 'cylinder') && typeof c.setPos === 'function') c.setPos(DEFAULT_CYL_POS);
+    if (c.type==='valve52' && typeof c.setState==='function') c.setState(DEFAULT_VALVE_STATE);
+    else if ((c.type==='cylDouble'||c.type==='cylinder') && typeof c.setPos==='function') c.setPos(DEFAULT_CYL_POS);
+    if (c.type==='valve52'){ c._pilot12Prev=false; c._pilot14Prev=false; } // nollställ pilotminne
   });
   connections.forEach(conn => conn.pathEl.classList.remove('active'));
-  lastPressure = new Set(); // nollställ overlay
-  // ta bort pressurized-klass från portar
+  lastPressure = new Set();
   components.forEach(c=>{
     if (!c.ports) return;
-    for (const k of Object.keys(c.ports)){
-      c.ports[k].el?.classList.remove('pressurized');
-    }
+    for (const k of Object.keys(c.ports)){ c.ports[k].el?.classList.remove('pressurized'); }
   });
-  clearSelectedConnection();
-  clearSelectedComponent();
-  hideCtxMenu();
+  clearSelectedConnection(); clearSelectedComponent(); hideCtxMenu();
   pushHistory('Reset');
 }
 
@@ -648,37 +641,34 @@ function addButtons(){
   ensureButton('addSource',  '➕ Tryckkälla', ()=>{
     if (!canEdit()) return;
     const r = workspaceBBox();
-    addSource(r.width*0.15, r.height*0.50,
-              compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
+    addSource(r.width*0.15, r.height*0.50, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
     pushHistory('Add source');
   });
   ensureButton('addValve52', '➕ 5/2-ventil', ()=>{
     if (!canEdit()) return;
     const r = workspaceBBox();
-    const v = addValve52(r.width*0.40, r.height*0.50,
-               compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
+    const v = addValve52(r.width*0.40, r.height*0.50, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
+    // init pilotminne (för kantdetektering)
+    v._pilot12Prev = false; v._pilot14Prev = false;
     wrapValveToggleGuard(v);
     pushHistory('Add valve52');
   });
   ensureButton('addCylDouble','➕ Cylinder, dubbelverkande', ()=>{
     if (!canEdit()) return;
     const r = workspaceBBox();
-    addCylinderDouble(r.width*0.70, r.height*0.50,
-                      compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
+    addCylinderDouble(r.width*0.70, r.height*0.50, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
     pushHistory('Add cylinder');
   });
   ensureButton('addAnd',     '➕ AND-ventil', ()=>{
     if (!canEdit()) return;
     const r = workspaceBBox();
-    addAndValve(r.width*0.25, r.height*0.35,
-                compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
+    addAndValve(r.width*0.25, r.height*0.35, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
     pushHistory('Add AND');
   });
   ensureButton('addOr',      '➕ OR-ventil', ()=>{
     if (!canEdit()) return;
     const r = workspaceBBox();
-    addOrValve(r.width*0.25, r.height*0.65,
-               compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
+    addOrValve(r.width*0.25, r.height*0.65, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
     pushHistory('Add OR');
   });
   ensureButton('saveProj', '💾 Spara projekt', ()=>{
@@ -693,16 +683,9 @@ function addButtons(){
     const inp = document.createElement('input');
     inp.type = 'file'; inp.accept = 'application/json';
     inp.onchange = async (e)=>{
-      const file = e.target.files?.[0];
-      if (!file) return;
-      try {
-        const data = JSON.parse(await file.text());
-        await loadProject(data);
-        pushHistory('Load project');
-      } catch (err){
-        console.error('Fel vid laddning:', err);
-        alert('Ogiltig projektfil.');
-      }
+      const file = e.target.files?.[0]; if (!file) return;
+      try { const data = JSON.parse(await file.text()); await loadProject(data); pushHistory('Load project'); }
+      catch(err){ console.error('Fel vid laddning:', err); alert('Ogiltig projektfil.'); }
     };
     inp.click();
   });
@@ -717,17 +700,15 @@ addButtons();
 /* ---------- Startlayout ---------- */
 window.addEventListener('load', ()=>{
   const r = workspaceBBox();
-  addSource(r.width*0.15, r.height*0.50,
-            compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
-  const v = addValve52(r.width*0.40, r.height*0.50,
-             compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
+  addSource(r.width*0.15, r.height*0.50, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
+  const v = addValve52(r.width*0.40, r.height*0.50, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
+  v._pilot12Prev = false; v._pilot14Prev = false;
   wrapValveToggleGuard(v);
-  addCylinderDouble(r.width*0.70, r.height*0.50,
-                    compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
+  addCylinderDouble(r.width*0.70, r.height*0.50, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
   pushHistory('Initial');
 });
 
-/* ---------- Injicera nödvändig CSS om du inte redan har den ---------- */
+/* ---------- Nödvändig CSS om du inte redan har den ---------- */
 (function injectOverlayCSS(){
   if (document.getElementById('overlayCSS')) return;
   const css = `

@@ -16,7 +16,7 @@ export function addValve52(
   const FONT0 = 10;
   const STROKE0 = 2;
   const MARKERW0 = 6;
-  const SVGW0 = (CELLW0 + 110);   // tidigare: fönster+margin
+  const SVGW0 = (CELLW0 + 110);
   const SVGH0 = (CELLH0 + 0);
 
   // Skalade mått
@@ -61,22 +61,24 @@ export function addValve52(
   defs.appendChild(m);
   svg.appendChild(defs);
 
-  // ======= Rot-grupp (ingen SVG-transform scale här; vi skalar siffror) =======
+  // ======= Rot-grupp =======
   const gRoot = document.createElementNS(svg.namespaceURI,'g');
   gRoot.setAttribute('transform', `translate(${gx},${gy})`);
 
-  // ======= Porterna (fasta, kopplingsbara) =======
-  // Portordning: uppe 4(v), 2(h); nere 5(v), 1(m), 3(h)
+  // ======= Porterna =======
   const ports = {
-    "4": { cx: 10*scale,          cy: -10*scale },
-    "2": { cx: (CELLW0-10)*scale, cy: -10*scale },
-    "5": { cx: 10*scale,          cy: (CELLH0+10)*scale },
-    "1": { cx: (CELLW0/2)*scale,  cy: (CELLH0+10)*scale },
-    "3": { cx: (CELLW0-10)*scale, cy: (CELLH0+10)*scale }
+    "4":  { cx: 10*scale,              cy: -10*scale },
+    "2":  { cx: (CELLW0-10)*scale,     cy: -10*scale },
+    "5":  { cx: 10*scale,              cy: (CELLH0+10)*scale },
+    "1":  { cx: (CELLW0/2)*scale,      cy: (CELLH0+10)*scale },
+    "3":  { cx: (CELLW0-10)*scale,     cy: (CELLH0+10)*scale },
+        "12": { cx: (CELLW0 + 18)*scale,   cy: (CELLH0/2)*scale }   ,      // vänster pilot
+    "14": { cx: (-18)*scale,           cy: (CELLH0/2)*scale },        // höger pilot
+
   };
+
   const portEls = {};
   const gPorts = document.createElementNS(svg.namespaceURI,'g');
-
   for (const key of Object.keys(ports)){
     const c = document.createElementNS(svg.namespaceURI,'circle');
     c.setAttribute('class','port');
@@ -100,7 +102,6 @@ export function addValve52(
   // ======= Lådor + pilar (glider i sidled) =======
   const slideInner = document.createElementNS(svg.namespaceURI,'g');
 
-  // Hjälpare
   const addDoubleArrow = (parent,x1,y1,x2,y2)=>{
     const line = document.createElementNS(svg.namespaceURI,'line');
     line.setAttribute('x1', String(x1));
@@ -134,11 +135,8 @@ export function addValve52(
   r0.setAttribute('stroke-width', String(stroke));
   cell0.appendChild(r0);
 
-  // 1↔4 (diagonal från botten mitt till övre vänster)
   addDoubleArrow(cell0, (CELLW0/2)*scale, CELLH0*scale, 10*scale, 10*scale);
-  // 2↔3 (vertikal i höger del av vänster cell)
   addDoubleArrow(cell0, (CELLW0-10)*scale, 10*scale, (CELLW0-10)*scale, CELLH0*scale);
-  // block 5 (vänster nedre)
   addBlock(cell0, 2*scale, (CELLH0/2 - 8)*scale, 8*scale, 16*scale);
 
   // Cell 1 (höger)
@@ -153,18 +151,15 @@ export function addValve52(
   r1.setAttribute('stroke-width', String(stroke));
   cell1.appendChild(r1);
 
-  // 1↔2 (diagonal inom höger cell)
   addDoubleArrow(cell1, (CELLW0/2)*scale, CELLH0*scale, (CELLW0-10)*scale, 10*scale);
-  // 4↔5 (vertikal i vänsterkant av höger cell)
   addDoubleArrow(cell1, 10*scale, 10*scale, 10*scale, CELLH0*scale);
-  // block 3 (höger nedre)
   addBlock(cell1, (CELLW0-12)*scale, (CELLH0/2 - 8)*scale, 8*scale, 16*scale);
 
   slideInner.append(cell0, cell1);
 
-  // Lägg till i roten: portar (statiska) först, sedan glidande grafik
-  gRoot.appendChild(gPorts);
-  gRoot.appendChild(slideInner);
+  // ======= Lägg i rätt ordning =======
+  gRoot.appendChild(slideInner); // lådor under
+  gRoot.appendChild(gPorts);     // portar över
   svg.appendChild(gRoot);
 
   el.append(label, svg);
@@ -174,29 +169,29 @@ export function addValve52(
     id,
     type: 'valve52',
     el, x, y,
-    // Viktigt: använd de SKALADE måtten för kopplingsmatematiken
     svgW, svgH, gx, gy,
     state: 1,
     ports: {
-      "4": { cx: ports["4"].cx, cy: ports["4"].cy, el: portEls["4"] },
-      "2": { cx: ports["2"].cx, cy: ports["2"].cy, el: portEls["2"] },
-      "5": { cx: ports["5"].cx, cy: ports["5"].cy, el: portEls["5"] },
-      "1": { cx: ports["1"].cx, cy: ports["1"].cy, el: portEls["1"] },
-      "3": { cx: ports["3"].cx, cy: ports["3"].cy, el: portEls["3"] }
+      "4":  { cx: ports["4"].cx,  cy: ports["4"].cy,  el: portEls["4"]  },
+      "2":  { cx: ports["2"].cx,  cy: ports["2"].cy,  el: portEls["2"]  },
+      "5":  { cx: ports["5"].cx,  cy: ports["5"].cy,  el: portEls["5"]  },
+      "1":  { cx: ports["1"].cx,  cy: ports["1"].cy,  el: portEls["1"]  },
+      "3":  { cx: ports["3"].cx,  cy: ports["3"].cy,  el: portEls["3"]  },
+      "12": { cx: ports["12"].cx, cy: ports["12"].cy, el: portEls["12"] },
+      "14": { cx: ports["14"].cx, cy: ports["14"].cy, el: portEls["14"] }
     },
     setState(s){
       this.state = s ? 1 : 0;
-      const shift = (this.state === 0) ? 0 : -cellW; // skjut exakt en (SKALAD) cellbredd
+      const shift = (this.state === 0) ? 0 : -cellW;
       slideInner.setAttribute('transform', `translate(${shift},0)`);
       redrawConnections();
     },
     toggle(){ this.setState(1 - this.state); }
   };
 
-  // Start i läge 1
+  // Startläge
   comp.setState(1);
 
-  // Klick i cellerna växlar
   r0.addEventListener('click', ()=> comp.toggle());
   r1.addEventListener('click', ()=> comp.toggle());
 
