@@ -11,13 +11,16 @@ export function addCylinderDouble(
   const id = uid();
   const s = (n)=> n * SCALE;
 
-  // Vi ger extra bredd åt höger så att full stångutgång syns
-  const SVG_W = 360;   // större för att rymma tippens fulla slag (W-20)
-  const SVG_H = 170;
-  const GX = 10, GY = 25;
+  // Kompaktare box: lägre SVG_H och mindre top-offset (GY)
+  const SVG_W = 340;   // rymmer hela stångens utstick
+  const SVG_H = 50;   // kompaktare på höjden (var 170)
+  const GX = 10, GY = 10;
 
-  // Oskalerade husmått
+  // Oskalerade husmått (samma cylinderkropp)
   const W = 160, H = 40;
+
+  // Mindre marginal till portar (gör det lättare att koppla underifrån)
+  const PORT_MARGIN = 6; // var 12
 
   const el = document.createElement('div');
   el.className = 'comp';
@@ -33,6 +36,8 @@ export function addCylinderDouble(
   svg.classList.add('compSvg');
   svg.setAttribute('width',  s(SVG_W));
   svg.setAttribute('height', s(SVG_H));
+  // Låt grafik spilla utanför utan att klippas (hjälper när portar ligger nära andra komponenter)
+  svg.style.overflow = 'visible';
 
   const g = document.createElementNS(NS,'g');
   g.setAttribute('transform', `translate(${s(GX)},${s(GY)})`);
@@ -57,18 +62,18 @@ export function addCylinderDouble(
   rod.setAttribute('width', s(W-66)); rod.setAttribute('height', s(6));
   rod.setAttribute('fill','#888');
 
-  // Stångspets (visuellt tydlig ända)
+  // Stångspets (tydlig ände)
   const rodTip = document.createElementNS(NS,'rect');
-  rodTip.setAttribute('x', s(W));                 // start: precis vid husets högerkant
+  rodTip.setAttribute('x', s(W));
   rodTip.setAttribute('y', s(H/2 - 6));
   rodTip.setAttribute('width', s(10));
   rodTip.setAttribute('height', s(12));
   rodTip.setAttribute('fill','#666');
 
-  // Portar (Cap vänster botten, Rod höger botten)
+  // Portar – närmare huset (PORT_MARGIN)
   const ports = {
-    Cap: { cx: 10,   cy: H+12 },
-    Rod: { cx: W-10, cy: H+12 }
+    Cap: { cx: 10,     cy: H + PORT_MARGIN },
+    Rod: { cx: W - 10, cy: H + PORT_MARGIN }
   };
   const portEls = {};
   Object.keys(ports).forEach(key=>{
@@ -79,7 +84,7 @@ export function addCylinderDouble(
     c.addEventListener('click', (e)=>{ e.stopPropagation(); handlePortClick(comp, key, c); });
 
     const t = document.createElementNS(NS,'text');
-    t.setAttribute('x', s(p.cx)); t.setAttribute('y', s(p.cy - 10));
+    t.setAttribute('x', s(p.cx)); t.setAttribute('y', s(p.cy - 8)); // lite närmare porten
     t.setAttribute('text-anchor','middle');
     t.setAttribute('font-size', Math.max(9, 10*SCALE));
     t.textContent = key;
@@ -112,12 +117,8 @@ export function addCylinderDouble(
       // Stångens vänsterkant vid kolvens högerkant
       const rodX = px + 6;
 
-      // Tippens x ska följa kolven 1:1:
-      // vid pos=0: tipX = W
-      // vid pos=1: tipX = W + (W-20)
-      const tipX = px + (W - 10);    // = W + (px - 10)
-
-      // Stångens bredd = avstånd från rodX till tipX
+      // Tippens x följer kolven 1:1 (se förra fixen)
+      const tipX = px + (W - 10);      // = W + (px - 10)
       const rodW = Math.max(0, tipX - rodX);
 
       rod.setAttribute('x', s(rodX));

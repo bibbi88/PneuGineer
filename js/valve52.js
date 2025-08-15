@@ -11,13 +11,13 @@ export function addValve52(
   // Bas (oskalat) enligt din godkända mockup
   const CELLW0 = 120;
   const CELLH0 = 80;
-  const GX0 = 10;
-  const GY0 = 20;
+  const GX0 = 115;
+  const GY0 = 0;
   const FONT0 = 10;
   const STROKE0 = 2;
   const MARKERW0 = 6;
-  const SVGW0 = (CELLW0 + 20);   // tidigare: fönster+margin
-  const SVGH0 = (CELLH0 + 40);
+  const SVGW0 = (CELLW0 + 110);   // tidigare: fönster+margin
+  const SVGH0 = (CELLH0 + 0);
 
   // Skalade mått
   const cellW = CELLW0 * scale;

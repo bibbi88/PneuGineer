@@ -1,4 +1,6 @@
 // js/main.js
+// Steg 1+2: Tryck-overlay + Stegning av simulering (Step)
+
 import { addValve52 }        from './valve52.js';
 import { addCylinderDouble } from './cylinderDouble.js';
 import { addSource }         from './source.js';
@@ -9,91 +11,60 @@ import { addOrValve }        from './orValve.js';
 const compLayer = document.getElementById('compLayer');
 const connLayer = document.getElementById('connLayer');
 
-/* --- Ledningslagret överst, men släpp igenom klick utanför trådar --- */
+// wires över komponenter men låt bara själva path:en få klick
 connLayer.style.zIndex = '2';
 compLayer.style.zIndex = '1';
-connLayer.style.pointerEvents = 'none'; // pathar får egna pointer-events
+connLayer.style.pointerEvents = 'none';
 
 /* ---------- App-state ---------- */
-let components = [];    // { id,type,el,x,y, ports:{k:{cx,cy,el}}, state?, svgW,svgH,gx,gy, ... }
+let components = [];    // { id,type,el,x,y, ports:{k:{cx,cy,el}}, ... }
 let connections = [];   // { from:{id,port}, to:{id,port}, pathEl }
 let nextId = 1;
 let pendingPort = null;
 
-/* --- Val & radering --- */
 let selectedConnection = null;
 let selectedComponent  = null;
 
-/* --- Simuleringsläge --- */
 const Modes = { STOP:'stop', PLAY:'play', PAUSE:'pause' };
-let simMode = Modes.STOP; // start i STOP (redigerbart)
+let simMode = Modes.STOP;
 
-/* --- Standardlägen för reset --- */
-const DEFAULT_VALVE_STATE = 1; // "läge 1"
-const DEFAULT_CYL_POS     = 0; // helt indragen
+const DEFAULT_VALVE_STATE = 1; // 5/2 startläge
+const DEFAULT_CYL_POS     = 0; // cylinder helt indragen
 
-/* --- Undo / Redo --- */
+/* ---------- Undo/Redo ---------- */
 const HISTORY_LIMIT = 50;
-let history = [];  // stack av snapshots
-let future  = [];  // stack för redo
-let isRestoring = false; // blockera history push när vi återställer
-
-/* ---------- CSS för trådar, markering & meny ---------- */
-(function injectWireCSS(){
-  const css = `
-    .wire { stroke:#000; stroke-width:2; fill:none; }
-    .wire.active { stroke:#d00; stroke-dasharray:6 6; animation: wireflow 1.2s linear infinite; }
-    .wire.selected { stroke:#0a74ff; stroke-width:3; }
-    .comp.selected { outline: 2px dashed #0a74ff; outline-offset: 2px; }
-    @keyframes wireflow { to { stroke-dashoffset: -12; } }
-
-    .ctxmenu {
-      position: fixed; z-index: 9999;
-      background:#fff; border:1px solid #ccc; border-radius:8px;
-      box-shadow: 0 8px 22px rgba(0,0,0,.12);
-      padding:6px; font-size:14px; min-width:160px;
-    }
-    .ctxmenu button {
-      display:block; width:100%; text-align:left;
-      background:none; border:0; padding:8px 10px; cursor:pointer;
-    }
-    .ctxmenu button:hover { background:#f5f7ff; }
-    .btn[disabled] { opacity: .5; cursor: not-allowed; }
-  `;
-  const style = document.createElement('style');
-  style.textContent = css;
-  document.head.appendChild(style);
-})();
+let history = [];
+let future  = [];
+let isRestoring = false;
 
 /* ---------- Utils ---------- */
 function uid(){ return nextId++; }
 function workspaceBBox(){ return compLayer.getBoundingClientRect(); }
 function canEdit(){ return simMode === Modes.STOP; }
 
-/* ----- Port → globala koordinater ----- */
+/* ---------- Port → globala koordinater ---------- */
 function portGlobalPosition(comp, portKey){
   const p = comp.ports?.[portKey];
   if (!p) return { x: comp.x, y: comp.y };
 
+  // Om komponenten ger svgW/svgH + gx/gy så är p.cx/p.cy i lokala SVG-koordinater
   if (comp.svgW && comp.svgH && (comp.gx !== undefined) && (comp.gy !== undefined)) {
     const svg0x = comp.x - comp.svgW/2;
     const svg0y = comp.y - comp.svgH/2;
     return { x: svg0x + comp.gx + p.cx, y: svg0y + comp.gy + p.cy };
   }
+  // fallback (gamla komponenter)
   return { x: comp.x + p.cx, y: comp.y + p.cy };
 }
 
-/* ---------- Wire-dragning (ortogonal; sista biten vertikal) ---------- */
+/* ---------- Wire-dragning (ortogonal, sista biten vertikal) ---------- */
 function drawWirePath(x1, y1, x2, y2){
   const stub = 14;
-
   if (x1 === x2) return `M ${x1},${y1} L ${x2},${y2}`;
-
   const dy = y2 - y1;
   const s  = Math.min(stub, Math.max(0, Math.abs(dy)/2) || stub);
   const yStart = y1 + (dy >= 0 ? s : -s);
   const yEnd   = y2 - (dy >= 0 ? s : -s);
-
   return [
     `M ${x1},${y1}`,
     `L ${x1},${yStart}`,
@@ -103,11 +74,9 @@ function drawWirePath(x1, y1, x2, y2){
   ].join(' ');
 }
 
-/* ---------- Rita om kopplingar ---------- */
 function redrawConnections(){
   connLayer.setAttribute('width',  compLayer.clientWidth);
   connLayer.setAttribute('height', compLayer.clientHeight);
-
   connections.forEach(conn=>{
     const c1 = components.find(c=>c.id===conn.from.id);
     const c2 = components.find(c=>c.id===conn.to.id);
@@ -118,10 +87,10 @@ function redrawConnections(){
   });
 }
 
-/* ---------- Val: tråd ---------- */
+/* ---------- Val / radering ---------- */
 function selectConnection(conn){
   clearSelectedComponent();
-  if (selectedConnection && selectedConnection !== conn){
+  if (selectedConnection && selectedConnection!==conn){
     selectedConnection.pathEl.classList.remove('selected');
   }
   selectedConnection = conn;
@@ -133,11 +102,9 @@ function clearSelectedConnection(){
     selectedConnection = null;
   }
 }
-
-/* ---------- Val: komponent ---------- */
 function selectComponent(comp){
   clearSelectedConnection();
-  if (selectedComponent && selectedComponent !== comp){
+  if (selectedComponent && selectedComponent!==comp){
     selectedComponent.el.classList.remove('selected');
   }
   selectedComponent = comp;
@@ -150,10 +117,15 @@ function clearSelectedComponent(){
   }
 }
 
-/* ---------- Delete med tangentbord ---------- */
+compLayer.addEventListener('click', ()=>{
+  clearSelectedConnection();
+  clearSelectedComponent();
+  hideCtxMenu();
+});
+
 window.addEventListener('keydown', (e)=>{
-  if (e.key !== 'Delete' && e.key !== 'Backspace') return;
-  if (!canEdit()) return; // bara i STOP
+  if (e.key!=='Delete' && e.key!=='Backspace') return;
+  if (!canEdit()) return;
 
   if (selectedConnection){
     selectedConnection.pathEl.remove();
@@ -175,9 +147,7 @@ window.addEventListener('keydown', (e)=>{
 
 /* ---------- Kontextmeny (högerklick) ---------- */
 let ctxMenuEl = null;
-function hideCtxMenu(){
-  if (ctxMenuEl){ ctxMenuEl.remove(); ctxMenuEl = null; }
-}
+function hideCtxMenu(){ if (ctxMenuEl){ ctxMenuEl.remove(); ctxMenuEl = null; } }
 function showCtxMenu(x, y, { type, payload }){
   hideCtxMenu();
   const m = document.createElement('div');
@@ -190,13 +160,13 @@ function showCtxMenu(x, y, { type, payload }){
   delBtn.disabled = !canEdit();
   delBtn.addEventListener('click', ()=>{
     if (!canEdit()) return;
-    if (type === 'component' && payload?.comp){
+    if (type==='component' && payload?.comp){
       deleteComponent(payload.comp);
       clearSelectedComponent();
       pushHistory('Delete component');
-    } else if (type === 'wire' && payload?.conn){
+    } else if (type==='wire' && payload?.conn){
       payload.conn.pathEl.remove();
-      connections = connections.filter(c => c!==payload.conn);
+      connections = connections.filter(c=>c!==payload.conn);
       clearSelectedConnection();
       redrawConnections();
       pushHistory('Delete wire');
@@ -222,27 +192,17 @@ function showCtxMenu(x, y, { type, payload }){
   ctxMenuEl = m;
 }
 
-/* ---------- Radera komponent + dess trådar ---------- */
 function deleteComponent(comp){
   const toRemove = connections.filter(c => c.from.id===comp.id || c.to.id===comp.id);
   toRemove.forEach(c => c.pathEl.remove());
   connections = connections.filter(c => c.from.id!==comp.id && c.to.id!==comp.id);
-
   comp.el.remove();
   components = components.filter(c => c !== comp);
-
   hideCtxMenu();
   redrawConnections();
 }
 
-/* ---------- Markering rensas i tom yta ---------- */
-compLayer.addEventListener('click', ()=>{
-  clearSelectedConnection();
-  clearSelectedComponent();
-  hideCtxMenu();
-});
-
-/* ---------- Drag move för komponent ---------- */
+/* ---------- Drag ---------- */
 function makeDraggable(comp){
   let dragging=false, dx=0, dy=0;
 
@@ -255,7 +215,6 @@ function makeDraggable(comp){
     const rect = workspaceBBox();
     dx = e.clientX - (rect.left + comp.x);
     dy = e.clientY - (rect.top  + comp.y);
-    comp.el.classList.add('draggable');
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp, { once:true });
   }
@@ -269,9 +228,8 @@ function makeDraggable(comp){
     redrawConnections();
   }
   function onUp(){
-    if (dragging) pushHistory('Move component');
     dragging=false;
-    comp.el.classList.remove('draggable');
+    pushHistory('Move component');
     window.removeEventListener('mousemove', onMove);
   }
   comp.el.addEventListener('mousedown', onDown);
@@ -283,7 +241,7 @@ function makeDraggable(comp){
   });
 }
 
-/* ---------- Portkoppling ---------- */
+/* ---------- Koppla portar ---------- */
 function handlePortClick(comp, portKey, portEl){
   if (!canEdit()) return;
   hideCtxMenu();
@@ -334,33 +292,33 @@ function handlePortClick(comp, portKey, portEl){
   pushHistory('Create wire');
 }
 
-/* ---------- Tryckpropagering ---------- */
+/* ---------- TRYCK-OVERLAY ---------- */
 function computePressureSet(){
-  if (simMode !== Modes.PLAY) return new Set();
-
   const key = (id,port)=> `${id}:${port}`;
+
+  // 1) bygg graf av ledningar (odirigerat)
   const adj = new Map();
   const addUndirected = (a,b)=>{
     if (!adj.has(a)) adj.set(a, new Set());
     if (!adj.has(b)) adj.set(b, new Set());
     adj.get(a).add(b); adj.get(b).add(a);
   };
-
   connections.forEach(conn=>{
     addUndirected(key(conn.from.id, conn.from.port), key(conn.to.id, conn.to.port));
   });
 
+  // 2) startnoder = tryckkällor
   const start = [];
   components.forEach(c=>{
     if (c.type === 'source'){
-      if (c.ports.OUT) start.push(key(c.id,'OUT'));
-      if (c.ports.P)   start.push(key(c.id,'P'));
+      if (c.ports?.OUT) start.push(key(c.id,'OUT'));
+      if (c.ports?.P)   start.push(key(c.id,'P')); // bakåtkomp
     }
   });
 
-  const pressurized = new Set();
-  const q = [];
-  start.forEach(s=>{ pressurized.add(s); q.push(s); });
+  // 3) flood från källor via kablage
+  const pressurized = new Set(start);
+  const q = [...start];
   while(q.length){
     const cur = q.shift();
     const nbrs = adj.get(cur);
@@ -373,47 +331,52 @@ function computePressureSet(){
     }
   }
 
+  // 4) komponentlogik (5/2, AND, OR) + flood igen vid förändring
   let changed = true;
   while (changed){
     changed = false;
 
+    // 5/2: 1 <-> (4 eller 2)
     components.forEach(v=>{
       if (v.type !== 'valve52') return;
       const a = (v.state===0) ? '4' : '2';
-      const n1 = key(v.id,'1');
-      const na = key(v.id, a);
-      const sizeBefore = pressurized.size;
+      const n1 = `${v.id}:1`;
+      const na = `${v.id}:${a}`;
+      const before = pressurized.size;
       if (pressurized.has(n1)) pressurized.add(na);
       if (pressurized.has(na)) pressurized.add(n1);
-      if (pressurized.size !== sizeBefore) changed = true;
+      if (pressurized.size !== before) changed = true;
     });
 
+    // AND: A & B -> OUT
     components.forEach(av=>{
       if (av.type !== 'andValve') return;
-      const nA = key(av.id,'A'), nB = key(av.id,'B'), nO = key(av.id,'OUT');
-      const sizeBefore = pressurized.size;
+      const nA = `${av.id}:A`, nB = `${av.id}:B`, nO = `${av.id}:OUT`;
+      const before = pressurized.size;
       if (pressurized.has(nA) && pressurized.has(nB)) pressurized.add(nO);
-      if (pressurized.size !== sizeBefore) changed = true;
+      if (pressurized.size !== before) changed = true;
     });
 
+    // OR (shuttle): A || B -> OUT
     components.forEach(ov=>{
       if (ov.type !== 'orValve') return;
-      const nA = key(ov.id,'A'), nB = key(ov.id,'B'), nO = key(ov.id,'OUT');
-      const sizeBefore = pressurized.size;
+      const nA = `${ov.id}:A`, nB = `${ov.id}:B`, nO = `${ov.id}:OUT`;
+      const before = pressurized.size;
       if (pressurized.has(nA) || pressurized.has(nB)) pressurized.add(nO);
-      if (pressurized.size !== sizeBefore) changed = true;
+      if (pressurized.size !== before) changed = true;
     });
 
+    // Om något nytt blev trycksatt: flood igen via kablage
     if (changed){
-      const q2 = [...pressurized];
-      while(q2.length){
-        const cur = q2.shift();
+      const queue = [...pressurized];
+      while(queue.length){
+        const cur = queue.shift();
         const nbrs = adj.get(cur);
         if (!nbrs) continue;
         for (const n of nbrs){
           if (!pressurized.has(n)){
             pressurized.add(n);
-            q2.push(n);
+            queue.push(n);
           }
         }
       }
@@ -423,35 +386,46 @@ function computePressureSet(){
   return pressurized;
 }
 
-/* ---------- Simulering ---------- */
-function findConnections(fromId, fromPort){
-  return connections.filter(c =>
-    (c.from.id===fromId && c.from.port===fromPort) ||
-    (c.to.id===fromId   && c.to.port===fromPort)
-  );
-}
-function counterpart(conn, id){ return (conn.from.id===id) ? conn.to : conn.from; }
-
 let lastPressure = new Set();
+let stepOnceFlag = false; // ⏭️ ett enstaka sim-tick
 
 function simulate(dt){
-  lastPressure = computePressureSet();
+  // "spela" om vi är i PLAY eller om vi ska stega just denna frame
+  const playing = (simMode === Modes.PLAY) || stepOnceFlag;
 
-  if (simMode === Modes.PLAY){
+  // 1) beräkna tryckbild när playing; i PAUSE behåll senaste; i STOP nollställ
+  if (playing){
+    lastPressure = computePressureSet();
+  } else if (simMode === Modes.STOP){
+    lastPressure = new Set();
+  } // i PAUSE: lämna lastPressure orört (visar senaste läge)
+
+  // 2) overlay på portar
+  components.forEach(c=>{
+    if (!c.ports) return;
+    for (const k of Object.keys(c.ports)){
+      const n = `${c.id}:${k}`;
+      const pressed = lastPressure.has(n) && (playing || simMode===Modes.PAUSE);
+      c.ports[k].el?.classList.toggle('pressurized', pressed);
+    }
+  });
+
+  // 3) cylinder-rörelse bara när playing (Step eller Play)
+  if (playing){
     components.filter(c=>c.type==='cylDouble' || c.type==='cylinder').forEach(cyl=>{
-      let capPress = false, rodPress = false;
-
-      const capConns = findConnections(cyl.id, 'Cap');
-      const rodConns = findConnections(cyl.id, 'Rod');
       const isPress = (id,port)=> lastPressure.has(`${id}:${port}`);
 
+      let capPress=false, rodPress=false;
+      const capConns = connections.filter(c=> (c.from.id===cyl.id && c.from.port==='Cap') || (c.to.id===cyl.id && c.to.port==='Cap'));
+      const rodConns = connections.filter(c=> (c.from.id===cyl.id && c.from.port==='Rod') || (c.to.id===cyl.id && c.to.port==='Rod'));
+
       capConns.forEach(conn=>{
-        const o = counterpart(conn, cyl.id);
-        if (isPress(o.id, o.port)) capPress = true;
+        const other = (conn.from.id===cyl.id) ? conn.to : conn.from;
+        if (isPress(other.id, other.port)) capPress = true;
       });
       rodConns.forEach(conn=>{
-        const o = counterpart(conn, cyl.id);
-        if (isPress(o.id, o.port)) rodPress = true;
+        const other = (conn.from.id===cyl.id) ? conn.to : conn.from;
+        if (isPress(other.id, other.port)) rodPress = true;
       });
 
       let target = cyl.pos;
@@ -460,19 +434,23 @@ function simulate(dt){
 
       const speed = 0.8;
       const dir = Math.sign(target - cyl.pos);
-      if (dir !== 0) cyl.setPos(cyl.pos + dir*speed*dt);
+      if (dir!==0) cyl.setPos(cyl.pos + dir*speed*dt);
     });
   }
 
+  // 4) wires: aktiva (blink) där båda ändar har tryck
   connections.forEach(conn=>{
     const a = `${conn.from.id}:${conn.from.port}`;
     const b = `${conn.to.id}:${conn.to.port}`;
-    const active = (simMode === Modes.PLAY) && lastPressure.has(a) && lastPressure.has(b);
-    conn.pathEl.classList.toggle('active', active);
+    const active = (playing || simMode===Modes.PAUSE) && lastPressure.has(a) && lastPressure.has(b);
+    conn.pathEl?.classList.toggle('active', active);
   });
+
+  // rensa step-flag efter ett tick
+  stepOnceFlag = false;
 }
 
-/* ---------- Tidsloop ---------- */
+/* ---------- RAF-loop ---------- */
 let last = performance.now();
 function tick(t){
   const dt = Math.min(0.05, (t-last)/1000);
@@ -482,28 +460,24 @@ function tick(t){
 }
 requestAnimationFrame(tick);
 
-/* ---------- Spara/Ladda ---------- */
+/* ---------- Historik ---------- */
 function snapshotProject(){
-  const comps = components.map(c => {
-    const base = { id: c.id, type: c.type, x: c.x, y: c.y };
-    if (c.type === 'valve52') return { ...base, state: c.state };
-    if (c.type === 'cylDouble' || c.type === 'cylinder') return { ...base, pos: c.pos ?? 0 };
-    if (c.type === 'source') return { ...base, on: c.on ?? true };
+  const comps = components.map(c=>{
+    const base = { id:c.id, type:c.type, x:c.x, y:c.y };
+    if (c.type==='valve52') return { ...base, state:c.state };
+    if (c.type==='cylDouble' || c.type==='cylinder') return { ...base, pos:c.pos??0 };
     return base;
   });
-
-  const conns = connections.map(conn => ({
-    from: { id: conn.from.id, port: conn.from.port },
-    to:   { id: conn.to.id,   port: conn.to.port }
+  const conns = connections.map(conn=>({
+    from:{ id:conn.from.id, port:conn.from.port },
+    to:  { id:conn.to.id,   port:conn.to.port }
   }));
-
   return { version: 1, comps, conns };
 }
-
 function clearProject(){
-  connections.forEach(c => c.pathEl.remove());
+  connections.forEach(c=>c.pathEl.remove());
   connections = [];
-  components.forEach(c => c.el.remove());
+  components.forEach(c=>c.el.remove());
   components = [];
   nextId = 1;
   pendingPort = null;
@@ -512,7 +486,6 @@ function clearProject(){
   hideCtxMenu();
   redrawConnections();
 }
-
 async function loadProject(data){
   isRestoring = true;
   clearProject();
@@ -522,14 +495,13 @@ async function loadProject(data){
     let comp = null;
     if (sc.type === 'source'){
       comp = addSource(sc.x, sc.y, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
-      if (typeof sc.on === 'boolean') comp.on = sc.on;
     } else if (sc.type === 'valve52'){
       comp = addValve52(sc.x, sc.y, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
-      if (typeof sc.state === 'number') comp.setState(sc.state);
+      if (typeof sc.state==='number' && typeof comp.setState==='function') comp.setState(sc.state);
       wrapValveToggleGuard(comp);
     } else if (sc.type === 'cylDouble' || sc.type === 'cylinder'){
       comp = addCylinderDouble(sc.x, sc.y, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
-      if (typeof sc.pos === 'number') comp.setPos(sc.pos);
+      if (typeof sc.pos==='number' && typeof comp.setPos==='function') comp.setPos(sc.pos);
     } else if (sc.type === 'andValve'){
       comp = addAndValve(sc.x, sc.y, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
     } else if (sc.type === 'orValve'){
@@ -548,19 +520,8 @@ async function loadProject(data){
     const path = document.createElementNS('http://www.w3.org/2000/svg','path');
     path.setAttribute('class','wire');
     path.style.pointerEvents = 'stroke';
-    path.addEventListener('click', (e)=>{
-      e.stopPropagation();
-      const c = connections.find(k=>k.pathEl===path);
-      if (c) selectConnection(c);
-    });
-    path.addEventListener('contextmenu', (e)=>{
-      e.preventDefault();
-      const c = connections.find(k=>k.pathEl===path);
-      if (c){
-        selectConnection(c);
-        showCtxMenu(e.clientX, e.clientY, { type:'wire', payload:{ conn:c } });
-      }
-    });
+    path.addEventListener('click', (e)=>{ e.stopPropagation(); const c = connections.find(k=>k.pathEl===path); if (c) selectConnection(c); });
+    path.addEventListener('contextmenu', (e)=>{ e.preventDefault(); const c = connections.find(k=>k.pathEl===path); if (c){ selectConnection(c); showCtxMenu(e.clientX,e.clientY,{ type:'wire', payload:{ conn:c }}); }});
     connLayer.appendChild(path);
 
     connections.push({
@@ -572,17 +533,6 @@ async function loadProject(data){
 
   redrawConnections();
   isRestoring = false;
-}
-
-/* ---------- Nedladdning ---------- */
-function download(filename, text){
-  const a = document.createElement('a');
-  a.setAttribute('href', 'data:application/json;charset=utf-8,' + encodeURIComponent(text));
-  a.setAttribute('download', filename);
-  a.style.display = 'none';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
 }
 
 /* ---------- Undo/Redo ---------- */
@@ -618,7 +568,7 @@ function redo(){
   });
 }
 
-/* ---------- Knappar ---------- */
+/* ---------- UI ---------- */
 function ensureButton(id, label, onClick){
   let btn = document.getElementById(id);
   if (!btn){
@@ -638,13 +588,17 @@ function setMode(m){
   if (m === simMode) return;
   simMode = m;
   updateModeButtons();
-
   if (simMode !== Modes.PLAY){
     connections.forEach(conn => conn.pathEl.classList.remove('active'));
   }
 }
 function updateModeButtons(){
   ensureButton('btnPlay',  simMode===Modes.PLAY  ? '▶️ Spelar…' : '▶️ Spela', ()=> setMode(Modes.PLAY));
+  ensureButton('btnStep',  '⏭️ Stega', ()=>{
+    // kör ett enda sim-tick (t.ex. 20 ms) oavsett mode
+    stepOnceFlag = true;
+    simulate(0.02);
+  });
   ensureButton('btnPause', simMode===Modes.PAUSE ? '⏸️ Paus'   : '⏸️ Pausa', ()=> setMode(Modes.PAUSE));
   ensureButton('btnStop',  '⏹️ Stoppa & återställ', ()=> resetSystem());
 
@@ -663,103 +617,102 @@ function updateUndoRedoButtons(){
 
 function resetSystem(){
   setMode(Modes.STOP);
-
   components.forEach(c=>{
-    if (c.type === 'valve52' && typeof c.setState === 'function'){
-      c.setState(DEFAULT_VALVE_STATE);
-    } else if ((c.type === 'cylDouble' || c.type === 'cylinder') && typeof c.setPos === 'function'){
-      c.setPos(DEFAULT_CYL_POS);
+    if (c.type === 'valve52' && typeof c.setState === 'function') c.setState(DEFAULT_VALVE_STATE);
+    else if ((c.type === 'cylDouble' || c.type === 'cylinder') && typeof c.setPos === 'function') c.setPos(DEFAULT_CYL_POS);
+  });
+  connections.forEach(conn => conn.pathEl.classList.remove('active'));
+  lastPressure = new Set(); // nollställ overlay
+  // ta bort pressurized-klass från portar
+  components.forEach(c=>{
+    if (!c.ports) return;
+    for (const k of Object.keys(c.ports)){
+      c.ports[k].el?.classList.remove('pressurized');
     }
   });
-
-  connections.forEach(conn => conn.pathEl.classList.remove('active'));
-
   clearSelectedConnection();
   clearSelectedComponent();
   hideCtxMenu();
-
   pushHistory('Reset');
 }
 
-/* ---- Guard: lås ventilväxling utanför PLAY ---- */
+/* ---- Lås manuell växling av 5/2 till PLAY ---- */
 function wrapValveToggleGuard(valveComp){
-  if (!valveComp || typeof valveComp.toggle !== 'function') return;
+  if (!valveComp || typeof valveComp.toggle!=='function') return;
   const original = valveComp.toggle.bind(valveComp);
-  valveComp.toggle = function(){
-    if (simMode !== Modes.PLAY) return;
-    original();
-  };
+  valveComp.toggle = function(){ if (simMode!==Modes.PLAY) return; original(); };
 }
 
 /* ---- Skapa knappar ---- */
-ensureButton('addSource',  '➕ Tryckkälla', ()=>{
-  if (!canEdit()) return;
-  const r = workspaceBBox();
-  addSource(r.width*0.15, r.height*0.50,
-            compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
-  pushHistory('Add source');
-});
-ensureButton('addValve52', '➕ 5/2-ventil', ()=>{
-  if (!canEdit()) return;
-  const r = workspaceBBox();
-  const v = addValve52(r.width*0.40, r.height*0.50,
-             compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
-  wrapValveToggleGuard(v);
-  pushHistory('Add valve52');
-});
-ensureButton('addCylDouble','➕ Cylinder, dubbelverkande', ()=>{
-  if (!canEdit()) return;
-  const r = workspaceBBox();
-  addCylinderDouble(r.width*0.70, r.height*0.50,
-                    compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
-  pushHistory('Add cylinder');
-});
-ensureButton('addAnd',     '➕ AND-ventil', ()=>{
-  if (!canEdit()) return;
-  const r = workspaceBBox();
-  addAndValve(r.width*0.25, r.height*0.35,
+function addButtons(){
+  ensureButton('addSource',  '➕ Tryckkälla', ()=>{
+    if (!canEdit()) return;
+    const r = workspaceBBox();
+    addSource(r.width*0.15, r.height*0.50,
               compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
-  pushHistory('Add AND');
-});
-ensureButton('addOr',      '➕ OR-ventil', ()=>{
-  if (!canEdit()) return;
-  const r = workspaceBBox();
-  addOrValve(r.width*0.25, r.height*0.65,
-             compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
-  pushHistory('Add OR');
-});
+    pushHistory('Add source');
+  });
+  ensureButton('addValve52', '➕ 5/2-ventil', ()=>{
+    if (!canEdit()) return;
+    const r = workspaceBBox();
+    const v = addValve52(r.width*0.40, r.height*0.50,
+               compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
+    wrapValveToggleGuard(v);
+    pushHistory('Add valve52');
+  });
+  ensureButton('addCylDouble','➕ Cylinder, dubbelverkande', ()=>{
+    if (!canEdit()) return;
+    const r = workspaceBBox();
+    addCylinderDouble(r.width*0.70, r.height*0.50,
+                      compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
+    pushHistory('Add cylinder');
+  });
+  ensureButton('addAnd',     '➕ AND-ventil', ()=>{
+    if (!canEdit()) return;
+    const r = workspaceBBox();
+    addAndValve(r.width*0.25, r.height*0.35,
+                compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
+    pushHistory('Add AND');
+  });
+  ensureButton('addOr',      '➕ OR-ventil', ()=>{
+    if (!canEdit()) return;
+    const r = workspaceBBox();
+    addOrValve(r.width*0.25, r.height*0.65,
+               compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
+    pushHistory('Add OR');
+  });
+  ensureButton('saveProj', '💾 Spara projekt', ()=>{
+    if (!canEdit()) return;
+    const snap = snapshotProject();
+    const a = document.createElement('a');
+    a.href = 'data:application/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(snap, null, 2));
+    a.download = 'projekt.json'; a.style.display='none'; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  });
+  ensureButton('loadProj', '📂 Ladda projekt', ()=>{
+    if (!canEdit()) return;
+    const inp = document.createElement('input');
+    inp.type = 'file'; inp.accept = 'application/json';
+    inp.onchange = async (e)=>{
+      const file = e.target.files?.[0];
+      if (!file) return;
+      try {
+        const data = JSON.parse(await file.text());
+        await loadProject(data);
+        pushHistory('Load project');
+      } catch (err){
+        console.error('Fel vid laddning:', err);
+        alert('Ogiltig projektfil.');
+      }
+    };
+    inp.click();
+  });
+  ensureButton('undoBtn', '↩️ Ångra', ()=> { if (canEdit()) undo(); });
+  ensureButton('redoBtn', '↪️ Gör om', ()=> { if (canEdit()) redo(); });
 
-/* ---- Save/Load/Undo/Redo ---- */
-ensureButton('saveProj', '💾 Spara projekt', ()=>{
-  if (!canEdit()) return;
-  const snap = snapshotProject();
-  download('projekt.json', JSON.stringify(snap, null, 2));
-});
-ensureButton('loadProj', '📂 Ladda projekt', ()=>{
-  if (!canEdit()) return;
-  const inp = document.createElement('input');
-  inp.type = 'file';
-  inp.accept = 'application/json';
-  inp.onchange = async (e)=>{
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const text = await file.text();
-    try {
-      const data = JSON.parse(text);
-      await loadProject(data);
-      pushHistory('Load project');
-    } catch (err){
-      console.error('Fel vid laddning:', err);
-      alert('Ogiltig projektfil.');
-    }
-  };
-  inp.click();
-});
-ensureButton('undoBtn', '↩️ Ångra', ()=> { if (canEdit()) undo(); });
-ensureButton('redoBtn', '↪️ Gör om', ()=> { if (canEdit()) redo(); });
-
-/* ---- Play/Pause/Stop UI ---- */
-updateModeButtons();
+  updateModeButtons();
+  updateUndoRedoButtons();
+}
+addButtons();
 
 /* ---------- Startlayout ---------- */
 window.addEventListener('load', ()=>{
@@ -771,7 +724,37 @@ window.addEventListener('load', ()=>{
   wrapValveToggleGuard(v);
   addCylinderDouble(r.width*0.70, r.height*0.50,
                     compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
-
   pushHistory('Initial');
-  updateUndoRedoButtons();
 });
+
+/* ---------- Injicera nödvändig CSS om du inte redan har den ---------- */
+(function injectOverlayCSS(){
+  if (document.getElementById('overlayCSS')) return;
+  const css = `
+    .wire { stroke:#000; stroke-width:2; fill:none; }
+    .wire.active { stroke:#d00; stroke-dasharray:6 6; animation: wireflow 1.2s linear infinite; }
+    @keyframes wireflow { to { stroke-dashoffset: -12; } }
+    .wire.selected { stroke:#0a74ff; stroke-width:3; }
+    .comp.selected { outline: 2px dashed #0a74ff; outline-offset: 2px; }
+
+    .port { fill:#fff; stroke:#0a74ff; stroke-width:1.5; }
+    .port.pressurized { fill:#e6f3ff; stroke:#0073e6; stroke-width:2; }
+
+    .ctxmenu {
+      position: fixed; z-index: 9999;
+      background:#fff; border:1px solid #ccc; border-radius:8px;
+      box-shadow: 0 8px 22px rgba(0,0,0,.12);
+      padding:6px; font-size:14px; min-width:160px;
+    }
+    .ctxmenu button {
+      display:block; width:100%; text-align:left;
+      background:none; border:0; padding:8px 10px; cursor:pointer;
+    }
+    .ctxmenu button:hover { background:#f5f7ff; }
+    .btn[disabled] { opacity: .5; cursor: not-allowed; }
+  `;
+  const style = document.createElement('style');
+  style.id = 'overlayCSS';
+  style.textContent = css;
+  document.head.appendChild(style);
+})();
