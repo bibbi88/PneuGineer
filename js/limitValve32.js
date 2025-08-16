@@ -5,9 +5,8 @@
 // Vänster cell (AKTIV): 2→1, 3 block (T)
 // Höger  cell (VILA):  2→3, 1 block (T)
 //
-// Fixar:
-//  - Vänster pilspets sitter vid 1 (ritas 2→1 med marker-end).
-//  - Pilar försvinner inte vid rörelse (ingen clipPath; endast SVG transform).
+// Etikett: visas nu som ett SVG-textobjekt precis ovanför rullen (följer med mover).
+// Klick på etiketten (eller dubbelklick på komponenten eller S-tangent) låter dig binda sensor (t.ex. a0/a1).
 //
 // Signatur (matchar main.js):
 // addLimitValve32(x,y, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid, getSignal)
@@ -43,10 +42,11 @@ export function addLimitValve32(
   el.style.left = x + 'px';
   el.style.top  = y + 'px';
 
-  const label = document.createElement('div');
-  label.className = 'label';
-  label.textContent = '3/2 gränsläge';
-  el.appendChild(label);
+  // (Tidigare label i överkant) – nu blank för att inte visa "3/2-ventil"
+  const htmlLabel = document.createElement('div');
+  htmlLabel.className = 'label';
+  htmlLabel.textContent = ''; // inga rubriker överst
+  el.appendChild(htmlLabel);
 
   const svg = document.createElementNS(NS,'svg');
   svg.classList.add('compSvg');
@@ -72,8 +72,7 @@ export function addLimitValve32(
 
   // === MOVER (ALLT som ska skuffas: ram/ytterbox, innerlådor, rulle/skalen, fjäder) ===
   const mover = document.createElementNS(NS,'g');
-  // OBS: vi använder endast SVG-attributet 'transform' (inte CSS-transform),
-  // för att markers/pilar ska renderas stabilt över alla motorer.
+  // vi använder SVG-transform (inte CSS) för stabil rendering av markers
 
   // Ytterkapsling (ram) – följer med
   const body = document.createElementNS(NS,'rect');
@@ -133,7 +132,17 @@ export function addLimitValve32(
   const rollerInner = document.createElementNS(NS,'circle');
   rollerInner.setAttribute('cx', 4); rollerInner.setAttribute('cy', 0); rollerInner.setAttribute('r', 6);
   rollerInner.setAttribute('fill','#fff'); rollerInner.setAttribute('stroke','#000'); rollerInner.setAttribute('stroke-width','2');
-  rollerGroup.append(rollerOuter, rollerInner);
+
+  // === NYTT: Etikett precis ovanför rullen (följer med mover) ===
+  const rollLabel = document.createElementNS(NS,'text');
+  rollLabel.setAttribute('x', 4);     // ovanför rullens mitt (cx=4)
+  rollLabel.setAttribute('y', -18);   // lite ovanför rullen
+  rollLabel.setAttribute('text-anchor','middle');
+  rollLabel.setAttribute('font-size','12');
+  rollLabel.style.userSelect = 'none';
+  rollLabel.style.cursor = 'pointer'; // klickbar för bindning
+
+  rollerGroup.append(rollerOuter, rollerInner, rollLabel);
 
   // Fjäder (följer med)
   const spring = document.createElementNS(NS,'g');
@@ -167,7 +176,8 @@ export function addLimitValve32(
   let manualActive = false;
 
   function updateLabel(){
-    label.textContent = '3/2 gränsläge' + (sensorKey ? ` — ${sensorKey}` : '');//  '3/2 gränsläge' + (sensorKey ? ` — ${sensorKey}` : '');
+    // Visa endast sensornyckeln (utan "3/2-ventil" text)
+    rollLabel.textContent = sensorKey ? sensorKey : '';
   }
 
   function applyTransforms(active){
@@ -208,7 +218,7 @@ export function addLimitValve32(
   svg.addEventListener('keydown', (e)=>{ if (e.key.toLowerCase()==='s') promptBind(); });
   svg.setAttribute('tabindex', '0'); svg.style.outline = 'none';
   el.addEventListener('dblclick', (e)=>{ e.stopPropagation(); promptBind(); });
-  label.addEventListener('click', (e)=>{ e.stopPropagation(); promptBind(); });
+  rollLabel.addEventListener('click', (e)=>{ e.stopPropagation(); promptBind(); });
 
   // === Komponent-obj =======================================================
   const comp = {
