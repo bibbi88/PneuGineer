@@ -6,11 +6,11 @@ export function addValve52(
   const id = uid();
 
   // ======= Skalning =======
-  const scale = .75;
+  const scale = 1;
 
   // Bas (oskalat) enligt din godkända mockup
-  const CELLW0 = 120;
-  const CELLH0 = 80;
+  const CELLW0 = 80;
+  const CELLH0 = 60;
   const GX0 = 115;
   const GY0 = 0;
   const FONT0 = 10;
@@ -72,8 +72,8 @@ export function addValve52(
     "5":  { cx: 10*scale,              cy: (CELLH0+10)*scale },
     "1":  { cx: (CELLW0/2)*scale,      cy: (CELLH0+10)*scale },
     "3":  { cx: (CELLW0-10)*scale,     cy: (CELLH0+10)*scale },
-        "12": { cx: (CELLW0 + 18)*scale,   cy: (CELLH0/2)*scale }   ,      // vänster pilot
-    "14": { cx: (-18)*scale,           cy: (CELLH0/2)*scale },        // höger pilot
+    "12": { cx: (CELLW0*2 + 18)*scale,   cy: (CELLH0/2)*scale }   ,      // vänster pilot
+    "14": { cx: (-CELLW0-18)*scale,           cy: (CELLH0/2)*scale },        // höger pilot
 
   };
 

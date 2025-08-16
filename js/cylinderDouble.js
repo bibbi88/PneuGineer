@@ -1,7 +1,7 @@
 // js/cylinderDouble.js
 // Dubbelverkande cylinder. Portar: Cap (vänster botten), Rod (höger botten).
 // Justera storlek för ALLA cylindrar här:
-const SCALE = 1.5;
+const SCALE = 1;
 
 export function addCylinderDouble(
   x, y,
@@ -17,7 +17,7 @@ export function addCylinderDouble(
   const GX = 10, GY = 10;
 
   // Oskalerade husmått (samma cylinderkropp)
-  const W = 160, H = 40;
+  const W = 220, H = 70;
 
   // Mindre marginal till portar (gör det lättare att koppla underifrån)
   const PORT_MARGIN = 6; // var 12
