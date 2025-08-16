@@ -1,18 +1,18 @@
 // js/main.js
-// Tryck-overlay + Stega + pilotsignaler (12/14) för 5/2-ventil
-// + Osynlig klick-yta för wires (lättare att välja)
-// + 12/14 portar får horisontell "inflygning" på ledningar
-// + Siffervisning av tryck (bar) på varje ledning i sim-läge
-// + Marquee multi-select + Copy/Cut/Paste/Delete av markerade komponenter
-// + Länkläge: port-prioritet, korsmarkör, ESC för att avbryta
+// Tryck-overlay (siffror på trådar) + Stega + riktade pilotsignaler (12 ⇒ state=1, 14 ⇒ state=0)
+// Junctions via hit-test + multimarkering (lasso) + gruppflytt/radering
+// ORTOGONALA TRÅDAR med FLERA SEGMENT (H/V-guider), dubbelklick för segment,
+// handtag för segment, contextmeny för att lägga till/ta bort/rensa segment.
+// Port 12/14 på 5/2 får alltid horisontell in-/utgång, och NU: alltid utåt (12→+x, 14→-x).
+// Finjustera markerade komponenter med pilar (Shift = 10 px).
 
 import { addValve52 }        from './valve52.js';
 import { addCylinderDouble } from './cylinderDouble.js';
 import { addSource }         from './source.js';
 import { addAndValve }       from './andValve.js';
 import { addOrValve }        from './orValve.js';
-import { addLimitValve32 }   from './limitValve32.js'; // 3/2 gränslägesventil
-import { addPushButton32 }   from './pushButton32.js'; // 3/2 tryckknapp (momentan)
+import { addLimitValve32 }   from './limitValve32.js';
+import { addPushButton32 }   from './pushButton32.js';
 
 /* ---------- DOM-lager ---------- */
 const compLayer = document.getElementById('compLayer');
@@ -20,30 +20,26 @@ const connLayer = document.getElementById('connLayer');
 
 connLayer.style.zIndex = '2';
 compLayer.style.zIndex = '1';
-connLayer.style.pointerEvents = 'none';
+connLayer.style.pointerEvents = 'none'; // vi gör egen hit-test i capture
 
 /* ---------- App-state ---------- */
 let components = [];
+// connection: { from:{id,port}, to:{id,port}, pathEl, labelEl, guides:[{type:'H'|'V',pos:number}], handleEls:[] }
 let connections = [];
 let nextId = 1;
-let pendingPort = null;     // {id, port} när länkning pågår
+let pendingPort = null;
 let isDirty = false;
 let currentProjectName = 'projekt';
 
 let selectedConnection = null;
-// Flerkomponents-val:
-const selectedComponents = new Set();
-let lastClickPoint = { x: 200, y: 200 }; // fallback för klistra in-offset
+let selectedComponent  = null;
+let selectedComponents = new Set();
 
 const Modes = { STOP:'stop', PLAY:'play', PAUSE:'pause' };
 let simMode = Modes.STOP;
 
 const DEFAULT_VALVE_STATE = 1;
 const DEFAULT_CYL_POS     = 0;
-
-/* ---------- Tryck-konstanter ---------- */
-const SUPPLY_BAR = 6.0;  // nominellt matningstryck
-const EPS        = 1e-3;
 
 /* ---------- Undo/Redo ---------- */
 const HISTORY_LIMIT = 50;
@@ -55,12 +51,22 @@ let isRestoring = false;
 function uid(){ return nextId++; }
 function workspaceBBox(){ return compLayer.getBoundingClientRect(); }
 function canEdit(){ return simMode === Modes.STOP; }
-function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
-function prettyBar(p){
-  if (p == null) return '–';
-  // hela eller en decimal
-  const s = (Math.abs(p - Math.round(p)) < 0.05) ? String(Math.round(p)) : p.toFixed(1);
-  return s;
+function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
+
+/* Finjustering med piltangenter */
+function nudgeSelectedComponents(dx, dy){
+  if (!canEdit()) return;
+  if (selectedComponents.size === 0) return;
+
+  const rect = workspaceBBox();
+  selectedComponents.forEach(c=>{
+    const nx = clamp(c.x + dx, 40, rect.width  - 40);
+    const ny = clamp(c.y + dy, 40, rect.height - 40);
+    c.x = nx; c.y = ny;
+    c.el.style.left = nx + 'px';
+    c.el.style.top  = ny + 'px';
+  });
+  redrawConnections();
 }
 
 /* ---------- Signals & Cylinder-namn ---------- */
@@ -71,14 +77,12 @@ function setSignal(key, value) {
   signals[key] = v;
   redrawConnections?.();
 }
-function getSignal(key) {
-  return !!signals[key];
-}
+function getSignal(key) { return !!signals[key]; }
 let cylinderCount = 0;
 function getNextCylinderLetter() {
   const code = 'A'.charCodeAt(0) + cylinderCount;
   cylinderCount += 1;
-  return String.fromCharCode(code); // 'A','B',...
+  return String.fromCharCode(code);
 }
 
 /* ---------- Port → globala koordinater ---------- */
@@ -93,197 +97,306 @@ function portGlobalPosition(comp, portKey){
   return { x: comp.x + p.cx, y: comp.y + p.cy };
 }
 
-/* ---------- Wires (ortogonalt, 12/14 med horisontell ”inflygning”) ---------- */
-// Ortogonal ledning med valfri sista segmentriktning per ände.
-// opts = { startHoriz: boolean, endHoriz: boolean }
-function drawWirePath(x1, y1, x2, y2, opts = {}){
-  const { startHoriz = false, endHoriz = false } = opts;
+/* ---------- Wires (ortogonalt) ---------- */
+const WIRE_STUB = 14;
 
-  const stub = 14;
-  const dx = x2 - x1;
+// Port-orientering: 12/14 på 5/2 ska vara horisontell, övrigt vertikal
+function getPortEntryOrientation(comp, portKey){
+  if (comp?.type === 'valve52' && (portKey === '12' || portKey === '14')) return 'H';
+  return 'V';
+}
+
+// NYTT: hjälp för att känna igen pilotportar på 5/2
+function isValvePilotPort(comp, portKey){
+  return comp?.type === 'valve52' && (portKey === '12' || portKey === '14');
+}
+
+// Skapa liten stub från porten i önskad riktning mot motparten
+function makeEndpointStub(pHere, pOther, orient, len = WIRE_STUB){
+  if (orient === 'H'){
+    const dir = (pOther.x >= pHere.x) ? 1 : -1;
+    return { x: pHere.x + dir*len, y: pHere.y };
+  } else {
+    const dir = (pOther.y >= pHere.y) ? 1 : -1;
+    return { x: pHere.x, y: pHere.y + dir*len };
+  }
+}
+
+// Auto-rutt med liten avstickare
+function routeAuto(x1,y1,x2,y2){
+  if (x1 === x2){
+    return {
+      points: [{x:x1,y:y1},{x:x2,y:y2}],
+      label: { x: x1, y: (y1+y2)/2 - 6 }
+    };
+  }
   const dy = y2 - y1;
-
-  const sgn = (v)=> (v===0 ? 1 : (v>0 ? 1 : -1));
-  const sx = sgn(dx);
-  const sy = sgn(dy);
-
-  // standardfall: sista segmentet vertikalt (tidigare beteende)
-  if (!startHoriz && !endHoriz){
-    if (x1 === x2) return `M ${x1},${y1} L ${x2},${y2}`;
-    const s  = Math.min(stub, Math.max(0, Math.abs(dy)/2) || stub);
-    const yStart = y1 + sy*s;
-    const yEnd   = y2 - sy*s;
-    return [
-      `M ${x1},${y1}`,
-      `L ${x1},${yStart}`,
-      `L ${x2},${yStart}`,
-      `L ${x2},${yEnd}`,
-      `L ${x2},${y2}`
-    ].join(' ');
-  }
-
-  // start vertikalt, slut horisontellt (… -> 12/14)
-  if (!startHoriz && endHoriz){
-    const s  = stub;
-    const xNear = x2 - sx*s;   // närma dig i x-led
-    const yKnee = y1 + sy*s;
-    return [
-      `M ${x1},${y1}`,
-      `L ${x1},${yKnee}`,
-      `L ${xNear},${yKnee}`,
-      `L ${xNear},${y2}`,
-      `L ${x2},${y2}`
-    ].join(' ');
-  }
-
-  // start horisontellt, slut vertikalt (12/14 -> …)
-  if (startHoriz && !endHoriz){
-    const s  = stub;
-    const xKnee = x1 + sx*s;
-    const yNear = y2 - sy*s;
-    return [
-      `M ${x1},${y1}`,
-      `L ${xKnee},${y1}`,
-      `L ${xKnee},${yNear}`,
-      `L ${x2},${yNear}`,
-      `L ${x2},${y2}`
-    ].join(' ');
-  }
-
-  // start horisontellt OCH slut horisontellt
-  if (startHoriz && endHoriz){
-    const s  = stub;
-    const xL = x1 + sx*s;
-    const xR = x2 - sx*s;
-    return [
-      `M ${x1},${y1}`,
-      `L ${xL},${y1}`,
-      `L ${xR},${y1}`,
-      `L ${xR},${y2}`,
-      `L ${x2},${y2}`
-    ].join(' ');
-  }
+  const s  = Math.min(WIRE_STUB, Math.max(0, Math.abs(dy)/2) || WIRE_STUB);
+  const yStart = y1 + (dy >= 0 ? s : -s);
+  const yEnd   = y2 - (dy >= 0 ? s : -s);
+  return {
+    points: [
+      {x:x1,y:y1},{x:x1,y:yStart},{x:x2,y:yStart},{x:x2,y:yEnd},{x:x2,y:y2}
+    ],
+    label: { x: (x1+x2)/2, y: yStart - 6 }
+  };
 }
 
-function wireCenterXY(a, b){
-  return { cx:(a.x+b.x)/2, cy:(a.y+b.y)/2 };
+// Hjälp: hitta nästa guide av typ t från index i+1, annars fallback (x2 eller y2)
+function nextGuidePos(guides, i, type, fallback){
+  for (let k=i+1;k<guides.length;k++){
+    if (guides[k].type === type) return guides[k].pos;
+  }
+  return fallback;
 }
 
-/* ---------- Rita om ledningar ---------- */
+// Manuell rutt med flera guider (H/V) i angiven ordning
+function routeWithGuides(x1,y1,x2,y2, guides){
+  const pts = [{x:x1,y:y1}];
+  let cur = { x:x1, y:y1 };
+
+  for (let i=0;i<guides.length;i++){
+    const g = guides[i];
+    if (g.type === 'H'){
+      // upp/ner till g.pos, sedan horisontellt mot nästa V (eller änd-x)
+      pts.push({ x:cur.x, y:g.pos });
+      const nx = nextGuidePos(guides, i, 'V', x2);
+      pts.push({ x:nx, y:g.pos });
+      cur = { x:nx, y:g.pos };
+    } else { // 'V'
+      // vänster/höger till g.pos, sedan vertikalt mot nästa H (eller änd-y)
+      pts.push({ x:g.pos, y:cur.y });
+      const ny = nextGuidePos(guides, i, 'H', y2);
+      pts.push({ x:g.pos, y:ny });
+      cur = { x:g.pos, y:ny };
+    }
+  }
+
+  // Avsluta till mål
+  if (cur.x !== x2) pts.push({ x:x2, y:cur.y });
+  if (cur.y !== y2) pts.push({ x:x2, y:y2 });
+
+  // Label vid halva L1-längden
+  const mid = polylineMidpoint(pts);
+  return { points: pts, label: { x: mid.x, y: mid.y - 6 } };
+}
+
+function polylineMidpoint(pts){
+  let tot=0;
+  for (let i=0;i<pts.length-1;i++){
+    tot += Math.abs(pts[i+1].x - pts[i].x) + Math.abs(pts[i+1].y - pts[i].y);
+  }
+  let acc=0;
+  const half = tot/2;
+  for (let i=0;i<pts.length-1;i++){
+    const A = pts[i], B = pts[i+1];
+    const seg = Math.abs(B.x-A.x) + Math.abs(B.y-A.y);
+    if (acc + seg >= half){
+      const need = half - acc;
+      if (A.x===B.x){
+        const y = A.y + Math.sign(B.y-A.y)*need;
+        return { x:A.x, y };
+      } else {
+        const x = A.x + Math.sign(B.x-A.x)*need;
+        return { x, y:A.y };
+      }
+    }
+    acc += seg;
+  }
+  return pts[Math.floor(pts.length/2)] || pts[0];
+}
+
+function pathFromPoints(pts){
+  let d = `M ${pts[0].x},${pts[0].y}`;
+  for (let i=1;i<pts.length;i++){
+    d += ` L ${pts[i].x},${pts[i].y}`;
+  }
+  return d;
+}
+
+// GEOMETRI: lägger in "stubs" vid portarna enligt entry-orientation, men
+// NYTT: för 12/14 på 5/2 tvinga stubben att gå UTÅT (12→+x, 14→-x) oavsett motände.
+function computeConnectionGeometry(conn){
+  const c1 = components.find(c=>c.id===conn.from.id);
+  const c2 = components.find(c=>c.id===conn.to.id);
+  if(!c1 || !c2) return null;
+
+  const a = portGlobalPosition(c1, conn.from.port);
+  const b = portGlobalPosition(c2, conn.to.port);
+
+  // Önskad kontaktorientering vid respektive ände
+  const oStart = getPortEntryOrientation(c1, conn.from.port);
+  const oEnd   = getPortEntryOrientation(c2, conn.to.port);
+
+  // Stubs – special för pilotportar (12/14): alltid horisontellt UTÅT
+  let a0, b0;
+  if (isValvePilotPort(c1, conn.from.port)){
+    const dir = (conn.from.port === '12') ? +1 : -1; // 12 höger, 14 vänster
+    a0 = { x: a.x + dir*WIRE_STUB, y: a.y };
+  } else {
+    a0 = makeEndpointStub(a, b, oStart);
+  }
+  if (isValvePilotPort(c2, conn.to.port)){
+    const dir = (conn.to.port === '12') ? +1 : -1;
+    b0 = { x: b.x + dir*WIRE_STUB, y: b.y };
+  } else {
+    b0 = makeEndpointStub(b, a, oEnd);
+  }
+
+  const guides = Array.isArray(conn.guides) ? conn.guides : [];
+
+  // Rutta mellan a0 → b0
+  const inner = (guides.length>0)
+    ? routeWithGuides(a0.x, a0.y, b0.x, b0.y, guides)
+    : routeAuto(a0.x, a0.y, b0.x, b0.y);
+
+  // Bygg hela polylinjen
+  const pts = [];
+  pts.push({ x:a.x, y:a.y });
+  if (a0.x!==a.x || a0.y!==a.y) pts.push(a0);
+
+  const innerPts = inner.points;
+  for (let i=1; i<innerPts.length-1; i++) pts.push(innerPts[i]);
+
+  if (b0.x!==b.x || b0.y!==b.y) pts.push(b0);
+  pts.push({ x:b.x, y:b.y });
+
+  const mid = polylineMidpoint(pts);
+  return { a, b, points: pts, label: { x: mid.x, y: mid.y - 6 } };
+}
+
 function redrawConnections(){
   connLayer.setAttribute('width',  compLayer.clientWidth);
   connLayer.setAttribute('height', compLayer.clientHeight);
   connections.forEach(conn=>{
-    const c1 = components.find(c=>c.id===conn.from.id);
-    const c2 = components.find(c=>c.id===conn.to.id);
-    if(!c1 || !c2) return;
-    const a = portGlobalPosition(c1, conn.from.port);
-    const b = portGlobalPosition(c2, conn.to.port);
-
-    // 12/14: horisontell sista/första biten
-    const startHoriz = (conn.from.port === '12' || conn.from.port === '14');
-    const endHoriz   = (conn.to.port   === '12' || conn.to.port   === '14');
-
-    const d = drawWirePath(a.x, a.y, b.x, b.y, { startHoriz, endHoriz });
-
-    // uppdatera path + hit
+    const geom = computeConnectionGeometry(conn);
+    if (!geom) return;
+    const d = pathFromPoints(geom.points);
     conn.pathEl.setAttribute('d', d);
-    conn.hitEl?.setAttribute('d', d);
-
-    // placera trycketikett i mitten
-    if (conn.pressLbl){
-      const mid = wireCenterXY(a,b);
-      conn.pressLbl.setAttribute('x', mid.cx);
-      conn.pressLbl.setAttribute('y', mid.cy - 6); // liten upp-justering
-      conn.pressBg?.setAttribute('x', mid.cx - 12);
-      conn.pressBg?.setAttribute('y', mid.cy - 17);
+    if (conn.labelEl){
+      conn.labelEl.setAttribute('x', geom.label.x);
+      conn.labelEl.setAttribute('y', geom.label.y);
     }
+    // uppdatera handtagens placering (grovt: mitt mellan ändar)
+    refreshHandlesForConnection(conn, /*repositionOnly=*/true);
   });
 }
 
 /* ---------- Val / radering ---------- */
-function setComponentSelected(comp, on){
-  comp.el.classList.toggle('selected', !!on);
-  if (on) selectedComponents.add(comp); else selectedComponents.delete(comp);
-}
-function clearSelectedComponents(){
-  [...selectedComponents].forEach(c=> c.el.classList.remove('selected'));
-  selectedComponents.clear();
-}
-function selectConnection(conn){
-  clearSelectedComponents();
-  if (selectedConnection && selectedConnection!==conn) selectedConnection.pathEl.classList.remove('selected');
-  selectedConnection = conn;
-  if (selectedConnection) selectedConnection.pathEl.classList.add('selected');
+function applySelectedClasses(){
+  components.forEach(c=>{
+    c.el.classList.toggle('selected', selectedComponents.has(c));
+  });
 }
 function clearSelectedConnection(){
   if (selectedConnection){
     selectedConnection.pathEl.classList.remove('selected');
+    destroyHandlesForConnection(selectedConnection);
     selectedConnection = null;
   }
 }
+function selectConnection(conn){
+  clearSelectedComponent();
+  if (selectedConnection && selectedConnection!==conn){
+    selectedConnection.pathEl.classList.remove('selected');
+    destroyHandlesForConnection(selectedConnection);
+  }
+  selectedConnection = conn;
+  if (selectedConnection){
+    selectedConnection.pathEl.classList.add('selected');
+    maybeSeedFirstGuide(selectedConnection);
+    refreshHandlesForConnection(selectedConnection);
+  }
+}
+function selectComponent(comp, additive=false){
+  clearSelectedConnection();
+  if (!additive) selectedComponents.clear();
+  if (selectedComponents.has(comp) && additive){
+    selectedComponents.delete(comp);
+  } else {
+    selectedComponents.add(comp);
+    selectedComponent = comp;
+  }
+  applySelectedClasses();
+}
+function clearSelectedComponent(){
+  selectedComponents.clear();
+  selectedComponent = null;
+  applySelectedClasses();
+}
+
+/* --- Svälj bakgrundsklick efter lasso --- */
+let suppressNextBackgroundClick = false;
 
 compLayer.addEventListener('click', (e)=>{
-  // spara sista klickpunkt (för paste-offset)
-  const r = workspaceBBox();
-  lastClickPoint = { x: clamp(e.clientX - r.left, 0, r.width), y: clamp(e.clientY - r.top, 0, r.height) };
-
-  // Om vi är i länk-läge: ignorera rensning (portar har prioritet)
-  if (pendingPort) return;
-
-  clearSelectedConnection();
-  if (!e.shiftKey) clearSelectedComponents();
-  hideCtxMenu();
+  if (suppressNextBackgroundClick){
+    suppressNextBackgroundClick = false;
+    return;
+  }
+  if (e.target === compLayer){
+    clearSelectedConnection();
+    clearSelectedComponent();
+    hideCtxMenu();
+  }
 });
 
 window.addEventListener('keydown', (e)=>{
-  // Avbryt länkning med ESC
+  // ESC avbryter länkning
   if (e.key === 'Escape' && pendingPort){
-    cancelLinking();
+    const prevComp = components.find(c=>c.id===pendingPort.id);
+    if (prevComp) prevComp.ports[pendingPort.port]?.el?.setAttribute('fill','#fff');
+    pendingPort = null;
+    document.body.style.cursor = '';
     return;
+  }
+  if ((e.key!=='Delete' && e.key!=='Backspace') || !canEdit()) return;
+
+  if (selectedConnection){
+    removeConnection(selectedConnection);
+    selectedConnection = null;
+    e.preventDefault();
+    pushHistory('Delete wire');
+    redrawConnections();
+    return;
+  }
+  if (selectedComponents.size > 0){
+    const toDel = [...selectedComponents];
+    toDel.forEach(c => deleteComponent(c));
+    clearSelectedComponent();
+    e.preventDefault();
+    pushHistory('Delete components');
+    return;
+  }
+});
+
+/* ---------- Piltangenter: nudge ---------- */
+let _nudgeActive = false;
+window.addEventListener('keydown', (e)=>{
+  // ignorera om fokus är i ett input/textarea eller contentEditable
+  const tag = (e.target && e.target.tagName) ? e.target.tagName.toUpperCase() : '';
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target && e.target.isContentEditable)) return;
+  if (!canEdit()) return;
+
+  let dx = 0, dy = 0;
+  const step = e.shiftKey ? 10 : 1;
+
+  switch(e.key){
+    case 'ArrowLeft':  dx = -step; break;
+    case 'ArrowRight': dx =  step; break;
+    case 'ArrowUp':    dy = -step; break;
+    case 'ArrowDown':  dy =  step; break;
+    default: return;
   }
 
-  // Copy/Cut/Paste
-  const mod = e.ctrlKey || e.metaKey;
-  if (mod && e.key.toLowerCase()==='c'){
-    if (!canEdit()) return;
-    copySelectionToClipboard();
-    e.preventDefault();
-    return;
-  }
-  if (mod && e.key.toLowerCase()==='x'){
-    if (!canEdit()) return;
-    copySelectionToClipboard();
-    deleteSelectedComponents();
-    pushHistory('Cut components');
-    e.preventDefault();
-    return;
-  }
-  if (mod && e.key.toLowerCase()==='v'){
-    if (!canEdit()) return;
-    pasteClipboardAt(lastClickPoint.x, lastClickPoint.y);
-    pushHistory('Paste components');
-    e.preventDefault();
-    return;
-  }
-
-  // Delete
-  if ((e.key==='Delete' || e.key==='Backspace') && canEdit()){
-    if (selectedConnection){
-      (selectedConnection.groupEl ?? selectedConnection.pathEl).remove();
-      connections = connections.filter(c=>c!==selectedConnection);
-      selectedConnection = null;
-      e.preventDefault();
-      pushHistory('Delete wire');
-      redrawConnections();
-      return;
-    }
-    if (selectedComponents.size > 0){
-      deleteSelectedComponents();
-      e.preventDefault();
-      pushHistory('Delete components');
-      return;
-    }
+  e.preventDefault();
+  nudgeSelectedComponents(dx, dy);
+  _nudgeActive = true;
+});
+window.addEventListener('keyup', (e)=>{
+  if (!_nudgeActive) return;
+  if (e.key==='ArrowLeft' || e.key==='ArrowRight' || e.key==='ArrowUp' || e.key==='Down'){
+    pushHistory(selectedComponents.size>1 ? 'Nudge components' : 'Nudge component');
+    _nudgeActive = false;
   }
 });
 
@@ -291,14 +404,53 @@ window.addEventListener('keydown', (e)=>{
 let ctxMenuEl = null;
 function hideCtxMenu(){ if (ctxMenuEl){ ctxMenuEl.remove(); ctxMenuEl = null; } }
 function showCtxMenu(x, y, { type, payload }){
-  // blockera under länkning
-  if (pendingPort) return;
-
   hideCtxMenu();
   const m = document.createElement('div');
   m.className = 'ctxmenu';
   m.style.left = x + 'px';
   m.style.top  = y + 'px';
+
+  const addBtn = (txt, fn)=>{
+    const b = document.createElement('button');
+    b.textContent = txt;
+    b.addEventListener('click', ()=>{ fn(); hideCtxMenu(); });
+    m.appendChild(b);
+  };
+
+  if (type==='wire' && payload?.conn){
+    const conn = payload.conn;
+    const hit = payload.hit || null;
+
+    if (hit){
+      const segIsH = (hit.seg && hit.seg.A && hit.seg.B) ? (hit.seg.A.y === hit.seg.B.y) : false;
+      addBtn('➕ Lägg till segment här', ()=>{
+        if (!conn.guides) conn.guides = [];
+        if (segIsH) conn.guides.push({ type:'H', pos: hit.y });
+        else        conn.guides.push({ type:'V', pos: hit.x });
+        refreshHandlesForConnection(conn);
+        redrawConnections();
+        pushHistory('Add wire segment');
+      });
+    }
+
+    if (Array.isArray(conn.guides) && conn.guides.length>0){
+      addBtn('➖ Ta bort närmaste segment', ()=>{
+        const idx = nearestGuideIndex(conn, hit?.x ?? payload.x, hit?.y ?? payload.y);
+        if (idx>=0){
+          conn.guides.splice(idx,1);
+          refreshHandlesForConnection(conn);
+          redrawConnections();
+          pushHistory('Remove nearest wire segment');
+        }
+      });
+      addBtn('🧹 Rensa alla segment', ()=>{
+        conn.guides = [];
+        refreshHandlesForConnection(conn);
+        redrawConnections();
+        pushHistory('Clear wire segments');
+      });
+    }
+  }
 
   const delBtn = document.createElement('button');
   delBtn.textContent = canEdit() ? '🗑️ Ta bort' : '🔒 Redigering kräver STOP-läge';
@@ -306,13 +458,11 @@ function showCtxMenu(x, y, { type, payload }){
   delBtn.addEventListener('click', ()=>{
     if (!canEdit()) return;
     if (type==='component' && payload?.comp){
-      setComponentSelected(payload.comp, true);
-      deleteSelectedComponents();
-      clearSelectedComponents();
+      deleteComponent(payload.comp);
+      clearSelectedComponent();
       pushHistory('Delete component');
     } else if (type==='wire' && payload?.conn){
-      (payload.conn.groupEl ?? payload.conn.pathEl).remove();
-      connections = connections.filter(c=>c!==payload.conn);
+      removeConnection(payload.conn);
       clearSelectedConnection();
       redrawConnections();
       pushHistory('Delete wire');
@@ -338,155 +488,375 @@ function showCtxMenu(x, y, { type, payload }){
   ctxMenuEl = m;
 }
 
+/* ---------- Komponentradering ---------- */
 function deleteComponent(comp){
   const toRemove = connections.filter(c => c.from.id===comp.id || c.to.id===comp.id);
-  toRemove.forEach(c => (c.groupEl ?? c.pathEl).remove());
-  connections = connections.filter(c => c.from.id!==comp.id && c.to.id!==comp.id);
-  comp.el.remove();
+  toRemove.forEach(c => removeConnection(c));
   components = components.filter(c => c !== comp);
+  comp.el.remove();
   hideCtxMenu();
   redrawConnections();
 }
-function deleteSelectedComponents(){
-  const list = [...selectedComponents];
-  list.forEach(c=> deleteComponent(c));
-  clearSelectedComponents();
+
+/* ---------- Junction-komponent ---------- */
+function addJunction(
+  x, y,
+  compLayer, components,
+  handlePortClick, makeDraggable, redrawConnections, uid
+){
+  const id = uid();
+  const NS = 'http://www.w3.org/2000/svg';
+
+  const el = document.createElement('div');
+  el.className = 'comp';
+  el.style.left = x + 'px';
+  el.style.top  = y + 'px';
+
+  const label = document.createElement('div');
+  label.className = 'label';
+  label.textContent = 'J';
+
+  const svg = document.createElementNS(NS,'svg');
+  svg.classList.add('compSvg');
+  const SVG_W = 24, SVG_H = 24;
+  svg.setAttribute('width',  SVG_W);
+  svg.setAttribute('height', SVG_H);
+
+  const g = document.createElementNS(NS,'g');
+  const GX = 12, GY = 12;
+  g.setAttribute('transform', `translate(${GX},${GY})`);
+
+  const dot = document.createElementNS(NS,'circle');
+  dot.setAttribute('cx', 0); dot.setAttribute('cy', 0);
+  dot.setAttribute('r', 3);
+  dot.setAttribute('fill', '#000');
+
+  const port = document.createElementNS(NS,'circle');
+  port.setAttribute('class','port');
+  port.setAttribute('r', 6);
+  port.setAttribute('cx', 0);
+  port.setAttribute('cy', 0);
+  port.addEventListener('click', (e)=>{
+    e.stopPropagation();
+    handlePortClick(comp, 'J', port);
+  });
+
+  g.append(dot, port);
+  svg.appendChild(g);
+  el.append(label, svg);
+  compLayer.appendChild(el);
+
+  const comp = {
+    id, type:'junction', el, x, y,
+    svgW: SVG_W, svgH: SVG_H, gx: GX, gy: GY,
+    ports: { J: { cx:0, cy:0, el: port } }
+  };
+
+  makeDraggable(comp);
+  components.push(comp);
+  redrawConnections();
+  return comp;
 }
 
-/* ---------- Drag ---------- */
+/* ---------- Drag (singel + grupp) ---------- */
 function makeDraggable(comp){
-  let dragging=false, dx=0, dy=0;
+  let dragging=false, startMouseX=0, startMouseY=0;
+  let offsets = null;
 
   function onDown(e){
     if (!canEdit()) return;
-    if (pendingPort) return; // länk-läge: dra inte
     if (e.target.closest('.port')) return;
 
-    // Shift-klick togglar individ
-    if (e.shiftKey){
-      setComponentSelected(comp, !selectedComponents.has(comp));
-    } else {
-      // om inte redan i mängden: välj bara denna
-      if (!selectedComponents.has(comp)){
-        clearSelectedComponents();
-        setComponentSelected(comp, true);
-      }
+    const additive = e.shiftKey || e.ctrlKey || e.metaKey;
+
+    if (!selectedComponents.has(comp)) {
+      if (!additive) selectedComponents.clear();
+      selectedComponents.add(comp);
+      applySelectedClasses();
     }
 
-    // Starta drag om komponenten är vald
     dragging = true;
     const rect = workspaceBBox();
-    dx = e.clientX - (rect.left + comp.x);
-    dy = e.clientY - (rect.top  + comp.y);
+    startMouseX = e.clientX - rect.left;
+    startMouseY = e.clientY - rect.top;
+
+    const group = (selectedComponents.size > 1);
+    if (group){
+      offsets = [...selectedComponents].map(c=>({
+        comp:c,
+        dx:startMouseX - c.x,
+        dy:startMouseY - c.y
+      }));
+    } else {
+      offsets = [{ comp, dx:startMouseX - comp.x, dy:startMouseY - comp.y }];
+    }
+
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp, { once:true });
+
+    e.preventDefault();
+    e.stopPropagation();
   }
   function onMove(e){
     if(!dragging) return;
     const rect = workspaceBBox();
-    const mx = clamp(e.clientX - rect.left - dx, 40, rect.width-40);
-    const my = clamp(e.clientY - rect.top  - dy, 40, rect.height-40);
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
 
-    // Om flera vald: flytta dem relativt samma delta som "comp"
-    const ox = mx - comp.x;
-    const oy = my - comp.y;
-    [...selectedComponents].forEach(c=>{
-      c.x = clamp(c.x + ox, 40, rect.width-40);
-      c.y = clamp(c.y + oy, 40, rect.height-40);
-      c.el.style.left = c.x + 'px';
-      c.el.style.top  = c.y + 'px';
+    offsets.forEach(o=>{
+      const nx = clamp(mx - o.dx, 40, rect.width-40);
+      const ny = clamp(my - o.dy, 40, rect.height-40);
+      o.comp.x = nx; o.comp.y = ny;
+      o.comp.el.style.left = nx + 'px';
+      o.comp.el.style.top  = ny + 'px';
     });
     redrawConnections();
   }
   function onUp(){
     dragging=false;
-    pushHistory('Move component');
+    offsets = null;
+    pushHistory(selectedComponents.size>1 ? 'Move components' : 'Move component');
     window.removeEventListener('mousemove', onMove);
   }
+
   comp.el.addEventListener('mousedown', onDown);
 
   comp.el.addEventListener('contextmenu', (e)=>{
     e.preventDefault();
-    if (pendingPort) return; // länk-läge
-    if (!selectedComponents.has(comp)){
-      clearSelectedComponents();
-      setComponentSelected(comp, true);
-    }
     showCtxMenu(e.clientX, e.clientY, { type:'component', payload:{ comp } });
   });
 }
 
-/* ---------- Marquee (rektangelmarkering) ---------- */
+/* ---------- Trådar ---------- */
+function createWirePath(){
+  const path = document.createElementNS('http://www.w3.org/2000/svg','path');
+  path.setAttribute('class','wire');
+  path.style.pointerEvents = 'stroke';
+  return path;
+}
+function createWireLabel(){
+  const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+  t.setAttribute('class','wireLabel');
+  t.setAttribute('text-anchor','middle');
+  t.setAttribute('font-size','12');
+  t.style.pointerEvents = 'none';
+  return t;
+}
+
+function addConnection(from, to){
+  const path = createWirePath();
+  const label = createWireLabel();
+  connLayer.appendChild(path);
+  connLayer.appendChild(label);
+  const conn = { from, to, pathEl: path, labelEl: label, guides: [], handleEls: [] };
+  connections.push(conn);
+  return conn;
+}
+function removeConnection(conn){
+  destroyHandlesForConnection(conn);
+  conn.pathEl?.remove();
+  conn.labelEl?.remove();
+  connections = connections.filter(c=>c!==conn);
+}
+
+function finalizeWire(from, to){
+  const conn = addConnection(from, to);
+  redrawConnections();
+  return conn;
+}
+
+/* ---------- Hit-test för trådar ---------- */
+function distPointToSegment(px, py, ax, ay, bx, by){
+  const abx = bx - ax, aby = by - ay;
+  const apx = px - ax, apy = py - ay;
+  const ab2 = abx*abx + aby*aby;
+  let t = 0;
+  if (ab2 > 0) t = Math.max(0, Math.min(1, (apx*abx + apy*aby)/ab2));
+  const cx = ax + t*abx, cy = ay + t*aby;
+  const dx = px - cx, dy = py - cy;
+  const d = Math.hypot(dx, dy);
+  return { d, cx, cy };
+}
+function hitTestWire(px, py, threshold=8){
+  let best = null;
+  connections.forEach(conn=>{
+    const geom = computeConnectionGeometry(conn);
+    if (!geom) return;
+    const pts = geom.points;
+    for (let i=0;i<pts.length-1;i++){
+      const A = pts[i], B = pts[i+1];
+      const { d, cx, cy } = distPointToSegment(px, py, A.x, A.y, B.x, B.y);
+      if (d <= threshold && (!best || d < best.d)){
+        best = { conn, d, x: cx, y: cy, seg: { A, B, i } };
+      }
+    }
+  });
+  return best;
+}
+
+/* ---------- Junction + val av tråd (capture) ---------- */
+window.addEventListener('click', (e)=>{
+  if (!canEdit()) return;
+
+  const rect = workspaceBBox();
+  const px = e.clientX - rect.left;
+  const py = e.clientY - rect.top;
+
+  // Länkning mot tråd ⇒ skapa junction
+  if (pendingPort && !(e.target && e.target.classList?.contains('port'))){
+    const hit = hitTestWire(px, py, 8);
+    if (hit){
+      const j = addJunction(hit.x, hit.y, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
+
+      // dela tråden (guider tas inte med – enklare)
+      removeConnection(hit.conn);
+      addConnection(hit.conn.from, { id:j.id, port:'J' });
+      addConnection({ id:j.id, port:'J' }, hit.conn.to);
+
+      // anslut pågående länk till junction
+      addConnection(pendingPort, { id:j.id, port:'J' });
+
+      const prevComp = components.find(c=>c.id===pendingPort.id);
+      prevComp?.ports[pendingPort.port]?.el?.setAttribute('fill','#fff');
+      pendingPort = null;
+      document.body.style.cursor = '';
+
+      redrawConnections();
+      pushHistory('Create junction');
+      e.stopPropagation(); e.preventDefault();
+      return;
+    }
+    return;
+  }
+
+  // Markera tråd
+  if (!pendingPort){
+    const hit = hitTestWire(px, py, 6);
+    if (hit){
+      selectConnection(hit.conn);
+      e.stopPropagation(); e.preventDefault();
+    }
+  }
+}, true);
+
+// Dubbelklick: lägg till segment (H/V) där du klickar
+window.addEventListener('dblclick', (e)=>{
+  if (!canEdit()) return;
+
+  const rect = workspaceBBox();
+  const px = e.clientX - rect.left;
+  const py = e.clientY - rect.top;
+
+  const hit = hitTestWire(px, py, 6);
+  if (!hit) return;
+
+  const isH = (hit.seg.A.y === hit.seg.B.y);
+  const conn = hit.conn;
+  if (!conn.guides) conn.guides = [];
+  conn.guides.push(isH ? { type:'H', pos: hit.y } : { type:'V', pos: hit.x });
+
+  selectConnection(conn);
+  refreshHandlesForConnection(conn);
+  redrawConnections();
+  pushHistory('Add wire segment (dblclick)');
+
+  e.stopPropagation(); e.preventDefault();
+}, true);
+
+// Contextmeny på tråd (med segmentåtgärder)
+window.addEventListener('contextmenu', (e)=>{
+  if (!canEdit()) return;
+
+  const rect = workspaceBBox();
+  const px = e.clientX - rect.left;
+  const py = e.clientY - rect.top;
+
+  const hit = hitTestWire(px, py, 6);
+  if (hit){
+    selectConnection(hit.conn);
+    showCtxMenu(e.clientX, e.clientY, { type:'wire', payload:{ conn:hit.conn, hit, x:px, y:py } });
+    e.stopPropagation(); e.preventDefault();
+  }
+}, true);
+
+/* ---------- Marquee (lasso) ---------- */
+let marqueeEl = null;
 let marqueeActive = false;
-let marqueeStart  = null;
-let marqueeEl     = null;
-let marqueeAdd    = false;
+let marqueeStart = { x:0, y:0 };
+let marqueeAdditive = false;
+
+function startMarquee(x, y, additive){
+  if (!canEdit()) return;
+  marqueeActive = true;
+  marqueeStart = { x, y };
+  marqueeAdditive = additive;
+
+  marqueeEl = document.createElement('div');
+  marqueeEl.className = 'marquee';
+  marqueeEl.style.left = x + 'px';
+  marqueeEl.style.top  = y + 'px';
+  document.body.appendChild(marqueeEl);
+}
+function updateMarquee(x, y){
+  if (!marqueeActive || !marqueeEl) return;
+  const left   = Math.min(marqueeStart.x, x);
+  const top    = Math.min(marqueeStart.y, y);
+  const right  = Math.max(marqueeStart.x, x);
+  const bottom = Math.max(marqueeStart.y, y);
+  marqueeEl.style.left = left + 'px';
+  marqueeEl.style.top  = top  + 'px';
+  marqueeEl.style.width  = (right-left) + 'px';
+  marqueeEl.style.height = (bottom-top) + 'px';
+}
+function endMarquee(x, y){
+  if (!marqueeActive) return;
+  const left   = Math.min(marqueeStart.x, x);
+  const top    = Math.min(marqueeStart.y, y);
+  const right  = Math.max(marqueeStart.x, x);
+  const bottom = Math.max(marqueeStart.y, y);
+
+  const rect = workspaceBBox();
+  const sel = components.filter(c=>{
+    const sx = rect.left + c.x;
+    const sy = rect.top  + c.y;
+    return sx>=left && sx<=right && sy>=top && sy<=bottom;
+  });
+
+  if (!marqueeAdditive) selectedComponents.clear();
+  sel.forEach(c => selectedComponents.add(c));
+  applySelectedClasses();
+
+  marqueeActive = false;
+  marqueeAdditive = false;
+
+  suppressNextBackgroundClick = true;
+
+  marqueeEl?.remove();
+  marqueeEl = null;
+}
 
 compLayer.addEventListener('mousedown', (e)=>{
   if (!canEdit()) return;
-  if (pendingPort) return; // länk-läge: ingen marquee
-  if (e.target.closest('.comp') || e.target.closest('.port')) return; // låt komponenters egna mousedown hantera
-  hideCtxMenu();
+  if (e.target.closest('.comp') || e.target.classList?.contains('port')) return;
 
-  marqueeActive = true;
-  marqueeAdd = !!e.shiftKey;
-  if (!marqueeAdd) clearSelectedComponents();
+  const additive = e.shiftKey || e.ctrlKey || e.metaKey;
+  startMarquee(e.clientX, e.clientY, additive);
+  e.preventDefault();
 
-  marqueeStart = { x: e.clientX, y: e.clientY };
-
-  marqueeEl = document.createElement('div');
-  marqueeEl.className = 'marquee-box';
-  marqueeEl.style.left = `${e.clientX}px`;
-  marqueeEl.style.top  = `${e.clientY}px`;
-  document.body.appendChild(marqueeEl);
-
-  function onMove(ev){
-    if (!marqueeActive) return;
-    const x1 = Math.min(marqueeStart.x, ev.clientX);
-    const y1 = Math.min(marqueeStart.y, ev.clientY);
-    const x2 = Math.max(marqueeStart.x, ev.clientX);
-    const y2 = Math.max(marqueeStart.y, ev.clientY);
-    marqueeEl.style.left   = `${x1}px`;
-    marqueeEl.style.top    = `${y1}px`;
-    marqueeEl.style.width  = `${x2-x1}px`;
-    marqueeEl.style.height = `${y2-y1}px`;
-
-    // markera komponenter som skär rektangel
-    const selRect = { left:x1, top:y1, right:x2, bottom:y2 };
-    components.forEach(c=>{
-      const b = c.el.getBoundingClientRect();
-      const hit = !(b.right < selRect.left || b.left > selRect.right || b.bottom < selRect.top || b.top > selRect.bottom);
-      if (hit) setComponentSelected(c, true);
-      else if (!marqueeAdd) setComponentSelected(c, false);
-    });
-  }
-  function onUp(){
-    marqueeActive = false;
+  const onMove = (ev)=> updateMarquee(ev.clientX, ev.clientY);
+  const onUp = (ev)=>{
     window.removeEventListener('mousemove', onMove);
     window.removeEventListener('mouseup', onUp, { once:true });
-    marqueeEl?.remove(); marqueeEl=null;
-    pushHistory('Select components');
-  }
-
+    endMarquee(ev.clientX, ev.clientY);
+    ev.stopPropagation();
+  };
   window.addEventListener('mousemove', onMove);
   window.addEventListener('mouseup', onUp, { once:true });
+
+  e.stopPropagation();
 });
 
-/* ---------- Koppla portar (med osynlig hit-yta & trycketikett) ---------- */
-function beginLinking(){
-  document.body.classList.add('linking');
-}
-function endLinking(){
-  document.body.classList.remove('linking');
-}
-function cancelLinking(){
-  // hitta första port och återställ färg
-  const prevComp = components.find(c=>c.id===pendingPort?.id);
-  if (prevComp){ prevComp.ports[pendingPort.port]?.el?.setAttribute('fill','#fff'); }
-  pendingPort = null;
-  endLinking();
-}
-
+/* ---------- Portkoppling ---------- */
 function handlePortClick(comp, portKey, portEl){
   if (!canEdit()) return;
   hideCtxMenu();
@@ -495,233 +865,203 @@ function handlePortClick(comp, portKey, portEl){
   if (!pendingPort){
     pendingPort = { id: comp.id, port: portKey };
     portEl.setAttribute('fill', '#dff1ff');
-    // Endast denna komponent vald om inte Shift
-    if (!selectedComponents.has(comp)){
-      clearSelectedComponents();
-      setComponentSelected(comp, true);
-    }
-    beginLinking();
+    document.body.style.cursor = 'crosshair';
     return;
   }
-  // klick på samma port = avbryt
   if (pendingPort.id === comp.id && pendingPort.port === portKey){
-    cancelLinking();
+    pendingPort = null;
+    portEl.setAttribute('fill', '#fff');
+    document.body.style.cursor = '';
     return;
   }
 
-  // Skapa wire-grupp
-  const g = document.createElementNS('http://www.w3.org/2000/svg','g');
-
-  const pathHit = document.createElementNS('http://www.w3.org/2000/svg','path');
-  pathHit.setAttribute('class','wire-hit');
-
-  const pathVis = document.createElementNS('http://www.w3.org/2000/svg','path');
-  pathVis.setAttribute('class','wire');
-  pathVis.style.pointerEvents = 'none'; // klick sker på hit-lagret
-
-  // Trycketikett (text) + liten transparent bakgrund för läsbarhet
-  const pressLbl = document.createElementNS('http://www.w3.org/2000/svg','text');
-  pressLbl.setAttribute('class','wirePressure');
-  pressLbl.setAttribute('text-anchor','middle');
-  pressLbl.setAttribute('dominant-baseline','central');
-
-  // (valfri) bakgrundsrektangel – kan lämnas av
-  // const pressBg = document.createElementNS('http://www.w3.org/2000/svg','rect');
-  // pressBg.setAttribute('class','wirePressureBg');
-  // pressBg.setAttribute('width','24');
-  // pressBg.setAttribute('height','14');
-  // pressBg.setAttribute('rx','3');
-
-  // g.append(pathHit, pathVis, pressBg, pressLbl);
-  g.append(pathHit, pathVis, pressLbl);
-  connLayer.appendChild(g);
-
-  function onClick(e){
-    if (pendingPort) return; // i länk-läge har portar prioritet
-    e.stopPropagation();
-    const conn = connections.find(c=>c.pathEl===pathVis);
-    if (conn) selectConnection(conn);
-  }
-  function onCtx(e){
-    if (pendingPort) return;
-    e.preventDefault();
-    const conn = connections.find(c=>c.pathEl===pathVis);
-    if (conn){
-      selectConnection(conn);
-      showCtxMenu(e.clientX, e.clientY, { type:'wire', payload:{ conn } });
-    }
-  }
-  function onEnter(){ if (!pendingPort) pathVis.classList.add('selected'); }
-  function onLeave(){ if (!pendingPort && selectedConnection?.pathEl !== pathVis) pathVis.classList.remove('selected'); }
-
-  pathHit.addEventListener('click', onClick);
-  pathHit.addEventListener('contextmenu', onCtx);
-  pathHit.addEventListener('mouseenter', onEnter);
-  pathHit.addEventListener('mouseleave', onLeave);
-
-  const conn = {
-    from: pendingPort,
-    to:   { id: comp.id, port: portKey },
-    pathEl: pathVis,      // synlig path
-    hitEl:  pathHit,      // klick-yta
-    groupEl: g,           // hela gruppen
-    pressLbl,             // trycktext
-    // pressBg
-  };
-  connections.push(conn);
+  finalizeWire(pendingPort, { id: comp.id, port: portKey });
 
   const prevComp = components.find(c=>c.id===pendingPort.id);
   if (prevComp) prevComp.ports[pendingPort.port]?.el?.setAttribute('fill','#fff');
 
   pendingPort = null;
-  endLinking();
-  redrawConnections();
+  document.body.style.cursor = '';
   pushHistory('Create wire');
 }
 
-/* ---------- TRYCK-OVERLAY (numeriskt) ---------- */
-// Bygg fullständig "ledningsgraf": wires + öppna inre förbindelser i ventiler
-function computePressureMap(){
+/* ---------- TRYCK-OVERLAY ---------- */
+const SOURCE_PRESSURE = 6.0;
+
+function computePressureSet(){
   const key = (id,port)=> `${id}:${port}`;
 
-  // 1) grafkanter
+  // 1) graf av ledningar
   const adj = new Map();
-  const add = (a,b)=>{
+  const addUndirected = (a,b)=>{
     if (!adj.has(a)) adj.set(a, new Set());
     if (!adj.has(b)) adj.set(b, new Set());
     adj.get(a).add(b); adj.get(b).add(a);
   };
-
-  // a) kablage-ledningar
   connections.forEach(conn=>{
-    add(key(conn.from.id, conn.from.port), key(conn.to.id, conn.to.port));
+    addUndirected(key(conn.from.id, conn.from.port), key(conn.to.id, conn.to.port));
   });
 
-  // b) komponent-inre förbindelser (beroende på läge)
-  components.forEach(c=>{
-    if (c.type==='valve52'){
-      if (c.state === 0){
-        // 1 <-> 4,  2 <-> 3
-        add(key(c.id,'1'), key(c.id,'4'));
-        add(key(c.id,'2'), key(c.id,'3'));
-      } else {
-        // 1 <-> 2,  4 <-> 5
-        add(key(c.id,'1'), key(c.id,'2'));
-        add(key(c.id,'4'), key(c.id,'5'));
-      }
-    } else if (c.type==='limit32'){
-      const active = !!c.state?.active;
-      if (active) add(key(c.id,'2'), key(c.id,'1'));
-      else        add(key(c.id,'2'), key(c.id,'3'));
-    } else if (c.type==='push32'){
-      const active = !!c.state?.active;
-      if (active) add(key(c.id,'2'), key(c.id,'1'));
-      else        add(key(c.id,'2'), key(c.id,'3'));
-    }
-  });
-
-  // 2) källor (noder med fasta tryck)
-  const sources = [];
+  // 2) start = tryckkällor
+  const start = [];
   components.forEach(c=>{
     if (c.type==='source'){
-      if (c.ports?.OUT) sources.push([key(c.id,'OUT'), SUPPLY_BAR]);
-      if (c.ports?.P)   sources.push([key(c.id,'P'),   SUPPLY_BAR]);
-    }
-    if (c.type==='valve52'){
-      sources.push([key(c.id,'3'), 0.0]); // avluft
-      sources.push([key(c.id,'5'), 0.0]);
-    }
-    if (c.type==='limit32' || c.type==='push32'){
-      sources.push([key(c.id,'3'), 0.0]);
+      if (c.ports?.OUT) start.push(key(c.id,'OUT'));
+      if (c.ports?.P)   start.push(key(c.id,'P'));
     }
   });
 
-  // 3) multi-source BFS → högsta tryck vinner per komponent
-  const pressure = new Map();
-  const q = [];
-  for (const [n, p] of sources){
-    const prev = pressure.get(n);
-    if (prev == null || p > prev){
-      pressure.set(n, p);
-      q.push([n, p]);
+  // 3) flood via kablage
+  const pressurized = new Set(start);
+  const q = [...start];
+  while(q.length){
+    const cur = q.shift();
+    const nbrs = adj.get(cur);
+    if (!nbrs) continue;
+    for (const n of nbrs){
+      if (!pressurized.has(n)){ pressurized.add(n); q.push(n); }
     }
   }
-  while(q.length){
-    const [n, p] = q.shift();
-    const nbrs = adj.get(n);
-    if (!nbrs) continue;
-    for (const m of nbrs){
-      const prev = pressure.get(m);
-      if (prev == null || p > prev){
-        pressure.set(m, p);
-        q.push([m, p]);
+
+  // 4) komponentlogik + flood igen vid förändring
+  let changed = true;
+  while (changed){
+    changed = false;
+
+    // 5/2: 1 <-> (4 eller 2)
+    components.forEach(v=>{
+      if (v.type!=='valve52') return;
+      const a = (v.state===0) ? '4' : '2';
+      const n1 = `${v.id}:1`, na = `${v.id}:${a}`;
+      const before = pressurized.size;
+      if (pressurized.has(n1)) pressurized.add(na);
+      if (pressurized.has(na)) pressurized.add(n1);
+      if (pressurized.size !== before) changed = true;
+    });
+
+    // AND
+    components.forEach(av=>{
+      if (av.type!=='andValve') return;
+      const nA = `${av.id}:A`, nB = `${av.id}:B`, nO = `${av.id}:OUT`;
+      const before = pressurized.size;
+      if (pressurized.has(nA) && pressurized.has(nB)) pressurized.add(nO);
+      if (pressurized.size !== before) changed = true;
+    });
+
+    // OR (shuttle)
+    components.forEach(ov=>{
+      if (ov.type!=='orValve') return;
+      const nA = `${ov.id}:A`, nB = `${ov.id}:B`, nO = `${ov.id}:OUT`;
+      const before = pressurized.size;
+      if (pressurized.has(nA) || pressurized.has(nB)) pressurized.add(nO);
+      if (pressurized.size !== before) changed = true;
+    });
+
+    // 3/2 gränslägesventil
+    components.forEach(lv=>{
+      if (lv.type!=='limit32') return;
+      const active = !!lv.state?.active;
+      const n2 = `${lv.id}:2`;
+      const nT = active ? `${lv.id}:1` : `${lv.id}:3`;
+      const before = pressurized.size;
+      if (pressurized.has(n2)) pressurized.add(nT);
+      if (pressurized.has(nT)) pressurized.add(n2);
+      if (pressurized.size !== before) changed = true;
+    });
+
+    // 3/2 tryckknapp (momentan)
+    components.forEach(pv=>{
+      if (pv.type!=='push32') return;
+      const a = pv.state?.active ? '1' : '3';
+      const n2 = `${pv.id}:2`, nx = `${pv.id}:${a}`;
+      const before = pressurized.size;
+      if (pressurized.has(n2)) pressurized.add(nx);
+      if (pressurized.has(nx)) pressurized.add(n2);
+      if (pressurized.size !== before) changed = true;
+    });
+
+    if (changed){
+      const queue = [...pressurized];
+      while(queue.length){
+        const cur = queue.shift();
+        const nbrs = adj.get(cur);
+        if (!nbrs) continue;
+        for (const n of nbrs){
+          if (!pressurized.has(n)){ pressurized.add(n); queue.push(n); }
+        }
       }
     }
   }
 
-  return pressure;
+  return pressurized;
 }
 
-let lastPressure = new Map(); // key -> bar
-let stepOnceFlag = false; // ⏭️ ett enstaka sim-tick
+let lastPressure = new Set();
+let stepOnceFlag = false;
 
-function pressureAt(id, port){
-  return lastPressure.get(`${id}:${port}`);
-}
-
+/* ---------- Simulation ---------- */
 function simulate(dt){
   const playing = (simMode === Modes.PLAY) || stepOnceFlag;
 
-  // 0) låt komponenter uppdatera internt läge (t.ex. limit32/push32 grafik)
   components.forEach(c=>{
     if (typeof c.recompute === 'function') c.recompute();
   });
 
-  // 1) tryckbild (numerisk)
   if (playing){
-    lastPressure = computePressureMap();
+    lastPressure = computePressureSet();
   } else if (simMode === Modes.STOP){
-    lastPressure = new Map();
+    lastPressure = new Set();
   }
-  // (i PAUSE behåller vi lastPressure)
 
-  // 2) pilotstyrning (rising-edge) för 5/2 – luftpuls på 12 eller 14 togglar läge
   if (playing){
     components.forEach(v=>{
       if (v.type!=='valve52') return;
       if (v._pilot12Prev === undefined) v._pilot12Prev = false;
       if (v._pilot14Prev === undefined) v._pilot14Prev = false;
 
-      const p12 = (pressureAt(v.id,'12') ?? 0) > EPS;
-      const p14 = (pressureAt(v.id,'14') ?? 0) > EPS;
+      const p12 = lastPressure.has(`${v.id}:12`);
+      const p14 = lastPressure.has(`${v.id}:14`);
 
-      if (p12 && !v._pilot12Prev) v.toggle();
-      if (p14 && !v._pilot14Prev) v.toggle();
+      const rising12 = p12 && !v._pilot12Prev;
+      const rising14 = p14 && !v._pilot14Prev;
+
+      if (rising12 && v.state !== 1) v.setState(1);
+      else if (rising14 && v.state !== 0) v.setState(0);
 
       v._pilot12Prev = p12;
       v._pilot14Prev = p14;
     });
   }
 
-  // 3) overlay på portar (pressurized om >0)
-  const simVisible = (simMode === Modes.PLAY) || (simMode === Modes.PAUSE) || stepOnceFlag;
+  // port overlay + title med bar
   components.forEach(c=>{
     if (!c.ports) return;
     for (const k of Object.keys(c.ports)){
-      const p = pressureAt(c.id, k) ?? 0;
-      const on = simVisible && (p > EPS);
-      c.ports[k].el?.classList.toggle('pressurized', on);
-      // title tooltip med tryck
-      if (simVisible) c.ports[k].el?.setAttribute('title', `${k}: ${prettyBar(p)} bar`);
-      else            c.ports[k].el?.removeAttribute('title');
+      const n = `${c.id}:${k}`;
+      const pressed = lastPressure.has(n) && (playing || simMode===Modes.PAUSE);
+      c.ports[k].el?.classList.toggle('pressurized', pressed);
+      if (simMode!==Modes.STOP) c.ports[k].el?.setAttribute('title', `${k}: ${pressed ? SOURCE_PRESSURE.toFixed(1) : '0.0'} bar`);
+      else c.ports[k].el?.removeAttribute('title');
     }
   });
 
-  // 4) cylinder-rörelse (binär logik: finns tryck vid Cap/Rod)
+  // cylinder-rörelse
   if (playing){
     components.filter(c=>c.type==='cylDouble' || c.type==='cylinder').forEach(cyl=>{
-      const capPress = (pressureAt(cyl.id,'Cap') ?? 0) > EPS;
-      const rodPress = (pressureAt(cyl.id,'Rod') ?? 0) > EPS;
+      const isPress = (id,port)=> lastPressure.has(`${id}:${port}`);
+
+      let capPress=false, rodPress=false;
+      const capConns = connections.filter(c=> (c.from.id===cyl.id && c.from.port==='Cap') || (c.to.id===cyl.id && c.to.port==='Cap'));
+      const rodConns = connections.filter(c=> (c.from.id===cyl.id && c.from.port==='Rod') || (c.to.id===cyl.id && c.to.port==='Rod'));
+
+      capConns.forEach(conn=>{
+        const other = (conn.from.id===cyl.id) ? conn.to : conn.from;
+        if (isPress(other.id, other.port)) capPress = true;
+      });
+      rodConns.forEach(conn=>{
+        const other = (conn.from.id===cyl.id) ? conn.to : conn.from;
+        if (isPress(other.id, other.port)) rodPress = true;
+      });
 
       let target = cyl.pos;
       if (capPress && !rodPress) target = 1;
@@ -733,25 +1073,24 @@ function simulate(dt){
     });
   }
 
-  // 5) wires: aktiva (blink) + trycketikett
+  // wires: aktiv & etikett
   connections.forEach(conn=>{
-    const pa = pressureAt(conn.from.id, conn.from.port);
-    const pb = pressureAt(conn.to.id,   conn.to.port);
-    const p  = (pa!=null && pb!=null) ? Math.min(pa, pb) : (pa ?? pb);
-    const active = simVisible && (p ?? 0) > EPS;
-
+    const aKey = `${conn.from.id}:${conn.from.port}`;
+    const bKey = `${conn.to.id}:${conn.to.port}`;
+    const aPress = lastPressure.has(aKey);
+    const bPress = lastPressure.has(bKey);
+    const active = (playing || simMode===Modes.PAUSE) && aPress && bPress;
     conn.pathEl?.classList.toggle('active', active);
 
-    if (conn.pressLbl){
-      conn.pressLbl.textContent = simVisible ? `${prettyBar(p)} bar` : '';
-      conn.pressLbl.classList.toggle('on', active);
-      conn.pressLbl.style.display = simVisible ? 'block' : 'none';
-      // om rektangel-bakgrund används:
-      // if (conn.pressBg){ conn.pressBg.style.display = simVisible ? 'block' : 'none'; }
+    if (simMode===Modes.PLAY || simMode===Modes.PAUSE){
+      const bar = (aPress || bPress) ? SOURCE_PRESSURE : 0.0;
+      if (conn.labelEl) conn.labelEl.textContent = bar.toFixed(1);
+    } else {
+      if (conn.labelEl) conn.labelEl.textContent = '';
     }
   });
 
-  stepOnceFlag = false; // rensa stegflagga efter ett tick
+  stepOnceFlag = false;
 }
 
 /* ---------- RAF-loop ---------- */
@@ -771,25 +1110,24 @@ function snapshotProject(){
     if (c.type==='valve52') return { ...base, state:c.state };
     if (c.type==='cylDouble' || c.type==='cylinder') return { ...base, pos:c.pos??0 };
     if (c.type==='push32')  return { ...base, active: !!(c.state?.active) };
-    // limit32 styrs via signaler, ingen extra state behövs
-    return base;
+    return base; // junction/limit32/and/or/source
   });
   const conns = connections.map(conn=>({
     from:{ id:conn.from.id, port:conn.from.port },
-    to:  { id:conn.to.id,   port:conn.to.port }
+    to:  { id:conn.to.id,   port:conn.to.port },
+    guides: (Array.isArray(conn.guides) && conn.guides.length>0) ? conn.guides.map(g=>({type:g.type,pos:g.pos})) : []
   }));
-  return { version: 8, comps, conns };
+  return { version: 13, comps, conns };
 }
 function clearProject(){
-  connections.forEach(c=> (c.groupEl ?? c.pathEl).remove());
+  connections.forEach(c=>removeConnection(c));
   connections = [];
   components.forEach(c=>c.el.remove());
   components = [];
   nextId = 1;
   pendingPort = null;
-  endLinking();
   clearSelectedConnection();
-  clearSelectedComponents();
+  clearSelectedComponent();
   hideCtxMenu();
   redrawConnections();
 }
@@ -808,15 +1146,8 @@ async function loadProject(data){
       v._pilot12Prev = false; v._pilot14Prev = false;
       wrapValveToggleGuard(v);
       comp = v;
-    } else if (sc.type === 'cylDouble' || sc.type === 'cylinder'){
-      comp = addCylinderDouble(
-        sc.x, sc.y,
-        compLayer, components,
-        handlePortClick, makeDraggable, redrawConnections,
-        uid,
-        getNextCylinderLetter,
-        setSignal
-      );
+    } else if (sc.type === 'cylDouble' || sc.type==='cylinder'){
+      comp = addCylinderDouble(sc.x, sc.y, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid, getNextCylinderLetter, setSignal);
       if (typeof sc.pos==='number' && typeof comp.setPos==='function') comp.setPos(sc.pos);
     } else if (sc.type === 'andValve'){
       comp = addAndValve(sc.x, sc.y, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
@@ -827,203 +1158,28 @@ async function loadProject(data){
     } else if (sc.type === 'push32'){
       comp = addPushButton32(sc.x, sc.y, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
       if (typeof sc.active==='boolean'){ comp.state.active = sc.active; comp.recompute?.(); }
+    } else if (sc.type === 'junction'){
+      comp = addJunction(sc.x, sc.y, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
     } else {
       continue;
     }
     idMap.set(sc.id, comp.id);
   }
 
-  // återskapa wires med hit-yta + trycktext
   for (const conn of data.conns){
     const newFromId = idMap.get(conn.from.id);
     const newToId   = idMap.get(conn.to.id);
     if (!newFromId || !newToId) continue;
-
-    const g = document.createElementNS('http://www.w3.org/2000/svg','g');
-
-    const pathHit = document.createElementNS('http://www.w3.org/2000/svg','path');
-    pathHit.setAttribute('class','wire-hit');
-
-    const pathVis = document.createElementNS('http://www.w3.org/2000/svg','path');
-    pathVis.setAttribute('class','wire');
-    pathVis.style.pointerEvents = 'none';
-
-    const pressLbl = document.createElementNS('http://www.w3.org/2000/svg','text');
-    pressLbl.setAttribute('class','wirePressure');
-    pressLbl.setAttribute('text-anchor','middle');
-    pressLbl.setAttribute('dominant-baseline','central');
-
-    g.append(pathHit, pathVis, pressLbl);
-    connLayer.appendChild(g);
-
-    pathHit.addEventListener('click', (e)=>{ if (pendingPort) return; e.stopPropagation(); const c = connections.find(k=>k.pathEl===pathVis); if (c) selectConnection(c); });
-    pathHit.addEventListener('contextmenu', (e)=>{ if (pendingPort) return; e.preventDefault(); const c = connections.find(k=>k.pathEl===pathVis); if (c){ selectConnection(c); showCtxMenu(e.clientX,e.clientY,{ type:'wire', payload:{ conn:c }}); }});
-    pathHit.addEventListener('mouseenter', ()=> { if (!pendingPort) pathVis.classList.add('selected'); });
-    pathHit.addEventListener('mouseleave', ()=>{ if (!pendingPort && selectedConnection?.pathEl !== pathVis) pathVis.classList.remove('selected'); });
-
-    connections.push({
-      from: { id: newFromId, port: conn.from.port },
-      to:   { id: newToId,   port: conn.to.port },
-      pathEl: pathVis,
-      hitEl:  pathHit,
-      groupEl: g,
-      pressLbl
-    });
+    const c = finalizeWire({ id:newFromId, port:conn.from.port }, { id:newToId, port:conn.to.port });
+    if (Array.isArray(conn.guides)){
+      c.guides = conn.guides.map(g=>({ type:(g.type==='V'?'V':'H'), pos: Number(g.pos) }));
+    } else if (typeof conn.ctrlY === 'number'){ // bakåtkomp från äldre version
+      c.guides = [{ type:'H', pos: conn.ctrlY }];
+    }
   }
 
   redrawConnections();
   isRestoring = false;
-}
-
-/* ---------- Urval → Urklipp ---------- */
-let clipboard = null; // { comps:[...], conns:[...], offset:{x,y}, w,h }
-function copySelectionToClipboard(){
-  if (selectedComponents.size === 0) return;
-  // bbox över val
-  const rects = [...selectedComponents].map(c=> c.el.getBoundingClientRect());
-  const x1 = Math.min(...rects.map(r=>r.left));
-  const y1 = Math.min(...rects.map(r=>r.top));
-  const x2 = Math.max(...rects.map(r=>r.right));
-  const y2 = Math.max(...rects.map(r=>r.bottom));
-
-  const r = workspaceBBox();
-  const box = { x: x1 - r.left, y: y1 - r.top, w: (x2-x1), h: (y2-y1) };
-
-  const ids = new Set([...selectedComponents].map(c=>c.id));
-
-  // komponenter
-  const comps = [...selectedComponents].map(c=>{
-    const base = { type:c.type, x: c.x - box.x, y: c.y - box.y };
-    if (c.type==='valve52') return { ...base, state:c.state };
-    if (c.type==='cylDouble' || c.type==='cylinder') return { ...base, pos:c.pos??0 };
-    if (c.type==='push32') return { ...base, active: !!(c.state?.active) };
-    return base;
-  });
-
-  // anslutningar där båda ändar är inom urvalet
-  const conns = connections
-    .filter(k=> ids.has(k.from.id) && ids.has(k.to.id))
-    .map(k=>({
-      from:{ ref:k.from.id, port:k.from.port },
-      to:  { ref:k.to.id,   port:k.to.port }
-    }));
-
-  clipboard = { comps, conns, box };
-}
-
-function pasteClipboardAt(targetX, targetY){
-  if (!clipboard) return;
-  const { comps, conns, box } = clipboard;
-
-  // placera med boxens övre vänstra hörn på target-(x,y)
-  const baseX = targetX + 20; // liten offset
-  const baseY = targetY + 20;
-
-  const createdStartIndex = components.length;
-
-  // Skapa komponenter
-  comps.forEach(sc=>{
-    let comp = null;
-    const x = baseX + sc.x;
-    const y = baseY + sc.y;
-
-    if (sc.type === 'source'){
-      comp = addSource(x, y, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
-    } else if (sc.type === 'valve52'){
-      const v = addValve52(x, y, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
-      if (typeof sc.state==='number' && typeof v.setState==='function') v.setState(sc.state);
-      v._pilot12Prev = false; v._pilot14Prev = false;
-      wrapValveToggleGuard(v);
-      comp = v;
-    } else if (sc.type === 'cylDouble' || sc.type === 'cylinder'){
-      comp = addCylinderDouble(
-        x, y,
-        compLayer, components,
-        handlePortClick, makeDraggable, redrawConnections,
-        uid,
-        getNextCylinderLetter,
-        setSignal
-      );
-      if (typeof sc.pos==='number' && typeof comp.setPos==='function') comp.setPos(sc.pos);
-    } else if (sc.type === 'andValve'){
-      comp = addAndValve(x, y, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
-    } else if (sc.type === 'orValve'){
-      comp = addOrValve(x, y, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
-    } else if (sc.type === 'limit32'){
-      comp = addLimitValve32(x, y, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid, getSignal);
-    } else if (sc.type === 'push32'){
-      comp = addPushButton32(x, y, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
-      if (typeof sc.active==='boolean'){ comp.state.active = sc.active; comp.recompute?.(); }
-    } else {
-      return;
-    }
-  });
-
-  // index-map: clipboard-ordning -> nya component-id
-  const created = components.slice(createdStartIndex);
-  const indexMap = new Map();
-  comps.forEach((c, idx)=> indexMap.set(idx, created[idx]?.id));
-
-  // Om clipboard.connsIndex saknas: skapa den baserat på ref-id matchning mot comps-ordning (bäst effort)
-  if (!clipboard.connsIndex){
-    clipboard.connsIndex = clipboard.conns.map(c=>({
-      fromIdx: comps.findIndex(cc=> cc.refId ? cc.refId===c.from.ref : false),
-      fromPort: c.from.port,
-      toIdx:   comps.findIndex(cc=> cc.refId ? cc.refId===c.to.ref : false),
-      toPort:  c.to.port
-    })).map((ci,i)=>{
-      // fallback – om refId saknas (vanligt), mappa i ordning
-      if (ci.fromIdx<0 || ci.toIdx<0){
-        const f = connections.length; // dummy
-      }
-      return {
-        fromIdx: comps.findIndex(cc=> cc===clipboard.conns[i].from.ref),
-        fromPort: clipboard.conns[i].from.port,
-        toIdx:   comps.findIndex(cc=> cc===clipboard.conns[i].to.ref),
-        toPort:  clipboard.conns[i].to.port
-      };
-    });
-  }
-
-  // Skapa ledningar
-  clipboard.connsIndex.forEach(c=>{
-    const fromId = indexMap.get(c.fromIdx);
-    const toId   = indexMap.get(c.toIdx);
-    if (!fromId || !toId) return;
-
-    const g = document.createElementNS('http://www.w3.org/2000/svg','g');
-
-    const pathHit = document.createElementNS('http://www.w3.org/2000/svg','path');
-    pathHit.setAttribute('class','wire-hit');
-
-    const pathVis = document.createElementNS('http://www.w3.org/2000/svg','path');
-    pathVis.setAttribute('class','wire');
-    pathVis.style.pointerEvents = 'none';
-
-    const pressLbl = document.createElementNS('http://www.w3.org/2000/svg','text');
-    pressLbl.setAttribute('class','wirePressure');
-    pressLbl.setAttribute('text-anchor','middle');
-    pressLbl.setAttribute('dominant-baseline','central');
-
-    g.append(pathHit, pathVis, pressLbl);
-    connLayer.appendChild(g);
-
-    pathHit.addEventListener('click', (e)=>{ if (pendingPort) return; e.stopPropagation(); const c0 = connections.find(k=>k.pathEl===pathVis); if (c0) selectConnection(c0); });
-    pathHit.addEventListener('contextmenu', (e)=>{ if (pendingPort) return; e.preventDefault(); const c0 = connections.find(k=>k.pathEl===pathVis); if (c0){ selectConnection(c0); showCtxMenu(e.clientX,e.clientY,{ type:'wire', payload:{ conn:c0 }}); }});
-    pathHit.addEventListener('mouseenter', ()=> { if (!pendingPort) pathVis.classList.add('selected'); });
-    pathHit.addEventListener('mouseleave', ()=>{ if (!pendingPort && selectedConnection?.pathEl !== pathVis) pathVis.classList.remove('selected'); });
-
-    connections.push({
-      from: { id: fromId, port: c.fromPort },
-      to:   { id: toId,   port: c.toPort },
-      pathEl: pathVis,
-      hitEl:  pathHit,
-      groupEl: g,
-      pressLbl
-    });
-  });
-
-  redrawConnections();
 }
 
 /* ---------- Undo/Redo ---------- */
@@ -1035,8 +1191,6 @@ function pushHistory(_label=''){
   future = [];
   updateUndoRedoButtons();
 
-  // Dessa åtgärder betraktas som ”rena”: Initial, Load project, Reset.
-  // Allt annat sätter isDirty = true.
   const cleanLabels = ['Initial','Load project','Reset'];
   isDirty = !cleanLabels.includes(_label);
 }
@@ -1085,7 +1239,7 @@ function updateModeButtons(){
   ensureButton('btnPlay',  simMode===Modes.PLAY  ? '▶️ Spelar…' : '▶️ Spela', ()=> setMode(Modes.PLAY));
   ensureButton('btnStep',  '⏭️ Stega', ()=>{
     stepOnceFlag = true;
-    simulate(0.02); // ett kort tick
+    simulate(0.02);
   });
   ensureButton('btnPause', simMode===Modes.PAUSE ? '⏸️ Paus'   : '⏸️ Pausa', ()=> setMode(Modes.PAUSE));
   ensureButton('btnStop',  '⏹️ Stoppa & återställ', ()=> resetSystem());
@@ -1109,15 +1263,20 @@ function resetSystem(){
     if (c.type==='valve52' && typeof c.setState==='function') c.setState(DEFAULT_VALVE_STATE);
     else if ((c.type==='cylDouble'||c.type==='cylinder') && typeof c.setPos==='function') c.setPos(DEFAULT_CYL_POS);
     else if (c.type==='push32'){ c.state.active=false; c.recompute?.(); }
-    if (c.type==='valve52'){ c._pilot12Prev=false; c._pilot14Prev=false; } // nollställ pilotminne
+    if (c.type==='valve52'){ c._pilot12Prev=false; c._pilot14Prev=false; }
   });
   connections.forEach(conn => conn.pathEl.classList.remove('active'));
-  lastPressure = new Map();
+  lastPressure = new Set();
   components.forEach(c=>{
     if (!c.ports) return;
-    for (const k of Object.keys(c.ports)){ c.ports[k].el?.classList.remove('pressurized'); c.ports[k].el?.removeAttribute('title'); }
+    for (const k of Object.keys(c.ports)){
+      c.ports[k].el?.classList.remove('pressurized');
+      c.ports[k].el?.removeAttribute('title');
+    }
   });
-  clearSelectedConnection(); clearSelectedComponents(); hideCtxMenu();
+  connections.forEach(conn => { if (conn.labelEl) conn.labelEl.textContent=''; });
+
+  clearSelectedConnection(); clearSelectedComponent(); hideCtxMenu();
   pushHistory('Reset');
 }
 
@@ -1128,7 +1287,68 @@ function wrapValveToggleGuard(valveComp){
   valveComp.toggle = function(){ if (simMode!==Modes.PLAY) return; original(); };
 }
 
-/* ---- Skapa knappar ---- */
+/* ---------- UI/CSS-injektion ---------- */
+(function injectOverlayCSS(){
+  if (document.getElementById('overlayCSS')) return;
+  const css = `
+    .wire { stroke:#000; stroke-width:2; fill:none; }
+    .wire.active { stroke:#d00; stroke-dasharray:6 6; animation: wireflow 1.2s linear infinite; }
+    @keyframes wireflow { to { stroke-dashoffset: -12; } }
+    .wire.selected { stroke:#0a74ff; stroke-width:3; }
+    .comp.selected { outline: 2px dashed #0a74ff; outline-offset: 2px; }
+
+    .port { fill:#fff; stroke:#0a74ff; stroke-width:1.5; cursor: crosshair; }
+    .port.pressurized { fill:#e6f3ff; stroke:#0073e6; stroke-width:2; }
+
+    .wireLabel {
+      font-family: system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+      fill:#222;
+      paint-order: stroke;
+      stroke: #fff;
+      stroke-width: 3px;
+      pointer-events: none;
+    }
+
+    .ctxmenu {
+      position: fixed; z-index: 9999;
+      background:#fff; border:1px solid #ccc; border-radius:8px;
+      box-shadow: 0 8px 22px rgba(0,0,0,.12);
+      padding:6px; font-size:14px; min-width:200px;
+    }
+    .ctxmenu button {
+      display:block; width:100%; text-align:left;
+      background:none; border:0; padding:8px 10px; cursor:pointer;
+    }
+    .ctxmenu button:hover { background:#f5f7ff; }
+    .btn[disabled] { opacity: .5; cursor: not-allowed; }
+
+    .marquee {
+      position: fixed;
+      border: 1px dashed #0a74ff;
+      background: rgba(10,116,255,0.08);
+      pointer-events: none;
+      z-index: 9998;
+    }
+
+    .ctrlHandle {
+      position: absolute;
+      width: 12px; height: 12px;
+      background: #fff;
+      border: 2px solid #0a74ff;
+      border-radius: 3px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.2);
+      z-index: 3;
+    }
+    .ctrlHandle.h { cursor: ns-resize; }
+    .ctrlHandle.v { cursor: ew-resize; }
+  `;
+  const style = document.createElement('style');
+  style.id = 'overlayCSS';
+  style.textContent = css;
+  document.head.appendChild(style);
+})();
+
+/* ---- Knappar ---- */
 function addButtons(){
   ensureButton('addSource',  '➕ Tryckkälla', ()=>{
     if (!canEdit()) return;
@@ -1147,14 +1367,7 @@ function addButtons(){
   ensureButton('addCylDouble','➕ Cylinder, dubbelverkande', ()=>{
     if (!canEdit()) return;
     const r = workspaceBBox();
-    addCylinderDouble(
-      r.width*0.70, r.height*0.50,
-      compLayer, components,
-      handlePortClick, makeDraggable, redrawConnections,
-      uid,
-      getNextCylinderLetter,
-      setSignal
-    );
+    addCylinderDouble(r.width*0.70, r.height*0.50, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid, getNextCylinderLetter, setSignal);
     pushHistory('Add cylinder');
   });
   ensureButton('addAnd',     '➕ AND-ventil', ()=>{
@@ -1172,13 +1385,7 @@ function addButtons(){
   ensureButton('addLimit32', '➕ 3/2 gränslägesventil', ()=>{
     if (!canEdit()) return;
     const r = workspaceBBox();
-    addLimitValve32(
-      r.width*0.52, r.height*0.28,
-      compLayer, components,
-      handlePortClick, makeDraggable, redrawConnections,
-      uid,
-      getSignal // ventilen läser t.ex. a0/a1
-    );
+    addLimitValve32(r.width*0.52, r.height*0.28, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid, getSignal);
     pushHistory('Add limit32');
   });
   ensureButton('addPush32',  '➕ Tryckknapp 3/2', ()=>{
@@ -1190,22 +1397,14 @@ function addButtons(){
 
   ensureButton('saveProj', '💾 Spara projekt', ()=>{
     if (!canEdit()) return;
-
     const snap = snapshotProject();
-
     const defaultName = currentProjectName || 'projekt';
     const answer = window.prompt('Ange ett namn för projektet (utan filändelse):', defaultName);
-    if (answer === null) return; // användaren avbröt
-
-    // Sanera och kom fram till filnamn
-    let name = answer.trim();
-    if (!name) name = defaultName;
-    name = name.replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, '_');
+    if (answer === null) return;
+    let name = (answer.trim() || defaultName).replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, '_');
     if (!name) name = 'projekt';
-
     currentProjectName = name;
     const filename = /\.json$/i.test(name) ? name : `${name}.json`;
-
     const a = document.createElement('a');
     a.href = 'data:application/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(snap, null, 2));
     a.download = filename;
@@ -1213,7 +1412,6 @@ function addButtons(){
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-
     isDirty = false;
   });
 
@@ -1223,17 +1421,9 @@ function addButtons(){
     inp.type = 'file'; inp.accept = 'application/json';
     inp.onchange = async (e)=>{
       const file = e.target.files?.[0]; if (!file) return;
-
       currentProjectName = file.name.replace(/\.json$/i, '');
-
-      try {
-        const data = JSON.parse(await file.text());
-        await loadProject(data);
-        pushHistory('Load project');
-      } catch(err){
-        console.error('Fel vid laddning:', err);
-        alert('Ogiltig projektfil.');
-      }
+      try { const data = JSON.parse(await file.text()); await loadProject(data); pushHistory('Load project'); }
+      catch(err){ console.error('Fel vid laddning:', err); alert('Ogiltig projektfil.'); }
     };
     inp.click();
   });
@@ -1253,14 +1443,7 @@ window.addEventListener('load', ()=>{
   const v = addValve52(r.width*0.40, r.height*0.50, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
   v._pilot12Prev = false; v._pilot14Prev = false;
   wrapValveToggleGuard(v);
-  addCylinderDouble(
-    r.width*0.70, r.height*0.50,
-    compLayer, components,
-    handlePortClick, makeDraggable, redrawConnections,
-    uid,
-    getNextCylinderLetter,
-    setSignal
-  );
+  addCylinderDouble(r.width*0.70, r.height*0.50, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid, getNextCylinderLetter, setSignal);
   pushHistory('Initial');
 });
 
@@ -1271,70 +1454,131 @@ window.addEventListener('beforeunload', (e)=>{
   e.returnValue = '';
 });
 
-/* ---------- Nödvändig CSS (inkl. wire-hit, trycketikett, marquee, länkläge) ---------- */
-(function injectOverlayCSS(){
-  if (document.getElementById('overlayCSS')) return;
-  const css = `
-    .wire { stroke:#000; stroke-width:2; fill:none; }
-    .wire.active { stroke:#d00; stroke-dasharray:6 6; animation: wireflow 1.2s linear infinite; }
-    @keyframes wireflow { to { stroke-dashoffset: -12; } }
-    .wire.selected { stroke:#0a74ff; stroke-width:3; }
+/* ---------- Segment-hjälpfunktioner ---------- */
 
-    /* osynlig klick-yta ovanpå varje wire */
-    .wire-hit {
-      stroke:#000;
-      stroke-opacity:0.001; /* 0 kan ignorera pointer-events i vissa webbläsare */
-      stroke-width:14;       /* klickyta */
-      fill:none;
-      pointer-events:stroke; /* träffa "strecket" */
-      stroke-linecap:round;
+// Om inga guider: skapa en första som passar geometri (H om x1!=x2 annars V)
+function maybeSeedFirstGuide(conn){
+  if (Array.isArray(conn.guides) && conn.guides.length>0) return;
+  const geom = computeConnectionGeometry({ ...conn, guides: [] });
+  if (!geom) return;
+  const { a, b } = geom;
+  if (a.x !== b.x){
+    const y = (a.y + b.y)/2;
+    conn.guides = [{ type:'H', pos:y }];
+  } else {
+    const x = (a.x + b.x)/2;
+    conn.guides = [{ type:'V', pos:x }];
+  }
+}
+
+// Returnera index för närmaste guide mot punkt (px,py)
+function nearestGuideIndex(conn, px, py){
+  if (!Array.isArray(conn.guides) || conn.guides.length===0) return -1;
+  let bestIdx = -1, bestD = Infinity;
+  conn.guides.forEach((g, i)=>{
+    const d = (g.type==='H') ? Math.abs(py - g.pos) : Math.abs(px - g.pos);
+    if (d < bestD){ bestD = d; bestIdx = i; }
+  });
+  return bestIdx;
+}
+
+/* ---------- Handtag för segment ---------- */
+function destroyHandlesForConnection(conn){
+  if (Array.isArray(conn.handleEls)){
+    conn.handleEls.forEach(el=> el?.remove());
+  }
+  conn.handleEls = [];
+}
+
+function refreshHandlesForConnection(conn, repositionOnly=false){
+  // Bara synligt om valt
+  if (selectedConnection !== conn){
+    destroyHandlesForConnection(conn);
+    return;
+  }
+
+  const geom = computeConnectionGeometry(conn);
+  if (!geom) return;
+  const { a, b } = geom;
+
+  if (!Array.isArray(conn.guides)) conn.guides = [];
+
+  // Skapa eller enbart repositionera
+  if (!repositionOnly){
+    destroyHandlesForConnection(conn);
+    conn.handleEls = conn.guides.map((g, idx)=>{
+      const el = document.createElement('div');
+      el.className = 'ctrlHandle ' + (g.type==='H' ? 'h' : 'v');
+      el.title = g.type==='H' ? 'Dra upp/ner för att flytta horisontellt segment'
+                              : 'Dra vänster/höger för att flytta vertikalt segment';
+      compLayer.appendChild(el);
+
+      let dragging=false, startOff=0;
+      const onDown = (e)=>{
+        if (!canEdit()) return;
+        dragging = true;
+        const rect = workspaceBBox();
+        if (g.type==='H'){
+          startOff = (e.clientY - rect.top) - g.pos;
+          el.style.cursor = 'ns-resize';
+        } else {
+          startOff = (e.clientX - rect.left) - g.pos;
+          el.style.cursor = 'ew-resize';
+        }
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp, { once:true });
+        e.stopPropagation(); e.preventDefault();
+      };
+      const onMove = (e)=>{
+        if (!dragging) return;
+        const rect = workspaceBBox();
+        if (g.type==='H'){
+          let y = e.clientY - rect.top - startOff;
+          y = clamp(y, 20, rect.height-20);
+          g.pos = y;
+        } else {
+          let x = e.clientX - rect.left - startOff;
+          x = clamp(x, 20, rect.width-20);
+          g.pos = x;
+        }
+        redrawConnections();
+      };
+      const onUp = ()=>{
+        dragging=false;
+        el.style.cursor = '';
+        pushHistory('Move wire segment');
+        window.removeEventListener('mousemove', onMove);
+      };
+
+      el.addEventListener('mousedown', onDown);
+      el.addEventListener('contextmenu', (e)=>{
+        e.preventDefault();
+        // ta bort just detta segment
+        const idxNow = conn.guides.indexOf(g);
+        if (idxNow>=0){
+          conn.guides.splice(idxNow,1);
+          refreshHandlesForConnection(conn);
+          redrawConnections();
+          pushHistory('Remove wire segment');
+        }
+      });
+
+      return el;
+    });
+  }
+
+  // Positionera handtag (enkelt: mitt mellan ändarna)
+  conn.guides.forEach((g, i)=>{
+    const el = conn.handleEls[i];
+    if (!el) return;
+    if (g.type==='H'){
+      const xMid = (a.x + b.x)/2;
+      el.style.left = (xMid - 6) + 'px';
+      el.style.top  = (g.pos - 6) + 'px';
+    } else {
+      const yMid = (a.y + b.y)/2;
+      el.style.left = (g.pos - 6) + 'px';
+      el.style.top  = (yMid - 6) + 'px';
     }
-
-    /* Trycketikett */
-    .wirePressure {
-      font: 11px/1 monospace;
-      fill:#444;
-      stroke:#fff; stroke-width:3px; paint-order: stroke;
-      user-select: none;
-      pointer-events: none;
-    }
-    .wirePressure.on { fill:#b00; }
-
-    .comp.selected { outline: 2px dashed #0a74ff; outline-offset: 2px; }
-
-    .port { fill:#fff; stroke:#0a74ff; stroke-width:1.5; cursor: pointer; }
-    .port.pressurized { fill:#e6f3ff; stroke:#0073e6; stroke-width:2; }
-
-    /* Länkläge: prioritera portar, byt markör, highlight */
-    body.linking { cursor: crosshair; }
-    body.linking .wire-hit { pointer-events: none; } /* wires tappas så portar får prioritet */
-    body.linking .port { cursor: crosshair; }
-    body.linking .port:hover { fill:#fffbe6; stroke-width:2; }
-
-    .ctxmenu {
-      position: fixed; z-index: 9999;
-      background:#fff; border:1px solid #ccc; border-radius:8px;
-      box-shadow: 0 8px 22px rgba(0,0,0,.12);
-      padding:6px; font-size:14px; min-width:160px;
-    }
-    .ctxmenu button {
-      display:block; width:100%; text-align:left;
-      background:none; border:0; padding:8px 10px; cursor:pointer;
-    }
-    .ctxmenu button:hover { background:#f5f7ff; }
-    .btn[disabled] { opacity: .5; cursor: not-allowed; }
-
-    /* Marquee */
-    .marquee-box {
-      position: fixed;
-      border: 1.5px dashed #0a74ff;
-      background: rgba(10,116,255,0.08);
-      pointer-events: none;
-      z-index: 9998;
-    }
-  `;
-  const style = document.createElement('style');
-  style.id = 'overlayCSS';
-  style.textContent = css;
-  document.head.appendChild(style);
-})();
+  });
+}

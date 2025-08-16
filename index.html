@@ -11,7 +11,6 @@
       --ink: #111;
       --muted: #666;
       --accent: #d00;
-      --vent: #000;
       --port: #0a74ff;
     }
     * { box-sizing: border-box; }
@@ -21,6 +20,7 @@
     .sidebar h2 { margin: 6px 0 10px; font-size: 16px; }
     .btn { display: block; width: 100%; margin: 6px 0; padding: 8px 10px; border: 1px solid #bbb; background: #fff; cursor: pointer; border-radius: 6px; text-align: left; }
     .btn:hover { background: #f8f8ff; }
+
     .workspace { position: relative; overflow: hidden; }
     .layer { position: absolute; inset: 0; }
     #connLayer { z-index: 0; }
@@ -32,9 +32,41 @@
     .port:hover { fill: #e8f1ff; }
     .wire { stroke: #000; stroke-width: 2; fill: none; }
     .wire.active { stroke: var(--accent); stroke-dasharray: 6 6; }
+    .wire.selected { stroke: #d00; stroke-width: 3; stroke-dasharray: 4 4; }
     .draggable { cursor: move; }
     .hint { position: absolute; bottom: 8px; left: 8px; padding: 6px 8px; font-size: 12px; color: #333; background: #ffffffcc; border: 1px solid #ddd; border-radius: 6px; z-index: 3; }
-    .wire.selected { stroke: #d00; stroke-width: 3; stroke-dasharray: 4 4; }
+
+    /* Hjälp-modal + FAB */
+    .help-fab {
+      position: absolute; right: 14px; bottom: 14px; z-index: 4;
+      border: 1px solid #c8d3ff; background: #eff3ff; color: #234;
+      padding: 10px 12px; border-radius: 999px; font-weight: 600; cursor: pointer;
+      box-shadow: 0 6px 14px rgba(0,0,0,.12);
+    }
+    .help-fab:hover { background:#e6edff; }
+
+    dialog.help-dialog {
+      width: min(1100px, 92vw);
+      max-height: min(86vh, 900px);
+      border: 0; border-radius: 14px; padding: 0; overflow: hidden;
+      box-shadow: 0 30px 80px rgba(0,0,0,.25);
+    }
+    dialog.help-dialog::backdrop { background: rgba(0,0,0,.35); backdrop-filter: blur(2px); }
+    .help-head {
+      display:flex; align-items:center; gap:10px;
+      background:#eef4ff; border-bottom:1px solid #dfe7ff; padding: 12px 16px;
+      font-weight: 700;
+    }
+    .help-body { padding: 14px 16px; background:#f9fbff; color:#10223d; }
+    .help-grid { display:grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    @media (max-width: 1024px){ .help-grid{ grid-template-columns: 1fr; } }
+    .help-body h3 { margin:1rem 0 .35rem; font-size:16px; }
+    .help-body code { background:#eef3ff; padding:.1rem .35rem; border-radius:6px; }
+    .kbd { display:inline-block; padding:.1rem .45rem; border:1px solid #cdd7ff; border-bottom-width:2px; border-radius:6px; background:#fff; font-size:12px; }
+    .pill { display:inline-block; padding:.05rem .45rem; border-radius:999px; background:#e8f1ff; border:1px solid #cfe0ff; font-size:12px; }
+    .help-foot { display:flex; justify-content:flex-end; gap:8px; padding: 10px 12px; background:#f2f5ff; border-top:1px solid #dfe7ff; }
+    .help-close { padding: 8px 12px; border-radius: 8px; border:1px solid #ccd8ff; background:#fff; cursor:pointer; }
+    .help-close:hover { background:#f7f9ff; }
   </style>
 </head>
 <body>
@@ -47,24 +79,116 @@
       <button class="btn" id="addAnd">➕ OCH-ventil</button>
       <button class="btn" id="addOr">➕ ELLER-ventil</button>
       <button class="btn" id="addLimit32">➕ 3/2 gränslägesventil</button>
-      <button class="btn" id="addPush32">➕ 3/2 gränslägesventil</button>
+      <button class="btn" id="addPush32">➕ Tryckknapp 3/2</button>
       <hr>
-      <p style="font-size:12px;line-height:1.35">
-        • Klicka en port och sedan en annan för att <b>koppla</b>.<br>
-        • Dra i vit yta för att <b>flytta</b> komponenten.<br>
-        • Klicka i ventilens ruta för att <b>växla läge</b> (om ingen sensor är bunden).<br>
-        • Markera gränslägesventilen och tryck <b>S</b> för att binda sensorn <i>(t.ex. a0, a1)</i>.
-      </p>
+      <!-- Ingen hjälptext här längre -->
     </aside>
 
     <main class="workspace">
       <svg id="connLayer" class="layer"></svg>
       <div id="compLayer" class="layer"></div>
-      <div class="hint">Tips: Koppla P→ventil→Cylinder. Cylinder ger signaler a0/a1 som kan styra gränslägesventiler.</div>
+      <div class="hint">Tips: Tryck <b>?</b> för hjälp. Koppla P→ventil→Cylinder. Cylinder ger signaler a0/a1 för gränslägesventiler.</div>
+
+      <!-- Flytande hjälpknapp -->
+      <button id="helpToggle" class="help-fab">? Hjälp</button>
     </main>
   </div>
 
+  <!-- Hjälp-modal -->
+  <dialog id="helpDialog" class="help-dialog">
+    <div class="help-head">Hjälp & snabbguide</div>
+    <div class="help-body">
+      <div class="help-grid">
+        <div>
+          <h3>Komponenter & lägen</h3>
+          <ul>
+            <li>Skapa: <span class="pill">Tryckkälla</span>, <span class="pill">5/2-ventil</span>, <span class="pill">Cylinder (DV)</span>, <span class="pill">AND</span>, <span class="pill">OR</span>, <span class="pill">3/2 gränsläge</span>, <span class="pill">Tryckknapp 3/2</span>.</li>
+            <li>Dra för att flytta (endast i <strong>STOP</strong>-läge).</li>
+            <li><strong>PLAY</strong> kör simulering, <strong>PAUSE</strong> fryser, <strong>STOP</strong> rensar overlay & låser redigering.</li>
+            <li>5/2 kan togglas manuellt i <strong>PLAY</strong> (klick i box). Pilot <code>12</code>/<code>14</code> växlar på puls.</li>
+          </ul>
+
+          <h3>Länka portar & junctions</h3>
+          <ul>
+            <li>Klicka en port → korsmarkör → klicka nästa port för tråd.</li>
+            <li>Under länkning: klick på tråd skapar <em>kopplingspunkt (J)</em> och ansluter där. Tråden delas automatiskt.</li>
+            <li>Portar har <em>hover-prioritet</em> framför trådar.</li>
+            <li>Trådar är ortogonala. Pilotportar <code>12</code>/<code>14</code> har horisontell inflygning och följer ventilens förskjutning.</li>
+          </ul>
+
+          <h3>Tråd-redigering</h3>
+          <ul>
+            <li><span class="kbd">Ctrl</span>/<span class="kbd">⌘</span>+klick på tråd → lägg <em>knä</em>. Dubbelklick på hörn → ta bort knä.</li>
+            <li>Välj tråd: kvadratiska handtag mitt på inre segment → dra för att flytta segmentet (ortogonalt bibehålls).</li>
+            <li><span class="kbd">Alt</span>+drag på inre segment → snabbjustering (auto→manuell vid behov).</li>
+          </ul>
+        </div>
+
+        <div>
+          <h3>Markering, kopiera & klistra</h3>
+          <ul>
+            <li>Dra på tom yta för <em>markeringsruta</em>. Släpp för att behålla valet. <span class="kbd">Shift</span> adderar i befintligt val.</li>
+            <li><span class="kbd">Ctrl</span>/<span class="kbd">⌘</span>+<span class="kbd">C</span> kopierar, <span class="kbd">X</span> klipper, <span class="kbd">V</span> klistrar nära senaste klickpunkt.</li>
+            <li>Kopierade trådar behåller ortogonala knän/segment; manuella punkter följer korrekt.</li>
+            <li><span class="kbd">Delete</span>/<span class="kbd">Backspace</span> tar bort val.</li>
+          </ul>
+
+          <h3>Tryck-overlay (bar)</h3>
+          <ul>
+            <li>I <strong>PLAY</strong>/<strong>PAUSE</strong> visas tryck i <em>bar</em> på varje tråd; aktiva blinkar rött.</li>
+            <li>Portar har tooltip med aktuellt tryck (<code>X: 0…6 bar</code>).</li>
+            <li>Modell: källa <strong>6.0 bar</strong>, avgångar <strong>0 bar</strong>, tryck sprids via max-regel i nätet.</li>
+          </ul>
+
+          <h3>Cylindrar & gränslägen</h3>
+          <ul>
+            <li>Cylindrar namnges automatiskt: <strong>A</strong>, <strong>B</strong>, …</li>
+            <li>Signaler: <code>a0</code> = A inne, <code>a1</code> = A ute (motsv. <code>b0</code>/<code>b1</code> …).</li>
+            <li>3/2-gränslägesventil kan lyssna på valfri sådan signal och visar kopplingen.</li>
+            <li>3/2-tryckknapp är momentan (aktiv vid klick, fjädrar tillbaka).</li>
+          </ul>
+        </div>
+      </div>
+
+      <h3>Tips</h3>
+      <ul>
+        <li>Tryck <strong>?</strong> för att öppna/stänga hjälpen.</li>
+        <li>ESC avbryter länkning.</li>
+        <li>Portar vinner hover när tråd passerar nära.</li>
+      </ul>
+    </div>
+    <div class="help-foot">
+      <button class="help-close" value="cancel">Stäng</button>
+    </div>
+  </dialog>
+
   <!-- ES-moduler -->
   <script type="module" src="./js/main.js"></script>
+
+  <!-- Hjälp-knapp + '?'-tangent -->
+  <script>
+    (function(){
+      const dlg = document.getElementById('helpDialog');
+      const btn = document.getElementById('helpToggle');
+
+      function toggleHelp(){
+        if (!dlg.open) dlg.showModal(); else dlg.close();
+      }
+      btn.addEventListener('click', toggleHelp);
+
+      function isTypingTarget(el){
+        if (!el) return false;
+        const tag = el.tagName?.toLowerCase();
+        return tag === 'input' || tag === 'textarea' || el.isContentEditable;
+      }
+      window.addEventListener('keydown', (e)=>{
+        if (isTypingTarget(document.activeElement)) return;
+        const isQ = e.key === '?' || (e.key === '/' && e.shiftKey) || (e.code === 'Slash' && e.shiftKey);
+        if (!isQ) return;
+        e.preventDefault();
+        toggleHelp();
+      });
+    })();
+  </script>
 </body>
 </html>

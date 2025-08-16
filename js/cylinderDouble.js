@@ -7,14 +7,15 @@ export function addCylinderDouble(
   x, y,
   compLayer, components,
   handlePortClick, makeDraggable, redrawConnections, uid,
-  getNextCylinderLetter, setSignal   // <-- NYA argument
+  getNextCylinderLetter, setSignal   // <-- behövs för auto-namn + signaler
 ){
   const id = uid();
   const s = (n)=> n * SCALE;
 
-  // Cylinder-namn
-  const letter = getNextCylinderLetter(); // 'A','B',...
-  const lower  = letter.toLowerCase();    // 'a','b',...
+  // ===== Init-namn =====
+  const initialLetter = (typeof getNextCylinderLetter === 'function')
+    ? getNextCylinderLetter()
+    : 'A';
 
   // Kompaktare box
   const SVG_W = 340;
@@ -31,7 +32,8 @@ export function addCylinderDouble(
 
   const label = document.createElement('div');
   label.className = 'label';
-  label.textContent = `Cylinder ${letter}`;
+  // låt etiketten vara klickbar trots global CSS
+  label.style.pointerEvents = 'auto';
 
   const NS = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(NS,'svg');
@@ -98,6 +100,7 @@ export function addCylinderDouble(
   el.append(label, svg);
   compLayer.appendChild(el);
 
+  // ===== Komponentobjekt =====
   const comp = {
     id, type:'cylDouble', el, x, y,
     svgW: s(SVG_W), svgH: s(SVG_H), gx: s(GX), gy: s(GY),
@@ -105,7 +108,13 @@ export function addCylinderDouble(
       Cap: { cx: s(ports.Cap.cx), cy: s(ports.Cap.cy), el: portEls.Cap },
       Rod: { cx: s(ports.Rod.cx), cy: s(ports.Rod.cy), el: portEls.Rod }
     },
-    pos: 0, // 0=indragen, 1=utdragen
+    // Läge (0=indragen, 1=utdragen)
+    pos: 0,
+
+    // Namn (bokstav) – init nedan via setLetter
+    letter: initialLetter,
+    lower: initialLetter.toLowerCase(),
+
     setPos(alpha){
       this.pos = Math.max(0, Math.min(1, alpha));
       // Kolvens x
@@ -122,24 +131,57 @@ export function addCylinderDouble(
       rodTip.setAttribute('x', s(tipX));
 
       // === Signaler ===
+      // Publicera enligt aktuell bokstav (lower)
       if (this.pos <= 0) {          // helt inne
-        setSignal(`${lower}0`, true);
-        setSignal(`${lower}1`, false);
+        setSignal(`${this.lower}0`, true);
+        setSignal(`${this.lower}1`, false);
       } else if (this.pos >= 1) {   // helt ute
-        setSignal(`${lower}0`, false);
-        setSignal(`${lower}1`, true);
+        setSignal(`${this.lower}0`, false);
+        setSignal(`${this.lower}1`, true);
       } else {                      // mellanläge
-        setSignal(`${lower}0`, false);
-        setSignal(`${lower}1`, false);
+        setSignal(`${this.lower}0`, false);
+        setSignal(`${this.lower}1`, false);
       }
-    }
+    },
+
+    // Byt bokstav (A–Z). Uppdaterar etikett och signal-nycklar.
+    setLetter(newLetterRaw){
+      if (!newLetterRaw) return;
+      const L = String(newLetterRaw).trim().toUpperCase();
+      if (!/^[A-Z]$/.test(L)) return; // kräver en (1) bokstav A–Z
+
+      const prevLower = this.lower;
+      const nextLower = L.toLowerCase();
+
+      // Tysta gamla signaler så de inte "hänger kvar"
+      setSignal(`${prevLower}0`, false);
+      setSignal(`${prevLower}1`, false);
+
+      this.letter = L;
+      this.lower  = nextLower;
+
+      // Uppdatera etikett
+      label.textContent = `Cylinder ${this.letter}`;
+
+      // Publicera nya signaler enligt aktuellt läge
+      this.setPos(this.pos);
+      redrawConnections?.();
+    },
+
+    getLetter(){ return this.letter; }
   };
 
-  // init
+  // Init-etikett & position/signaler
+  comp.setLetter(initialLetter);
   comp.setPos(comp.pos);
-  // första signalerna
-  setSignal(`${lower}0`, true);
-  setSignal(`${lower}1`, false);
+
+  // ====== UI: Byt bokstav via dubbelklick på etiketten ======
+  label.addEventListener('dblclick', (e)=>{
+    e.stopPropagation();
+    const answer = window.prompt('Ange cylinderbokstav (A–Z):', comp.letter);
+    if (answer === null) return; // avbrutet
+    comp.setLetter(answer);
+  });
 
   makeDraggable(comp);
   components.push(comp);
