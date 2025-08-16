@@ -23,6 +23,8 @@ let connections = [];
 let nextId = 1;
 let pendingPort = null;
 let isDirty = false; // varna bara när något har ändrats sedan senast ”rent” läge
+let currentProjectName = 'projekt';
+
 
 let selectedConnection = null;
 let selectedComponent  = null;
@@ -764,25 +766,58 @@ function addButtons(){
     addPushButton32(r.width*0.25, r.height*0.50, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
     pushHistory('Add push32');
   });
-  ensureButton('saveProj', '💾 Spara projekt', ()=>{
-    if (!canEdit()) return;
-    const snap = snapshotProject();
-    const a = document.createElement('a');
-    a.href = 'data:application/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(snap, null, 2));
-    a.download = 'projekt.json'; a.style.display='none'; document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    isDirty = false; // ✅ projektet betraktas som sparat
-  });
-  ensureButton('loadProj', '📂 Ladda projekt', ()=>{
-    if (!canEdit()) return;
-    const inp = document.createElement('input');
-    inp.type = 'file'; inp.accept = 'application/json';
-    inp.onchange = async (e)=>{
-      const file = e.target.files?.[0]; if (!file) return;
-      try { const data = JSON.parse(await file.text()); await loadProject(data); pushHistory('Load project'); }
-      catch(err){ console.error('Fel vid laddning:', err); alert('Ogiltig projektfil.'); }
-    };
-    inp.click();
-  });
+ensureButton('saveProj', '💾 Spara projekt', ()=>{
+  if (!canEdit()) return;
+
+  const snap = snapshotProject();
+
+  const defaultName = currentProjectName || 'projekt';
+  const answer = window.prompt('Ange ett namn för projektet (utan filändelse):', defaultName);
+  if (answer === null) return; // användaren avbröt
+
+  // Sanera och kom fram till filnamn
+  let name = answer.trim();
+  if (!name) name = defaultName;
+  // Ta bort otillåtna tecken i filnamn och ersätt whitespace med _
+  name = name.replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, '_');
+  if (!name) name = 'projekt';
+
+  currentProjectName = name; // kom ihåg till nästa gång
+  const filename = /\.json$/i.test(name) ? name : `${name}.json`;
+
+  const a = document.createElement('a');
+  a.href = 'data:application/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(snap, null, 2));
+  a.download = filename;
+  a.style.display='none';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+
+  isDirty = false; // sparat = rent
+});
+
+ensureButton('loadProj', '📂 Ladda projekt', ()=>{
+  if (!canEdit()) return;
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = 'application/json';
+  inp.onchange = async (e)=>{
+    const file = e.target.files?.[0]; if (!file) return;
+
+    // ➕ Sätt nuvarande namn från filens namn (utan .json)
+    currentProjectName = file.name.replace(/\.json$/i, '');
+
+    try {
+      const data = JSON.parse(await file.text());
+      await loadProject(data);
+      pushHistory('Load project');
+    } catch(err){
+      console.error('Fel vid laddning:', err);
+      alert('Ogiltig projektfil.');
+    }
+  };
+  inp.click();
+});
+
   ensureButton('undoBtn', '↩️ Ångra', ()=> { if (canEdit()) undo(); });
   ensureButton('redoBtn', '↪️ Gör om', ()=> { if (canEdit()) redo(); });
 
