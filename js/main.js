@@ -1,5 +1,6 @@
 // js/main.js
 // Tryck-overlay + Stega + pilotsignaler (12/14) för 5/2-ventil
+// + Osynlig klick-yta för wires (lättare att välja) + övriga komponenter
 
 import { addValve52 }        from './valve52.js';
 import { addCylinderDouble } from './cylinderDouble.js';
@@ -7,7 +8,7 @@ import { addSource }         from './source.js';
 import { addAndValve }       from './andValve.js';
 import { addOrValve }        from './orValve.js';
 import { addLimitValve32 }   from './limitValve32.js'; // 3/2 gränslägesventil
-import { addPushButton32 }   from './pushButton32.js'; // ⬅️ NY: 3/2 tryckknapp (momentan)
+import { addPushButton32 }   from './pushButton32.js'; // 3/2 tryckknapp (momentan)
 
 /* ---------- DOM-lager ---------- */
 const compLayer = document.getElementById('compLayer');
@@ -24,7 +25,6 @@ let nextId = 1;
 let pendingPort = null;
 let isDirty = false; // varna bara när något har ändrats sedan senast ”rent” läge
 let currentProjectName = 'projekt';
-
 
 let selectedConnection = null;
 let selectedComponent  = null;
@@ -102,7 +102,10 @@ function redrawConnections(){
     if(!c1 || !c2) return;
     const a = portGlobalPosition(c1, conn.from.port);
     const b = portGlobalPosition(c2, conn.to.port);
-    conn.pathEl.setAttribute('d', drawWirePath(a.x, a.y, b.x, b.y));
+    const d = drawWirePath(a.x, a.y, b.x, b.y);
+    // uppdatera både synlig path och hit-yta
+    conn.pathEl.setAttribute('d', d);
+    conn.hitEl?.setAttribute('d', d);
   });
 }
 
@@ -143,7 +146,7 @@ window.addEventListener('keydown', (e)=>{
   if (!canEdit()) return;
 
   if (selectedConnection){
-    selectedConnection.pathEl.remove();
+    (selectedConnection.groupEl ?? selectedConnection.pathEl).remove();
     connections = connections.filter(c=>c!==selectedConnection);
     selectedConnection = null;
     e.preventDefault();
@@ -180,7 +183,7 @@ function showCtxMenu(x, y, { type, payload }){
       clearSelectedComponent();
       pushHistory('Delete component');
     } else if (type==='wire' && payload?.conn){
-      payload.conn.pathEl.remove();
+      (payload.conn.groupEl ?? payload.conn.pathEl).remove();
       connections = connections.filter(c=>c!==payload.conn);
       clearSelectedConnection();
       redrawConnections();
@@ -209,7 +212,7 @@ function showCtxMenu(x, y, { type, payload }){
 
 function deleteComponent(comp){
   const toRemove = connections.filter(c => c.from.id===comp.id || c.to.id===comp.id);
-  toRemove.forEach(c => c.pathEl.remove());
+  toRemove.forEach(c => (c.groupEl ?? c.pathEl).remove());
   connections = connections.filter(c => c.from.id!==comp.id && c.to.id!==comp.id);
   comp.el.remove();
   components = components.filter(c => c !== comp);
@@ -256,7 +259,7 @@ function makeDraggable(comp){
   });
 }
 
-/* ---------- Koppla portar ---------- */
+/* ---------- Koppla portar (med osynlig hit-yta) ---------- */
 function handlePortClick(comp, portKey, portEl){
   if (!canEdit()) return;
   hideCtxMenu();
@@ -274,30 +277,48 @@ function handlePortClick(comp, portKey, portEl){
     return;
   }
 
-  const path = document.createElementNS('http://www.w3.org/2000/svg','path');
-  path.setAttribute('class','wire');
-  path.style.pointerEvents = 'stroke';
-  path.addEventListener('click', (e)=>{
+  // Skapa wire-grupp
+  const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+
+  const pathHit = document.createElementNS('http://www.w3.org/2000/svg','path');
+  pathHit.setAttribute('class','wire-hit');
+
+  const pathVis = document.createElementNS('http://www.w3.org/2000/svg','path');
+  pathVis.setAttribute('class','wire');
+  pathVis.style.pointerEvents = 'none'; // klick sker på hit-lagret
+
+  g.append(pathHit, pathVis);
+  connLayer.appendChild(g);
+
+  function onClick(e){
     e.stopPropagation();
-    const conn = connections.find(c=>c.pathEl===path);
+    const conn = connections.find(c=>c.pathEl===pathVis);
     if (conn) selectConnection(conn);
-  });
-  path.addEventListener('contextmenu', (e)=>{
+  }
+  function onCtx(e){
     e.preventDefault();
-    const conn = connections.find(c=>c.pathEl===path);
+    const conn = connections.find(c=>c.pathEl===pathVis);
     if (conn){
       selectConnection(conn);
       showCtxMenu(e.clientX, e.clientY, { type:'wire', payload:{ conn } });
     }
-  });
+  }
+  function onEnter(){ pathVis.classList.add('selected'); }
+  function onLeave(){ if (selectedConnection?.pathEl !== pathVis) pathVis.classList.remove('selected'); }
 
-  connLayer.appendChild(path);
+  pathHit.addEventListener('click', onClick);
+  pathHit.addEventListener('contextmenu', onCtx);
+  pathHit.addEventListener('mouseenter', onEnter);
+  pathHit.addEventListener('mouseleave', onLeave);
 
-  connections.push({
+  const conn = {
     from: pendingPort,
     to:   { id: comp.id, port: portKey },
-    pathEl: path
-  });
+    pathEl: pathVis,      // synlig path
+    hitEl:  pathHit,      // klick-yta
+    groupEl: g            // hela gruppen
+  };
+  connections.push(conn);
 
   const prevComp = components.find(c=>c.id===pendingPort.id);
   if (prevComp) prevComp.ports[pendingPort.port]?.el?.setAttribute('fill','#fff');
@@ -518,7 +539,7 @@ function snapshotProject(){
     const base = { id:c.id, type:c.type, x:c.x, y:c.y };
     if (c.type==='valve52') return { ...base, state:c.state };
     if (c.type==='cylDouble' || c.type==='cylinder') return { ...base, pos:c.pos??0 };
-    if (c.type==='push32')  return { ...base, active: !!(c.state?.active) }; // ⬅️ NYTT
+    if (c.type==='push32')  return { ...base, active: !!(c.state?.active) };
     // limit32 styrs via signaler, ingen extra state behövs
     return base;
   });
@@ -526,10 +547,10 @@ function snapshotProject(){
     from:{ id:conn.from.id, port:conn.from.port },
     to:  { id:conn.to.id,   port:conn.to.port }
   }));
-  return { version: 4, comps, conns };
+  return { version: 5, comps, conns };
 }
 function clearProject(){
-  connections.forEach(c=>c.pathEl.remove());
+  connections.forEach(c=> (c.groupEl ?? c.pathEl).remove());
   connections = [];
   components.forEach(c=>c.el.remove());
   components = [];
@@ -556,7 +577,7 @@ async function loadProject(data){
       wrapValveToggleGuard(v);
       comp = v;
     } else if (sc.type === 'cylDouble' || sc.type === 'cylinder'){
-      // ✅ skicka med namngivare + signaluppdaterare
+      // skicka med namngivare + signaluppdaterare
       comp = addCylinderDouble(
         sc.x, sc.y,
         compLayer, components,
@@ -581,22 +602,35 @@ async function loadProject(data){
     idMap.set(sc.id, comp.id);
   }
 
+  // återskapa wires med hit-yta
   for (const conn of data.conns){
     const newFromId = idMap.get(conn.from.id);
     const newToId   = idMap.get(conn.to.id);
     if (!newFromId || !newToId) continue;
 
-    const path = document.createElementNS('http://www.w3.org/2000/svg','path');
-    path.setAttribute('class','wire');
-    path.style.pointerEvents = 'stroke';
-    path.addEventListener('click', (e)=>{ e.stopPropagation(); const c = connections.find(k=>k.pathEl===path); if (c) selectConnection(c); });
-    path.addEventListener('contextmenu', (e)=>{ e.preventDefault(); const c = connections.find(k=>k.pathEl===path); if (c){ selectConnection(c); showCtxMenu(e.clientX,e.clientY,{ type:'wire', payload:{ conn:c }}); }});
-    connLayer.appendChild(path);
+    const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+
+    const pathHit = document.createElementNS('http://www.w3.org/2000/svg','path');
+    pathHit.setAttribute('class','wire-hit');
+
+    const pathVis = document.createElementNS('http://www.w3.org/2000/svg','path');
+    pathVis.setAttribute('class','wire');
+    pathVis.style.pointerEvents = 'none';
+
+    g.append(pathHit, pathVis);
+    connLayer.appendChild(g);
+
+    pathHit.addEventListener('click', (e)=>{ e.stopPropagation(); const c = connections.find(k=>k.pathEl===pathVis); if (c) selectConnection(c); });
+    pathHit.addEventListener('contextmenu', (e)=>{ e.preventDefault(); const c = connections.find(k=>k.pathEl===pathVis); if (c){ selectConnection(c); showCtxMenu(e.clientX,e.clientY,{ type:'wire', payload:{ conn:c }}); }});
+    pathHit.addEventListener('mouseenter', ()=> pathVis.classList.add('selected'));
+    pathHit.addEventListener('mouseleave', ()=>{ if (selectedConnection?.pathEl !== pathVis) pathVis.classList.remove('selected'); });
 
     connections.push({
       from: { id: newFromId, port: conn.from.port },
       to:   { id: newToId,   port: conn.to.port },
-      pathEl: path
+      pathEl: pathVis,
+      hitEl:  pathHit,
+      groupEl: g
     });
   }
 
@@ -725,7 +759,7 @@ function addButtons(){
   ensureButton('addCylDouble','➕ Cylinder, dubbelverkande', ()=>{
     if (!canEdit()) return;
     const r = workspaceBBox();
-    // ✅ skicka med namnbokstav + signaluppdaterare
+    // skicka med namnbokstav + signaluppdaterare
     addCylinderDouble(
       r.width*0.70, r.height*0.50,
       compLayer, components,
@@ -766,57 +800,58 @@ function addButtons(){
     addPushButton32(r.width*0.25, r.height*0.50, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
     pushHistory('Add push32');
   });
-ensureButton('saveProj', '💾 Spara projekt', ()=>{
-  if (!canEdit()) return;
 
-  const snap = snapshotProject();
+  ensureButton('saveProj', '💾 Spara projekt', ()=>{
+    if (!canEdit()) return;
 
-  const defaultName = currentProjectName || 'projekt';
-  const answer = window.prompt('Ange ett namn för projektet (utan filändelse):', defaultName);
-  if (answer === null) return; // användaren avbröt
+    const snap = snapshotProject();
 
-  // Sanera och kom fram till filnamn
-  let name = answer.trim();
-  if (!name) name = defaultName;
-  // Ta bort otillåtna tecken i filnamn och ersätt whitespace med _
-  name = name.replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, '_');
-  if (!name) name = 'projekt';
+    const defaultName = currentProjectName || 'projekt';
+    const answer = window.prompt('Ange ett namn för projektet (utan filändelse):', defaultName);
+    if (answer === null) return; // användaren avbröt
 
-  currentProjectName = name; // kom ihåg till nästa gång
-  const filename = /\.json$/i.test(name) ? name : `${name}.json`;
+    // Sanera och kom fram till filnamn
+    let name = answer.trim();
+    if (!name) name = defaultName;
+    // Ta bort otillåtna tecken i filnamn och ersätt whitespace med _
+    name = name.replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, '_');
+    if (!name) name = 'projekt';
 
-  const a = document.createElement('a');
-  a.href = 'data:application/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(snap, null, 2));
-  a.download = filename;
-  a.style.display='none';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+    currentProjectName = name; // kom ihåg till nästa gång
+    const filename = /\.json$/i.test(name) ? name : `${name}.json`;
 
-  isDirty = false; // sparat = rent
-});
+    const a = document.createElement('a');
+    a.href = 'data:application/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(snap, null, 2));
+    a.download = filename;
+    a.style.display='none';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
 
-ensureButton('loadProj', '📂 Ladda projekt', ()=>{
-  if (!canEdit()) return;
-  const inp = document.createElement('input');
-  inp.type = 'file'; inp.accept = 'application/json';
-  inp.onchange = async (e)=>{
-    const file = e.target.files?.[0]; if (!file) return;
+    isDirty = false; // sparat = rent
+  });
 
-    // ➕ Sätt nuvarande namn från filens namn (utan .json)
-    currentProjectName = file.name.replace(/\.json$/i, '');
+  ensureButton('loadProj', '📂 Ladda projekt', ()=>{
+    if (!canEdit()) return;
+    const inp = document.createElement('input');
+    inp.type = 'file'; inp.accept = 'application/json';
+    inp.onchange = async (e)=>{
+      const file = e.target.files?.[0]; if (!file) return;
 
-    try {
-      const data = JSON.parse(await file.text());
-      await loadProject(data);
-      pushHistory('Load project');
-    } catch(err){
-      console.error('Fel vid laddning:', err);
-      alert('Ogiltig projektfil.');
-    }
-  };
-  inp.click();
-});
+      // Sätt nuvarande namn från filens namn (utan .json)
+      currentProjectName = file.name.replace(/\.json$/i, '');
+
+      try {
+        const data = JSON.parse(await file.text());
+        await loadProject(data);
+        pushHistory('Load project');
+      } catch(err){
+        console.error('Fel vid laddning:', err);
+        alert('Ogiltig projektfil.');
+      }
+    };
+    inp.click();
+  });
 
   ensureButton('undoBtn', '↩️ Ångra', ()=> { if (canEdit()) undo(); });
   ensureButton('redoBtn', '↪️ Gör om', ()=> { if (canEdit()) redo(); });
@@ -833,7 +868,7 @@ window.addEventListener('load', ()=>{
   const v = addValve52(r.width*0.40, r.height*0.50, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
   v._pilot12Prev = false; v._pilot14Prev = false;
   wrapValveToggleGuard(v);
-  // ✅ skicka med vid startcylindern också
+  // skicka med vid startcylindern också
   addCylinderDouble(
     r.width*0.70, r.height*0.50,
     compLayer, components,
@@ -852,7 +887,7 @@ window.addEventListener('beforeunload', (e)=>{
   e.returnValue = '';        // Chrome/Edge kräver en icke-undefined sträng
 });
 
-/* ---------- Nödvändig CSS om du inte redan har den ---------- */
+/* ---------- Nödvändig CSS (inkl. wire-hit) ---------- */
 (function injectOverlayCSS(){
   if (document.getElementById('overlayCSS')) return;
   const css = `
@@ -860,6 +895,17 @@ window.addEventListener('beforeunload', (e)=>{
     .wire.active { stroke:#d00; stroke-dasharray:6 6; animation: wireflow 1.2s linear infinite; }
     @keyframes wireflow { to { stroke-dashoffset: -12; } }
     .wire.selected { stroke:#0a74ff; stroke-width:3; }
+
+    /* osynlig klick-yta ovanpå varje wire */
+    .wire-hit {
+      stroke:#000;
+      stroke-opacity:0.001; /* 0 kan ignorera pointer-events i vissa webbläsare */
+      stroke-width:14;       /* klickyta */
+      fill:none;
+      pointer-events:stroke; /* träffa "strecket" */
+      stroke-linecap:round;
+    }
+
     .comp.selected { outline: 2px dashed #0a74ff; outline-offset: 2px; }
 
     .port { fill:#fff; stroke:#0a74ff; stroke-width:1.5; }
