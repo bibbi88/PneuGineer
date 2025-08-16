@@ -6,6 +6,7 @@ import { addCylinderDouble } from './cylinderDouble.js';
 import { addSource }         from './source.js';
 import { addAndValve }       from './andValve.js';
 import { addOrValve }        from './orValve.js';
+import { addLimitValve32 }   from './limitValve32.js'; // ⬅️ NY: 3/2 gränslägesventil
 
 /* ---------- DOM-lager ---------- */
 const compLayer = document.getElementById('compLayer');
@@ -40,6 +41,24 @@ let isRestoring = false;
 function uid(){ return nextId++; }
 function workspaceBBox(){ return compLayer.getBoundingClientRect(); }
 function canEdit(){ return simMode === Modes.STOP; }
+
+/* ---------- Signals & Cylinder-namn (NYTT) ---------- */
+const signals = {};
+function setSignal(key, value) {
+  const v = !!value;
+  if (signals[key] === v) return;
+  signals[key] = v;
+  redrawConnections?.();
+}
+function getSignal(key) {
+  return !!signals[key];
+}
+let cylinderCount = 0;
+function getNextCylinderLetter() {
+  const code = 'A'.charCodeAt(0) + cylinderCount;
+  cylinderCount += 1;
+  return String.fromCharCode(code); // 'A','B',...
+}
 
 /* ---------- Port → globala koordinater ---------- */
 function portGlobalPosition(comp, portKey){
@@ -354,6 +373,19 @@ function computePressureSet(){
       if (pressurized.size !== before) changed = true;
     });
 
+    // 3/2 gränslägesventil (limit32): aktiv → (2 <-> 1), inaktiv → (2 <-> 3)
+    components.forEach(lv=>{
+      if (lv.type!=='limit32') return;
+      // läs ventilens aktuella läge: antas uppdateras av lv.recompute() i simulate()
+      const active = !!lv.state?.active;
+      const n2 = `${lv.id}:2`;
+      const nT = active ? `${lv.id}:1` : `${lv.id}:3`; // målport
+      const before = pressurized.size;
+      if (pressurized.has(n2)) pressurized.add(nT);
+      if (pressurized.has(nT)) pressurized.add(n2);
+      if (pressurized.size !== before) changed = true;
+    });
+
     if (changed){
       const queue = [...pressurized];
       while(queue.length){
@@ -375,6 +407,11 @@ let stepOnceFlag = false; // ⏭️ ett enstaka sim-tick
 
 function simulate(dt){
   const playing = (simMode === Modes.PLAY) || stepOnceFlag;
+
+  // 0) låt komponenter uppdatera internt läge (t.ex. limit32 läser signals) — NYTT
+  components.forEach(c=>{
+    if (typeof c.recompute === 'function') c.recompute();
+  });
 
   // 1) tryckbild
   if (playing){
@@ -468,13 +505,14 @@ function snapshotProject(){
     const base = { id:c.id, type:c.type, x:c.x, y:c.y };
     if (c.type==='valve52') return { ...base, state:c.state };
     if (c.type==='cylDouble' || c.type==='cylinder') return { ...base, pos:c.pos??0 };
+    // för limit32 finns inget särskilt att spara för läget (styrt av signaler)
     return base;
   });
   const conns = connections.map(conn=>({
     from:{ id:conn.from.id, port:conn.from.port },
     to:  { id:conn.to.id,   port:conn.to.port }
   }));
-  return { version: 2, comps, conns };
+  return { version: 3, comps, conns }; // bump version
 }
 function clearProject(){
   connections.forEach(c=>c.pathEl.remove());
@@ -505,12 +543,15 @@ async function loadProject(data){
       wrapValveToggleGuard(v);
       comp = v;
     } else if (sc.type === 'cylDouble' || sc.type === 'cylinder'){
-      comp = addCylinderDouble(sc.x, sc.y, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
+      comp = addCylinderDouble(sc.x, sc.y, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid, getNextCylinderLetter, setSignal);
       if (typeof sc.pos==='number' && typeof comp.setPos==='function') comp.setPos(sc.pos);
     } else if (sc.type === 'andValve'){
       comp = addAndValve(sc.x, sc.y, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
     } else if (sc.type === 'orValve'){
       comp = addOrValve(sc.x, sc.y, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
+    } else if (sc.type === 'limit32'){
+      // gränslägesventil
+      comp = addLimitValve32(sc.x, sc.y, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid, getSignal);
     } else {
       continue;
     }
@@ -599,7 +640,7 @@ function updateModeButtons(){
   ensureButton('btnPause', simMode===Modes.PAUSE ? '⏸️ Paus'   : '⏸️ Pausa', ()=> setMode(Modes.PAUSE));
   ensureButton('btnStop',  '⏹️ Stoppa & återställ', ()=> resetSystem());
 
-  const editableButtons = ['addSource','addValve52','addCylDouble','addAnd','addOr','saveProj','loadProj','undoBtn','redoBtn'];
+  const editableButtons = ['addSource','addValve52','addCylDouble','addAnd','addOr','addLimit32','saveProj','loadProj','undoBtn','redoBtn'];
   editableButtons.forEach(id=>{
     const b = document.getElementById(id);
     if (b) b.disabled = !canEdit();
@@ -656,7 +697,14 @@ function addButtons(){
   ensureButton('addCylDouble','➕ Cylinder, dubbelverkande', ()=>{
     if (!canEdit()) return;
     const r = workspaceBBox();
-    addCylinderDouble(r.width*0.70, r.height*0.50, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
+    addCylinderDouble(
+      r.width*0.70, r.height*0.50,
+      compLayer, components,
+      handlePortClick, makeDraggable, redrawConnections,
+      uid,
+      getNextCylinderLetter, // ⬅️ NYTT
+      setSignal              // ⬅️ NYTT
+    );
     pushHistory('Add cylinder');
   });
   ensureButton('addAnd',     '➕ AND-ventil', ()=>{
@@ -670,6 +718,18 @@ function addButtons(){
     const r = workspaceBBox();
     addOrValve(r.width*0.25, r.height*0.65, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
     pushHistory('Add OR');
+  });
+  ensureButton('addLimit32', '➕ 3/2 gränslägesventil', ()=>{
+    if (!canEdit()) return;
+    const r = workspaceBBox();
+    addLimitValve32(
+      r.width*0.52, r.height*0.28,
+      compLayer, components,
+      handlePortClick, makeDraggable, redrawConnections,
+      uid,
+      getSignal // ⬅️ nyckel: ventilen läser t.ex. a0/a1
+    );
+    pushHistory('Add limit32');
   });
   ensureButton('saveProj', '💾 Spara projekt', ()=>{
     if (!canEdit()) return;
@@ -704,7 +764,14 @@ window.addEventListener('load', ()=>{
   const v = addValve52(r.width*0.40, r.height*0.50, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
   v._pilot12Prev = false; v._pilot14Prev = false;
   wrapValveToggleGuard(v);
-  addCylinderDouble(r.width*0.70, r.height*0.50, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
+  addCylinderDouble(
+    r.width*0.70, r.height*0.50,
+    compLayer, components,
+    handlePortClick, makeDraggable, redrawConnections,
+    uid,
+    getNextCylinderLetter, // ⬅️ NYTT
+    setSignal              // ⬅️ NYTT
+  );
   pushHistory('Initial');
 });
 

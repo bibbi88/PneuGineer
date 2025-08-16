@@ -1,184 +1,241 @@
 // js/limitValve32.js
-// 3/2 gränslägesventil, fasta portar i högra "lådan" (stämmer med din mockup)
-// - vila: 2→3, 1 block (T)
-// - aktiv: 2→1, 3 block (T)
-// Styrs antingen manuellt (klick) eller via sensorKey (t.ex. "a0", "a1").
+// 3/2 gränslägesventil där hela ventilen (ram, inre lådor, rulle/skalen, fjäder)
+// skuffas med transform vid aktivering; porterna lämnas på plats.
+//
+// Vänster cell (AKTIV): 2→1, 3 block (T)
+// Höger  cell (VILA):  2→3, 1 block (T)
+//
+// Fixar:
+//  - Vänster pilspets sitter vid 1 (ritas 2→1 med marker-end).
+//  - Pilar försvinner inte vid rörelse (ingen clipPath; endast SVG transform).
+//
+// Signatur (matchar main.js):
+// addLimitValve32(x,y, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid, getSignal)
 
 export function addLimitValve32(
   x, y,
   compLayer, components,
   handlePortClick, makeDraggable, redrawConnections,
-  getSignal // <-- funktion från main.js
-) {
-  const width = 120, height = 70;
-  const group = document.createElement('div');
-  group.className = 'comp draggable';
-  group.style.left = `${x}px`;
-  group.style.top = `${y}px`;
+  uid,
+  getSignal
+){
+  const id = uid();
 
-  // Label överst
+  // Geometri
+  const W = 140, H = 60;
+  const NS = 'http://www.w3.org/2000/svg';
+  const midX = W / 2;
+
+  // Portpositioner (bara i höger cell)
+  const insetRight = Math.round((W - midX) * 0.25); // ~¼ in i högra halvan
+  const P2 = { cx: midX + insetRight, cy: -10  };    // 2 (uppe)
+  const P1 = { cx: midX + insetRight, cy: H + 10 }; // 1 (nere, under 2)
+  const P3 = { cx: W - 12,            cy: H + 10 }; // 3 (nere höger)
+
+  // Motsv. lägen i vänster cell (för inre grafik)
+  const L2 = { cx: insetRight, cy: P2.cy };
+  const L1 = { cx: insetRight, cy: P1.cy };
+  const L3 = { cx: midX - 12,  cy: P3.cy };
+
+  // Rot
+  const el = document.createElement('div');
+  el.className = 'comp';
+  el.style.left = x + 'px';
+  el.style.top  = y + 'px';
+
   const label = document.createElement('div');
   label.className = 'label';
   label.textContent = '3/2 gränsläge';
-  group.appendChild(label);
+  el.appendChild(label);
 
-  // SVG
-  const svgNS = 'http://www.w3.org/2000/svg';
-  const svg = document.createElementNS(svgNS, 'svg');
-  svg.setAttribute('class', 'compSvg');
-  svg.setAttribute('width', width);
-  svg.setAttribute('height', height);
+  const svg = document.createElementNS(NS,'svg');
+  svg.classList.add('compSvg');
+  svg.setAttribute('width',  W);
+  svg.setAttribute('height', H);
+  svg.style.overflow = 'visible'; // rulle/fjäder kan sticka ut
 
-  // Kapsling (två rutor)
-  const body = document.createElementNS(svgNS, 'rect');
-  body.setAttribute('x', 0); body.setAttribute('y', 0);
-  body.setAttribute('width', width); body.setAttribute('height', height);
-  body.setAttribute('fill', '#fff'); body.setAttribute('stroke', '#000');
-  svg.appendChild(body);
+  // --- defs: pilspets ---
+  const defs = document.createElementNS(NS,'defs');
+  const marker = document.createElementNS(NS,'marker');
+  marker.setAttribute('id','arrow');
+  marker.setAttribute('markerWidth','10');
+  marker.setAttribute('markerHeight','10');
+  marker.setAttribute('refX','9');
+  marker.setAttribute('refY','5');
+  marker.setAttribute('orient','auto');
+  const mpath = document.createElementNS(NS,'path');
+  mpath.setAttribute('d','M 0 0 L 10 5 L 0 10 z');
+  mpath.setAttribute('fill','#000');
+  marker.appendChild(mpath);
+  defs.append(marker);
+  svg.appendChild(defs);
 
-  const mid = document.createElementNS(svgNS, 'line');
-  mid.setAttribute('x1', width/2); mid.setAttribute('y1', 0);
-  mid.setAttribute('x2', width/2); mid.setAttribute('y2', height);
-  mid.setAttribute('stroke', '#000');
-  svg.appendChild(mid);
+  // === MOVER (ALLT som ska skuffas: ram/ytterbox, innerlådor, rulle/skalen, fjäder) ===
+  const mover = document.createElementNS(NS,'g');
+  // OBS: vi använder endast SVG-attributet 'transform' (inte CSS-transform),
+  // för att markers/pilar ska renderas stabilt över alla motorer.
 
-  // PORTER (fasta i högra lådan): 2 uppe (~¼ in), 1 nere under 2, 3 nere höger
-  const rightX = width/2;
-  const insetX = rightX + Math.round((width/2) * 0.25); // ~¼ in i högra lådan
-  const port2 = makePort(insetX, 6, '2');   // uppe
-  const port1 = makePort(insetX, height-6, '1'); // nere
-  const port3 = makePort(width-10, height-6, '3'); // nere höger
+  // Ytterkapsling (ram) – följer med
+  const body = document.createElementNS(NS,'rect');
+  body.setAttribute('x',0); body.setAttribute('y',0);
+  body.setAttribute('width',W); body.setAttribute('height',H);
+  body.setAttribute('fill','#fff'); body.setAttribute('stroke','#000');
+  body.setAttribute('stroke-width','2');
 
-  svg.appendChild(port2.el);
-  svg.appendChild(port1.el);
-  svg.appendChild(port3.el);
-
-  // Internt läges-flagga (om ingen sensorKey är bunden)
-  let manualActive = false;
-  let sensorKey = null; // t.ex. "a0", "a1", "b0", ...
-
-  // Rita interna pilar/block
-  const gRight = document.createElementNS(svgNS, 'g'); // viloläge i högra rutan
-  const gLeft  = document.createElementNS(svgNS, 'g'); // aktiverat i vänstra rutan
-  svg.appendChild(gRight);
-  svg.appendChild(gLeft);
-
-  function drawInternals(active) {
-    // Töm grupper
-    gRight.replaceChildren();
-    gLeft.replaceChildren();
-
-    // ----- Högra ruta (vila): 2→3, 1 block (T)
-    // diagonal 2→3
-    gRight.appendChild(path(`M ${insetX-rightX} 10 L ${width-10-rightX} ${height-10}`, '#000', 2, true));
-    // T block vid 1 (horisontell över lodrät)
-    gRight.appendChild(path(`M ${insetX-rightX-8} ${height-20} L ${insetX-rightX+8} ${height-20}`, '#000', 2));
-    gRight.appendChild(path(`M ${insetX-rightX} ${height-20} L ${insetX-rightX} ${height-6}`, '#000', 2));
-
-    // ----- Vänstra ruta (aktiv): 2→1, 3 block (T)
-    if (active) {
-      // diag 2→1 (speglad)
-      gLeft.appendChild(path(`M ${insetX- (rightX)} 10 L ${insetX-(rightX)} ${height-10}`, '#000', 2, true));
-      // T block vid 3 (speglad till vänster ruta, nere höger relativt vänster cell)
-      const leftCellRight = rightX; // x=60 i vänster cell
-      const bx = leftCellRight - 20; // lite in från högerkanten av vänster cell
-      const by = height-20;
-      gLeft.appendChild(path(`M ${bx-8} ${by} L ${bx+8} ${by}`, '#000', 2));
-      gLeft.appendChild(path(`M ${bx} ${by} L ${bx} ${height-6}`, '#000', 2));
-    }
-  }
-
-  function recompute() {
-    const isActive = sensorKey ? !!getSignal(sensorKey) : manualActive;
-    drawInternals(isActive);
-    comp.state.active = isActive;
-    redrawConnections();
-  }
-
-  // Klick i vänstra (aktiverade) rutan togglar manuellt om ingen sensorKey
-  svg.addEventListener('click', (e) => {
-    const clickX = e.offsetX;
-    if (!sensorKey && clickX < width/2) {
-      manualActive = !manualActive;
-      recompute();
-    }
-  });
-
-  // Enkel bindnings-UI: tryck 'S' → prompt för sensorKey (t.ex. a0/a1/b0/b1)
-  svg.addEventListener('keydown', (e) => {
-    if (e.key.toLowerCase() === 's') {
-      const key = window.prompt('Ange sensorKey (t.ex. a0, a1, b0, b1):', sensorKey || '');
-      if (key) {
-        sensorKey = key.trim().toLowerCase();
-        label.textContent = `3/2 gränsläge (${sensorKey})`;
-        recompute();
-      }
-    }
-  });
-  svg.setAttribute('tabindex', '0'); // så keydown fungerar
-  svg.style.outline = 'none';
-
-  // Port-klick koppling
-  [port1, port2, port3].forEach(p => {
-    p.el.addEventListener('click', (ev) => {
-      ev.stopPropagation();
-      handlePortClick(comp, p);
-    });
-  });
-
-  // Hjälpare
-  function makePort(px, py, id) {
-    const el = document.createElementNS(svgNS, 'circle');
-    el.setAttribute('class', 'port');
-    el.setAttribute('r', 5);
-    el.setAttribute('cx', px);
-    el.setAttribute('cy', py);
-    return { id, el, x: px, y: py };
-  }
-  function path(d, stroke, sw=2, arrow=false) {
-    const p = document.createElementNS(svgNS, 'path');
+  // Hjälpare för ritning
+  const path = (d, opts={})=>{
+    const p = document.createElementNS(NS,'path');
     p.setAttribute('d', d);
     p.setAttribute('fill', 'none');
-    p.setAttribute('stroke', stroke);
-    p.setAttribute('stroke-width', sw);
-    if (arrow) p.setAttribute('marker-end', 'url(#arrow-head)'); // optional if you have markers
+    p.setAttribute('stroke', opts.stroke || '#000');
+    p.setAttribute('stroke-width', opts.sw || 2);
+    if (opts.arrow === 'end')   p.setAttribute('marker-end','url(#arrow)');
+    if (opts.arrow === 'start') p.setAttribute('marker-start','url(#arrow)');
     return p;
-  }
-
-  // Lägg in valfri pil-marker om din app har en global <defs>. Om inte, funkar utan.
-  // (Eller skapa egen <defs> här och append:a till svg.)
-
-  // Registrera komponent
-  const comp = {
-    type: 'limit32',
-    label,
-    el: group,
-    svg,
-    ports: [
-      { id: '1', x: x + port1.x - width/2, y: y + port1.y - height/2, el: port1.el },
-      { id: '2', x: x + port2.x - width/2, y: y + port2.y - height/2, el: port2.el },
-      { id: '3', x: x + port3.x - width/2, y: y + port3.y - height/2, el: port3.el },
-    ],
-    state: { active: false, sensorKey: null },
-    getActivePaths() {
-      // returnera vilka port-par som är ihopkopplade, för ditt connLayer
-      // aktiv: 2-1, inaktiv: 2-3
-      return this.state.active ? [['2','1']] : [['2','3']];
-    },
-    bindSensor(key) {
-      sensorKey = key;
-      label.textContent = `3/2 gränsläge (${sensorKey})`;
-      recompute();
-    },
-    recompute,
+  };
+  const tBlock = (xCenter, yBar, yStemEnd)=>{
+    const frag = document.createDocumentFragment();
+    frag.appendChild(path(`M ${xCenter-10} ${yBar} L ${xCenter+10} ${yBar}`));
+    frag.appendChild(path(`M ${xCenter} ${yBar} L ${xCenter} ${yStemEnd}`));
+    return frag;
   };
 
-  group.appendChild(svg);
-  compLayer.appendChild(group);
-  makeDraggable(group, comp);
+  // Inre två "lådor"
+  const boxLeft  = document.createElementNS(NS,'rect');
+  boxLeft.setAttribute('x', 0); boxLeft.setAttribute('y', 0);
+  boxLeft.setAttribute('width', midX); boxLeft.setAttribute('height', H);
+  boxLeft.setAttribute('fill','#fff'); boxLeft.setAttribute('stroke','#000'); boxLeft.setAttribute('stroke-width','1.6');
+
+  const boxRight = document.createElementNS(NS,'rect');
+  boxRight.setAttribute('x', midX); boxRight.setAttribute('y', 0);
+  boxRight.setAttribute('width', midX); boxRight.setAttribute('height', H);
+  boxRight.setAttribute('fill','#fff'); boxRight.setAttribute('stroke','#000'); boxRight.setAttribute('stroke-width','1.6');
+
+  // Vänster cell (AKTIV): 2→1, 3 block (T)
+  // Pilen ska ha spetsen vid 1 → rita linjen från 2 ner mot 1 och använd marker-end
+  const gLeft = document.createElementNS(NS,'g');
+  gLeft.appendChild(path(`M ${L2.cx } ${L1.cy -10} L ${L1.cx} ${L2.cy + 10}`, { arrow:'end' }));
+  gLeft.appendChild(tBlock(L3.cx, H-24, L3.cy-10));
+
+  // Höger cell (VILA): 2→3, 1 block (T), pilspets vid 3
+  const gRight = document.createElementNS(NS,'g');
+  gRight.appendChild(path(`M ${P2.cx} ${P2.cy + 10} L ${P3.cx} ${P3.cy - 10}`, { arrow:'end' }));
+  gRight.appendChild(tBlock(P1.cx, H-24, P1.cy-10));
+
+  // Rulle + skalen (följer med)
+  const rollerGroup = document.createElementNS(NS,'g');
+  rollerGroup.setAttribute('transform', `translate(-34, ${H/2})`);
+  rollerGroup.append(
+    path(`M -6 -7 L 35 -7`), path(`M -6 7 L 35 7`)
+  );
+  const rollerOuter = document.createElementNS(NS,'circle');
+  rollerOuter.setAttribute('cx', 4); rollerOuter.setAttribute('cy', 0); rollerOuter.setAttribute('r', 13);
+  rollerOuter.setAttribute('fill','#fff'); rollerOuter.setAttribute('stroke','#000'); rollerOuter.setAttribute('stroke-width','2');
+  const rollerInner = document.createElementNS(NS,'circle');
+  rollerInner.setAttribute('cx', 4); rollerInner.setAttribute('cy', 0); rollerInner.setAttribute('r', 6);
+  rollerInner.setAttribute('fill','#fff'); rollerInner.setAttribute('stroke','#000'); rollerInner.setAttribute('stroke-width','2');
+  rollerGroup.append(rollerOuter, rollerInner);
+
+  // Fjäder (följer med)
+  const spring = document.createElementNS(NS,'g');
+  spring.setAttribute('transform', `translate(${W}, ${H/2})`);
+  spring.append(
+    path(`M 0 0 L 20 0`),
+    path(`M 20 0 l 10 -10 l 10 20 l 10 -20 l 10 20 l 10 -20 l 10 20`)
+  );
+
+  // Bygg ihop allt som ska skuffas
+  mover.append(body, boxLeft, boxRight, gLeft, gRight, rollerGroup, spring);
+  svg.appendChild(mover);
+
+  // === PORTER (statiska; lämnas kvar) ======================================
+  const makePort = (pos, key)=>{
+    const c = document.createElementNS(NS,'circle');
+    c.setAttribute('class','port');
+    c.setAttribute('r', 6);
+    c.setAttribute('cx', pos.cx);
+    c.setAttribute('cy', pos.cy);
+    c.addEventListener('click', (e)=>{ e.stopPropagation(); handlePortClick(comp, key, c); });
+    return c;
+  };
+  const port2El = makePort(P2, '2');
+  const port1El = makePort(P1, '1');
+  const port3El = makePort(P3, '3');
+  svg.append(port2El, port1El, port3El);
+
+  // === Tillstånd / interaktion =============================================
+  let sensorKey = null;  // 'a0', 'a1', ...
+  let manualActive = false;
+
+  function updateLabel(){
+    label.textContent = '3/2 gränsläge' + (sensorKey ? ` — ${sensorKey}` : '');//  '3/2 gränsläge' + (sensorKey ? ` — ${sensorKey}` : '');
+  }
+
+  function applyTransforms(active){
+    // Aktiv = vänster cell under porterna → flytta hela mover 'midX' åt höger
+    const dx = active ? midX : 0;
+    mover.setAttribute('transform', `translate(${dx}, 0)`);
+  }
+
+  function recompute(){
+    const active = sensorKey ? !!getSignal(sensorKey) : manualActive;
+    comp.state.active = active;
+    applyTransforms(active);
+  }
+
+  function promptBind(){
+    const k = window.prompt('Ange sensor (t.ex. a0, a1, b0, b1):', sensorKey || '');
+    if (k){
+      sensorKey = k.trim().toLowerCase();
+      updateLabel();
+      recompute();
+      redrawConnections();
+    }
+  }
+
+  // Manuell toggle (om ingen sensor): klick i vänstra halvan
+  svg.addEventListener('click', (e)=>{
+    const rect = svg.getBoundingClientRect();
+    const localX = e.clientX - rect.left;
+    if (sensorKey) return;
+    if (localX < midX){
+      manualActive = !manualActive;
+      recompute();
+      redrawConnections();
+    }
+  });
+
+  // Bindning via S / dubbelklick / klick på etikett
+  svg.addEventListener('keydown', (e)=>{ if (e.key.toLowerCase()==='s') promptBind(); });
+  svg.setAttribute('tabindex', '0'); svg.style.outline = 'none';
+  el.addEventListener('dblclick', (e)=>{ e.stopPropagation(); promptBind(); });
+  label.addEventListener('click', (e)=>{ e.stopPropagation(); promptBind(); });
+
+  // === Komponent-obj =======================================================
+  const comp = {
+    id, type: 'limit32',
+    el, x, y,
+    svgW: W, svgH: H, gx: 0, gy: 0,
+    ports: {
+      '1': { cx: P1.cx, cy: P1.cy, el: port1El },
+      '2': { cx: P2.cx, cy: P2.cy, el: port2El },
+      '3': { cx: P3.cx, cy: P3.cy, el: port3El }
+    },
+    state: { active: false },
+    recompute
+  };
+
+  // Mount
+  el.appendChild(svg);
+  compLayer.appendChild(el);
+  comp.x = x; comp.y = y;
+  el.style.left = `${x}px`; el.style.top  = `${y}px`;
+
+  makeDraggable(comp);
   components.push(comp);
 
-  // första draw
+  // Init
+  updateLabel();
   recompute();
   return comp;
 }

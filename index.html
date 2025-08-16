@@ -1,178 +1,69 @@
 <!DOCTYPE html>
 <html lang="sv">
-
 <head>
-    <meta charset="UTF-8" />
-    <title>Pneumatik – ISO-symboler (moduler)</title>
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <style>
-        :root {
-            --bg: #f7f7f9;
-            --panel: #ececf1;
-            --ink: #111;
-            --muted: #666;
-            --accent: #d00;
-            --vent: #000;
-            --port: #0a74ff;
-        }
-
-        * {
-            box-sizing: border-box;
-        }
-
-        body {
-            margin: 0;
-            font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-            background: var(--bg);
-            color: var(--ink);
-        }
-
-        .app {
-            display: grid;
-            grid-template-columns: 220px 1fr;
-            height: 100vh;
-        }
-
-        .sidebar {
-            background: var(--panel);
-            border-right: 1px solid #ccc;
-            padding: 10px;
-            overflow: auto;
-        }
-
-        .sidebar h2 {
-            margin: 6px 0 10px;
-            font-size: 16px;
-        }
-
-        .btn {
-            display: block;
-            width: 100%;
-            margin: 6px 0;
-            padding: 8px 10px;
-            border: 1px solid #bbb;
-            background: #fff;
-            cursor: pointer;
-            border-radius: 6px;
-            text-align: left;
-        }
-
-        .btn:hover {
-            background: #f8f8ff;
-        }
-
-        .workspace {
-            position: relative;
-            overflow: hidden;
-        }
-
-        .layer {
-            position: absolute;
-            inset: 0;
-        }
-
-        #connLayer {
-            z-index: 0;
-        }
-
-        #compLayer {
-            z-index: 1;
-        }
-
-        .comp {
-            position: absolute;
-            transform: translate(-50%, -50%);
-            user-select: none;
-        }
-
-        .label {
-            position: absolute;
-            top: -18px;
-            left: 0;
-            right: 0;
-            text-align: center;
-            font-size: 12px;
-            color: var(--muted);
-            pointer-events: none;
-        }
-
-        svg.compSvg {
-            display: block;
-            overflow: visible;
-        }
-
-        .port {
-            fill: #fff;
-            stroke: var(--port);
-            stroke-width: 1.5;
-            cursor: crosshair;
-        }
-
-        .port:hover {
-            fill: #e8f1ff;
-        }
-
-        .wire {
-            stroke: #000;
-            stroke-width: 2;
-            fill: none;
-        }
-
-        .wire.active {
-            stroke: var(--accent);
-            stroke-dasharray: 6 6;
-        }
-
-        .draggable {
-            cursor: move;
-        }
-
-        .hint {
-            position: absolute;
-            bottom: 8px;
-            left: 8px;
-            padding: 6px 8px;
-            font-size: 12px;
-            color: #333;
-            background: #ffffffcc;
-            border: 1px solid #ddd;
-            border-radius: 6px;
-            z-index: 3;
-        }
-        .wire.selected { stroke: #d00; stroke-width: 3; stroke-dasharray: 4 4; }
-
-    </style>
+  <meta charset="UTF-8" />
+  <title>Pneumatik – ISO-symboler (moduler)</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    :root {
+      --bg: #f7f7f9;
+      --panel: #ececf1;
+      --ink: #111;
+      --muted: #666;
+      --accent: #d00;
+      --vent: #000;
+      --port: #0a74ff;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background: var(--bg); color: var(--ink); }
+    .app { display: grid; grid-template-columns: 220px 1fr; height: 100vh; }
+    .sidebar { background: var(--panel); border-right: 1px solid #ccc; padding: 10px; overflow: auto; }
+    .sidebar h2 { margin: 6px 0 10px; font-size: 16px; }
+    .btn { display: block; width: 100%; margin: 6px 0; padding: 8px 10px; border: 1px solid #bbb; background: #fff; cursor: pointer; border-radius: 6px; text-align: left; }
+    .btn:hover { background: #f8f8ff; }
+    .workspace { position: relative; overflow: hidden; }
+    .layer { position: absolute; inset: 0; }
+    #connLayer { z-index: 0; }
+    #compLayer { z-index: 1; }
+    .comp { position: absolute; transform: translate(-50%, -50%); user-select: none; }
+    .label { position: absolute; top: -18px; left: 0; right: 0; text-align: center; font-size: 12px; color: var(--muted); pointer-events: none; }
+    svg.compSvg { display: block; overflow: visible; }
+    .port { fill: #fff; stroke: var(--port); stroke-width: 1.5; cursor: crosshair; }
+    .port:hover { fill: #e8f1ff; }
+    .wire { stroke: #000; stroke-width: 2; fill: none; }
+    .wire.active { stroke: var(--accent); stroke-dasharray: 6 6; }
+    .draggable { cursor: move; }
+    .hint { position: absolute; bottom: 8px; left: 8px; padding: 6px 8px; font-size: 12px; color: #333; background: #ffffffcc; border: 1px solid #ddd; border-radius: 6px; z-index: 3; }
+    .wire.selected { stroke: #d00; stroke-width: 3; stroke-dasharray: 4 4; }
+  </style>
 </head>
-
 <body>
-    <div class="app">
-        <aside class="sidebar">
-            <h2>Komponentbibliotek</h2>
-            <button class="btn" id="addValve52">➕ 5/2-ventil</button>
-            <button class="btn" id="addCylDouble">➕ Cylinder, dubbelverkande</button>
-            <button class="btn" id="addSource">➕ Tryckkälla</button>
-            <button class="btn" id="addAnd">➕ OCH-ventil</button>
-            <button class="btn" id="addOr">➕ ELLER-ventil</button>
+  <div class="app">
+    <aside class="sidebar">
+      <h2>Komponentbibliotek</h2>
+      <button class="btn" id="addValve52">➕ 5/2-ventil</button>
+      <button class="btn" id="addCylDouble">➕ Cylinder, dubbelverkande</button>
+      <button class="btn" id="addSource">➕ Tryckkälla</button>
+      <button class="btn" id="addAnd">➕ OCH-ventil</button>
+      <button class="btn" id="addOr">➕ ELLER-ventil</button>
+      <button class="btn" id="addLimit32">➕ 3/2 gränslägesventil</button>
+      <hr>
+      <p style="font-size:12px;line-height:1.35">
+        • Klicka en port och sedan en annan för att <b>koppla</b>.<br>
+        • Dra i vit yta för att <b>flytta</b> komponenten.<br>
+        • Klicka i ventilens ruta för att <b>växla läge</b> (om ingen sensor är bunden).<br>
+        • Markera gränslägesventilen och tryck <b>S</b> för att binda sensorn <i>(t.ex. a0, a1)</i>.
+      </p>
+    </aside>
 
+    <main class="workspace">
+      <svg id="connLayer" class="layer"></svg>
+      <div id="compLayer" class="layer"></div>
+      <div class="hint">Tips: Koppla P→ventil→Cylinder. Cylinder ger signaler a0/a1 som kan styra gränslägesventiler.</div>
+    </main>
+  </div>
 
-            <hr>
-            <p style="font-size:12px;line-height:1.35">
-                • Klicka en port och sedan en annan för att <b>koppla</b>.<br>
-                • Dra i vit yta för att <b>flytta</b> komponenten.<br>
-                • Klicka i ventilens ruta för att <b>växla läge</b>.
-            </p>
-        </aside>
-
-        <main class="workspace">
-            <svg id="connLayer" class="layer"></svg>
-            <div id="compLayer" class="layer"></div>
-            <div class="hint">Tips: Koppla P→A/B på ventilen, A/B→Cylinder (Cap/Rod). Klicka ventilen för att växla
-                läge.</div>
-        </main>
-    </div>
-
-    <!-- Viktigt: ES-moduler -->
-    <script type="module" src="./js/main.js"></script>
+  <!-- ES-moduler -->
+  <script type="module" src="./js/main.js"></script>
 </body>
-
 </html>

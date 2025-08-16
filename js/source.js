@@ -28,13 +28,23 @@ export function addSource(x, y, compLayer, components, handlePortClick, makeDrag
   g.setAttribute('transform', `translate(${s(GX)},${s(GY)})`);
 
   // Symbol: cirkel (källa) + utgång uppåt
-  const Cx = 50, Cy = 70, R = 26;
+  const Cx = 50, Cy = 50, R = 15;
 
   const circle = document.createElementNS(NS,'circle');
   circle.setAttribute('cx', s(Cx));
   circle.setAttribute('cy', s(Cy));
   circle.setAttribute('r',  s(R));
   circle.setAttribute('fill','#fff'); circle.setAttribute('stroke','#000'); circle.setAttribute('stroke-width', s(2));
+
+  // NYTT: inre cirkel (tunn ring) inne i källans huvudcirkel
+  const innerR = R * 0.55; // justerbar relativ storlek
+  const innerCircle = document.createElementNS(NS,'circle');
+  innerCircle.setAttribute('cx', s(Cx));
+  innerCircle.setAttribute('cy', s(Cy));
+  innerCircle.setAttribute('r',  s(innerR));
+  innerCircle.setAttribute('fill','none');
+  innerCircle.setAttribute('stroke','#000');
+  innerCircle.setAttribute('stroke-width', s(2));
 
   const stem = document.createElementNS(NS,'line');
   stem.setAttribute('x1', s(Cx)); stem.setAttribute('y1', s(Cy - R));
@@ -53,7 +63,8 @@ export function addSource(x, y, compLayer, components, handlePortClick, makeDrag
   t.setAttribute('text-anchor','middle'); t.setAttribute('font-size', Math.max(9, 11*SCALE));
   t.textContent = 'OUT';
 
-  g.append(circle, stem, p, t);
+  // Lägg till i ordning så innercirkeln hamnar ovanpå huvudcirkeln
+  g.append(circle, innerCircle, stem, p, t);
 
   svg.appendChild(g);
   el.append(label, svg);
