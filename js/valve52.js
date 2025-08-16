@@ -49,11 +49,11 @@ export function addValve52(
   const m = document.createElementNS(svg.namespaceURI,'marker');
   m.setAttribute('id','arr');
   m.setAttribute('viewBox','0 0 10 10');
-  m.setAttribute('refX','5');
+  m.setAttribute('refX','10');
   m.setAttribute('refY','5');
   m.setAttribute('markerWidth', String(markerW));
   m.setAttribute('markerHeight', String(markerW));
-  m.setAttribute('orient','auto');
+  m.setAttribute('orient','auto-start-reverse');
   const mp = document.createElementNS(svg.namespaceURI,'path');
   mp.setAttribute('d','M 0 0 L 10 5 L 0 10 z');
   mp.setAttribute('fill','#000');
@@ -135,9 +135,9 @@ export function addValve52(
   r0.setAttribute('stroke-width', String(stroke));
   cell0.appendChild(r0);
 
-  addDoubleArrow(cell0, (CELLW0/2)*scale, CELLH0*scale, 10*scale, 10*scale);
-  addDoubleArrow(cell0, (CELLW0-10)*scale, 10*scale, (CELLW0-10)*scale, CELLH0*scale);
-  addBlock(cell0, 2*scale, (CELLH0/2 - 8)*scale, 8*scale, 16*scale);
+  addDoubleArrow(cell0, (CELLW0/2)*scale, CELLH0*scale, 10*scale, 0);
+  addDoubleArrow(cell0, (CELLW0-10)*scale, 0*scale, (CELLW0-10)*scale, CELLH0*scale);
+  //addBlock(cell0, 2*scale, (CELLH0/2 - 8)*scale, 8*scale, 16*scale);
 
   // Cell 1 (höger)
   const cell1 = document.createElementNS(svg.namespaceURI,'g');
@@ -151,9 +151,9 @@ export function addValve52(
   r1.setAttribute('stroke-width', String(stroke));
   cell1.appendChild(r1);
 
-  addDoubleArrow(cell1, (CELLW0/2)*scale, CELLH0*scale, (CELLW0-10)*scale, 10*scale);
-  addDoubleArrow(cell1, 10*scale, 10*scale, 10*scale, CELLH0*scale);
-  addBlock(cell1, (CELLW0-12)*scale, (CELLH0/2 - 8)*scale, 8*scale, 16*scale);
+  addDoubleArrow(cell1, (CELLW0/2)*scale, CELLH0*scale, (CELLW0-10)*scale, 0);
+  addDoubleArrow(cell1, 10*scale, 0, 10*scale, CELLH0*scale);
+  //addBlock(cell1, (CELLW0-12)*scale, (CELLH0/2 - 8)*scale, 8*scale, 16*scale);
 
   slideInner.append(cell0, cell1);
 

@@ -22,6 +22,7 @@ let components = [];
 let connections = [];
 let nextId = 1;
 let pendingPort = null;
+let isDirty = false; // varna bara när något har ändrats sedan senast ”rent” läge
 
 let selectedConnection = null;
 let selectedComponent  = null;
@@ -553,8 +554,15 @@ async function loadProject(data){
       wrapValveToggleGuard(v);
       comp = v;
     } else if (sc.type === 'cylDouble' || sc.type === 'cylinder'){
-      // Om din cylinderDouble tar fler argument (namngivning/signaler), lägg till dem här.
-      comp = addCylinderDouble(sc.x, sc.y, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
+      // ✅ skicka med namngivare + signaluppdaterare
+      comp = addCylinderDouble(
+        sc.x, sc.y,
+        compLayer, components,
+        handlePortClick, makeDraggable, redrawConnections,
+        uid,
+        getNextCylinderLetter,
+        setSignal
+      );
       if (typeof sc.pos==='number' && typeof comp.setPos==='function') comp.setPos(sc.pos);
     } else if (sc.type === 'andValve'){
       comp = addAndValve(sc.x, sc.y, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
@@ -602,6 +610,11 @@ function pushHistory(_label=''){
   if (history.length > HISTORY_LIMIT) history.shift();
   future = [];
   updateUndoRedoButtons();
+
+  // Dessa åtgärder betraktas som ”rena”: Initial, Load project, Reset.
+  // Allt annat sätter isDirty = true.
+  const cleanLabels = ['Initial','Load project','Reset'];
+  isDirty = !cleanLabels.includes(_label);
 }
 function undo(){
   if (history.length < 2) return;
@@ -710,7 +723,15 @@ function addButtons(){
   ensureButton('addCylDouble','➕ Cylinder, dubbelverkande', ()=>{
     if (!canEdit()) return;
     const r = workspaceBBox();
-    addCylinderDouble(r.width*0.70, r.height*0.50, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
+    // ✅ skicka med namnbokstav + signaluppdaterare
+    addCylinderDouble(
+      r.width*0.70, r.height*0.50,
+      compLayer, components,
+      handlePortClick, makeDraggable, redrawConnections,
+      uid,
+      getNextCylinderLetter,
+      setSignal
+    );
     pushHistory('Add cylinder');
   });
   ensureButton('addAnd',     '➕ AND-ventil', ()=>{
@@ -749,6 +770,7 @@ function addButtons(){
     const a = document.createElement('a');
     a.href = 'data:application/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(snap, null, 2));
     a.download = 'projekt.json'; a.style.display='none'; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    isDirty = false; // ✅ projektet betraktas som sparat
   });
   ensureButton('loadProj', '📂 Ladda projekt', ()=>{
     if (!canEdit()) return;
@@ -776,8 +798,23 @@ window.addEventListener('load', ()=>{
   const v = addValve52(r.width*0.40, r.height*0.50, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
   v._pilot12Prev = false; v._pilot14Prev = false;
   wrapValveToggleGuard(v);
-  addCylinderDouble(r.width*0.70, r.height*0.50, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
+  // ✅ skicka med vid startcylindern också
+  addCylinderDouble(
+    r.width*0.70, r.height*0.50,
+    compLayer, components,
+    handlePortClick, makeDraggable, redrawConnections,
+    uid,
+    getNextCylinderLetter,
+    setSignal
+  );
   pushHistory('Initial');
+});
+
+// Varnar vid sidstängning/uppdatering om osparade ändringar finns
+window.addEventListener('beforeunload', (e)=>{
+  if (!isDirty) return;      // bara varna om något ändrats
+  e.preventDefault();        // krävs för vissa webbläsare
+  e.returnValue = '';        // Chrome/Edge kräver en icke-undefined sträng
 });
 
 /* ---------- Nödvändig CSS om du inte redan har den ---------- */
