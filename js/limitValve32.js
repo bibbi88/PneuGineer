@@ -112,9 +112,8 @@ export function addLimitValve32(
   boxRight.setAttribute('fill','#fff'); boxRight.setAttribute('stroke','#000'); boxRight.setAttribute('stroke-width','1.6');
 
   // Vänster cell (AKTIV): 2→1, 3 block (T)
-  // Pilen ska ha spetsen vid 1 → rita linjen från 2 ner mot 1 och använd marker-end
   const gLeft = document.createElementNS(NS,'g');
-  gLeft.appendChild(path(`M ${L2.cx } ${L1.cy -10} L ${L1.cx} ${L2.cy + 10}`, { arrow:'end' }));
+  gLeft.appendChild(path(`M ${L1.cx } ${L1.cy -10} L ${L2.cx} ${L2.cy + 10}`, { arrow:'end' }));
   gLeft.appendChild(tBlock(L3.cx, H-24, L3.cy-10));
 
   // Höger cell (VILA): 2→3, 1 block (T), pilspets vid 3
