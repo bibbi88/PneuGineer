@@ -1,12 +1,12 @@
 // js/limitValve32.js
 // 3/2 gränslägesventil där hela ventilen (ram, inre lådor, rulle/skalen, fjäder)
-// skuffas med transform vid aktivering; porterna lämnas på plats.
+// skjuts med SVG-transform vid aktivering; porterna lämnas på plats.
 //
 // Vänster cell (AKTIV): 2→1, 3 block (T)
 // Höger  cell (VILA):  2→3, 1 block (T)
 //
-// Etikett: visas nu som ett SVG-textobjekt precis ovanför rullen (följer med mover).
-// Klick på etiketten (eller dubbelklick på komponenten eller S-tangent) låter dig binda sensor (t.ex. a0/a1).
+// Etikett: ett SVG-textobjekt precis ovanför rullen (följer med). Visar endast sensornyckeln (t.ex. a0).
+// Klick på etiketten / dubbelklick på komponenten / S-tangent = bind sensor.
 //
 // Signatur (matchar main.js):
 // addLimitValve32(x,y, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid, getSignal)
@@ -25,10 +25,10 @@ export function addLimitValve32(
   const NS = 'http://www.w3.org/2000/svg';
   const midX = W / 2;
 
-  // Portpositioner (bara i höger cell)
+  // Portpositioner (höger cell)
   const insetRight = Math.round((W - midX) * 0.25); // ~¼ in i högra halvan
-  const P2 = { cx: midX + insetRight, cy: -10  };    // 2 (uppe)
-  const P1 = { cx: midX + insetRight, cy: H + 10 }; // 1 (nere, under 2)
+  const P2 = { cx: midX + insetRight, cy: -10  };   // 2 (uppe, mitt ovanför 1)
+  const P1 = { cx: midX + insetRight, cy: H + 10 }; // 1 (nere)
   const P3 = { cx: W - 12,            cy: H + 10 }; // 3 (nere höger)
 
   // Motsv. lägen i vänster cell (för inre grafik)
@@ -42,10 +42,10 @@ export function addLimitValve32(
   el.style.left = x + 'px';
   el.style.top  = y + 'px';
 
-  // (Tidigare label i överkant) – nu blank för att inte visa "3/2-ventil"
+  // Tom HTML-label (vi visar ingen “3/2-ventil”-text i överkant)
   const htmlLabel = document.createElement('div');
   htmlLabel.className = 'label';
-  htmlLabel.textContent = ''; // inga rubriker överst
+  htmlLabel.textContent = ''; // håll tom
   el.appendChild(htmlLabel);
 
   const svg = document.createElementNS(NS,'svg');
@@ -70,18 +70,17 @@ export function addLimitValve32(
   defs.append(marker);
   svg.appendChild(defs);
 
-  // === MOVER (ALLT som ska skuffas: ram/ytterbox, innerlådor, rulle/skalen, fjäder) ===
+  // === MOVER (allt som ska skjutas: ram, inre lådor, pilar, rulle, fjäder) ===
   const mover = document.createElementNS(NS,'g');
-  // vi använder SVG-transform (inte CSS) för stabil rendering av markers
 
-  // Ytterkapsling (ram) – följer med
+  // Ram
   const body = document.createElementNS(NS,'rect');
   body.setAttribute('x',0); body.setAttribute('y',0);
   body.setAttribute('width',W); body.setAttribute('height',H);
   body.setAttribute('fill','#fff'); body.setAttribute('stroke','#000');
   body.setAttribute('stroke-width','2');
 
-  // Hjälpare för ritning
+  // Hjälpare
   const path = (d, opts={})=>{
     const p = document.createElementNS(NS,'path');
     p.setAttribute('d', d);
@@ -99,7 +98,7 @@ export function addLimitValve32(
     return frag;
   };
 
-  // Inre två "lådor"
+  // Inre "lådor"
   const boxLeft  = document.createElementNS(NS,'rect');
   boxLeft.setAttribute('x', 0); boxLeft.setAttribute('y', 0);
   boxLeft.setAttribute('width', midX); boxLeft.setAttribute('height', H);
@@ -115,12 +114,12 @@ export function addLimitValve32(
   gLeft.appendChild(path(`M ${L1.cx } ${L1.cy -10} L ${L2.cx} ${L2.cy + 10}`, { arrow:'end' }));
   gLeft.appendChild(tBlock(L3.cx, H-24, L3.cy-10));
 
-  // Höger cell (VILA): 2→3, 1 block (T), pilspets vid 3
+  // Höger cell (VILA): 2→3, 1 block (T)
   const gRight = document.createElementNS(NS,'g');
   gRight.appendChild(path(`M ${P2.cx} ${P2.cy + 10} L ${P3.cx} ${P3.cy - 10}`, { arrow:'end' }));
   gRight.appendChild(tBlock(P1.cx, H-24, P1.cy-10));
 
-  // Rulle + skalen (följer med)
+  // Rulle + skalen
   const rollerGroup = document.createElementNS(NS,'g');
   rollerGroup.setAttribute('transform', `translate(-34, ${H/2})`);
   rollerGroup.append(
@@ -133,14 +132,14 @@ export function addLimitValve32(
   rollerInner.setAttribute('cx', 4); rollerInner.setAttribute('cy', 0); rollerInner.setAttribute('r', 6);
   rollerInner.setAttribute('fill','#fff'); rollerInner.setAttribute('stroke','#000'); rollerInner.setAttribute('stroke-width','2');
 
-  // === NYTT: Etikett precis ovanför rullen (följer med mover) ===
+  // Etikett: precis ovanför rullen (följer med mover)
   const rollLabel = document.createElementNS(NS,'text');
-  rollLabel.setAttribute('x', 4);     // ovanför rullens mitt (cx=4)
-  rollLabel.setAttribute('y', -18);   // lite ovanför rullen
+  rollLabel.setAttribute('x', 4);
+  rollLabel.setAttribute('y', -18);
   rollLabel.setAttribute('text-anchor','middle');
   rollLabel.setAttribute('font-size','12');
   rollLabel.style.userSelect = 'none';
-  rollLabel.style.cursor = 'pointer'; // klickbar för bindning
+  rollLabel.style.cursor = 'pointer';
 
   rollerGroup.append(rollerOuter, rollerInner, rollLabel);
 
@@ -152,11 +151,11 @@ export function addLimitValve32(
     path(`M 20 0 l 10 -10 l 10 20 l 10 -20 l 10 20 l 10 -20 l 10 20`)
   );
 
-  // Bygg ihop allt som ska skuffas
+  // Sätt ihop
   mover.append(body, boxLeft, boxRight, gLeft, gRight, rollerGroup, spring);
   svg.appendChild(mover);
 
-  // === PORTER (statiska; lämnas kvar) ======================================
+  // === PORTER (statiska) ====================================================
   const makePort = (pos, key)=>{
     const c = document.createElementNS(NS,'circle');
     c.setAttribute('class','port');
@@ -172,11 +171,10 @@ export function addLimitValve32(
   svg.append(port2El, port1El, port3El);
 
   // === Tillstånd / interaktion =============================================
-  let sensorKey = null;  // 'a0', 'a1', ...
+  let sensorKey = null;   // 'a0', 'a1', ...
   let manualActive = false;
 
   function updateLabel(){
-    // Visa endast sensornyckeln (utan "3/2-ventil" text)
     rollLabel.textContent = sensorKey ? sensorKey : '';
   }
 
@@ -194,19 +192,28 @@ export function addLimitValve32(
 
   function promptBind(){
     const k = window.prompt('Ange sensor (t.ex. a0, a1, b0, b1):', sensorKey || '');
-    if (k){
-      sensorKey = k.trim().toLowerCase();
-      updateLabel();
-      recompute();
-      redrawConnections();
+    if (k !== null){
+      setSensor(String(k));
     }
+  }
+
+  // === Exponera sensor-getter/setter (för spara/ladda) =====================
+  function setSensor(k){
+    const s = (k && String(k).trim()) ? String(k).trim().toLowerCase() : null;
+    sensorKey = s;
+    updateLabel();
+    recompute();
+    redrawConnections();
+  }
+  function getSensor(){
+    return sensorKey || null;
   }
 
   // Manuell toggle (om ingen sensor): klick i vänstra halvan
   svg.addEventListener('click', (e)=>{
     const rect = svg.getBoundingClientRect();
     const localX = e.clientX - rect.left;
-    if (sensorKey) return;
+    if (sensorKey) return;        // låst till sensor
     if (localX < midX){
       manualActive = !manualActive;
       recompute();
@@ -231,7 +238,10 @@ export function addLimitValve32(
       '3': { cx: P3.cx, cy: P3.cy, el: port3El }
     },
     state: { active: false },
-    recompute
+    recompute,
+    // Exponera för main.js (snapshot/load)
+    getSensorKey: getSensor,
+    setSensorKey: setSensor
   };
 
   // Mount
