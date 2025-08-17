@@ -5,6 +5,7 @@
 // handtag för segment, contextmeny för att lägga till/ta bort/rensa segment.
 // Port 12/14 på 5/2 får alltid horisontell in-/utgång, och alltid utåt (12→+x, 14→-x).
 // Finjustera markerade komponenter med pilar (Shift = 10 px). Sparar cylinderbokstav & limit-sensornamn.
+// Nytt: 12/14-stubben behandlas som justerbart segment (egna handtag + persistens).
 
 import { addValve52 }        from './valve52.js';
 import { addCylinderDouble } from './cylinderDouble.js';
@@ -24,7 +25,11 @@ connLayer.style.pointerEvents = 'none'; // vi gör egen hit-test i capture
 
 /* ---------- App-state ---------- */
 let components = [];
-// connection: { from:{id,port}, to:{id,port}, pathEl, labelEl, guides:[{type:'H'|'V',pos:number}], handleEls:[] }
+// connection: {
+//   from:{id,port}, to:{id,port}, pathEl, labelEl,
+//   guides:[{type:'H'|'V',pos:number}], handleEls:[],
+//   stubStartLen?:number|null, stubEndLen?:number|null
+// }
 let connections = [];
 let nextId = 1;
 let pendingPort = null;
@@ -47,6 +52,10 @@ let history = [];
 let future  = [];
 let isRestoring = false;
 
+/* ---------- Grid & Snap ---------- */
+const GRID_SIZE = 10;
+function snap(v, g=GRID_SIZE){ return Math.round(v / g) * g; }
+
 /* ---------- Utils ---------- */
 function uid(){ return nextId++; }
 function workspaceBBox(){ return compLayer.getBoundingClientRect(); }
@@ -60,8 +69,8 @@ function nudgeSelectedComponents(dx, dy){
 
   const rect = workspaceBBox();
   selectedComponents.forEach(c=>{
-    const nx = clamp(c.x + dx, 40, rect.width  - 40);
-    const ny = clamp(c.y + dy, 40, rect.height - 40);
+    const nx = snap(clamp(c.x + dx, 40, rect.width  - 40));
+    const ny = snap(clamp(c.y + dy, 40, rect.height - 40));
     c.x = nx; c.y = ny;
     c.el.style.left = nx + 'px';
     c.el.style.top  = ny + 'px';
@@ -103,17 +112,10 @@ const WIRE_STUB = 14;
 // Port-orientering: 12/14 på 5/2 ska vara horisontell, övrigt vertikal
 function getPortEntryOrientation(comp, portKey){
   if (comp?.type === 'valve52' && (portKey === '12' || portKey === '14')) return 'H';
-  if (comp?.type === 'andValve') {
-    // OUT uppåt ⇒ vertikal in/ut; A/B på sidor ⇒ horisontell in/ut
-    return (portKey === 'OUT') ? 'V' : 'H';
-  }
-    if (comp?.type === 'orValve') {
-    // OUT uppåt ⇒ vertikal in/ut; A/B på sidor ⇒ horisontell in/ut
-    return (portKey === 'OUT') ? 'V' : 'H';
-  }
+  if (comp?.type === 'andValve') return (portKey === 'OUT') ? 'V' : 'H';
+  if (comp?.type === 'orValve')  return (portKey === 'OUT') ? 'V' : 'H';
   return 'V';
 }
-
 function isValvePilotPort(comp, portKey){
   return comp?.type === 'valve52' && (portKey === '12' || portKey === '14');
 }
@@ -217,7 +219,18 @@ function pathFromPoints(pts){
   return d;
 }
 
-// GEOMETRI inkl. stubbar och 12/14 som alltid går UTÅT (12→+x, 14→-x)
+/* ---------- Pilot-stubbar: hjälp ---------- */
+function isPilotEndpoint(conn, which){ // 'start' | 'end'
+  const end = (which==='start') ? conn.from : conn.to;
+  const comp = components.find(c=> c.id === end.id);
+  return isValvePilotPort(comp, end.port);
+}
+function pilotDir(conn, which){ // +1 för 12, -1 för 14
+  const end = (which==='start') ? conn.from : conn.to;
+  return (end.port === '12') ? +1 : -1;
+}
+
+/* ---------- Geometri inkl. stubbar och 12/14 som alltid går utåt ---------- */
 function computeConnectionGeometry(conn){
   const c1 = components.find(c=>c.id===conn.from.id);
   const c2 = components.find(c=>c.id===conn.to.id);
@@ -232,13 +245,15 @@ function computeConnectionGeometry(conn){
   let a0, b0;
   if (isValvePilotPort(c1, conn.from.port)){
     const dir = (conn.from.port === '12') ? +1 : -1;
-    a0 = { x: a.x + dir*WIRE_STUB, y: a.y };
+    const L = Math.max(6, Number(conn.stubStartLen ?? WIRE_STUB));
+    a0 = { x: a.x + dir*L, y: a.y };
   } else {
     a0 = makeEndpointStub(a, b, oStart);
   }
   if (isValvePilotPort(c2, conn.to.port)){
     const dir = (conn.to.port === '12') ? +1 : -1;
-    b0 = { x: b.x + dir*WIRE_STUB, y: b.y };
+    const L = Math.max(6, Number(conn.stubEndLen ?? WIRE_STUB));
+    b0 = { x: b.x + dir*L, y: b.y };
   } else {
     b0 = makeEndpointStub(b, a, oEnd);
   }
@@ -341,6 +356,8 @@ window.addEventListener('keydown', (e)=>{
     const prevComp = components.find(c=>c.id===pendingPort.id);
     if (prevComp) prevComp.ports[pendingPort.port]?.el?.setAttribute('fill','#fff');
     pendingPort = null;
+    setHoverPort(null);
+    removePreviewPath();
     document.body.style.cursor = '';
     return;
   }
@@ -599,8 +616,8 @@ function makeDraggable(comp){
     const my = e.clientY - rect.top;
 
     offsets.forEach(o=>{
-      const nx = clamp(mx - o.dx, 40, rect.width-40);
-      const ny = clamp(my - o.dy, 40, rect.height-40);
+      const nx = snap(clamp(mx - o.dx, 40, rect.width-40));
+      const ny = snap(clamp(my - o.dy, 40, rect.height-40));
       o.comp.x = nx; o.comp.y = ny;
       o.comp.el.style.left = nx + 'px';
       o.comp.el.style.top  = ny + 'px';
@@ -627,6 +644,7 @@ function createWirePath(){
   const path = document.createElementNS('http://www.w3.org/2000/svg','path');
   path.setAttribute('class','wire');
   path.style.pointerEvents = 'stroke';
+  // path.setAttribute('marker-end','url(#arrow)'); // aktivera pilar om du vill
   return path;
 }
 function createWireLabel(){
@@ -643,7 +661,19 @@ function addConnection(from, to){
   const label = createWireLabel();
   connLayer.appendChild(path);
   connLayer.appendChild(label);
-  const conn = { from, to, pathEl: path, labelEl: label, guides: [], handleEls: [] };
+
+  // Pilot-portar? spara justerbara stubbar (horisontella)
+  const cFrom = components.find(c=> c.id === from.id);
+  const cTo   = components.find(c=> c.id === to.id);
+  const startPilot = isValvePilotPort(cFrom, from.port);
+  const endPilot   = isValvePilotPort(cTo,   to.port);
+
+  const conn = {
+    from, to, pathEl: path, labelEl: label,
+    guides: [], handleEls: [],
+    stubStartLen: startPilot ? WIRE_STUB : null,
+    stubEndLen:   endPilot   ? WIRE_STUB : null
+  };
   connections.push(conn);
   return conn;
 }
@@ -653,11 +683,56 @@ function removeConnection(conn){
   conn.labelEl?.remove();
   connections = connections.filter(c=>c!==conn);
 }
-
 function finalizeWire(from, to){
   const conn = addConnection(from, to);
   redrawConnections();
   return conn;
+}
+
+/* ---------- Port hit-test (magnet) ---------- */
+const PORT_SNAP_RADIUS = 16; // px
+function findNearestPort(px, py, exclude={ id:null, port:null }){
+  let best=null, bestD=Infinity;
+  components.forEach(c=>{
+    if (!c.ports) return;
+    for (const key of Object.keys(c.ports)){
+      if (exclude && exclude.id===c.id && exclude.port===key) continue;
+      const gp = portGlobalPosition(c, key);
+      const d = Math.hypot(gp.x - px, gp.y - py);
+      if (d < bestD){ best = { comp:c, key, x:gp.x, y:gp.y, d }; bestD = d; }
+    }
+  });
+  return (best && best.d <= PORT_SNAP_RADIUS) ? best : null;
+}
+
+let hoverPort = null;
+let lastHoverPortEl = null;
+function setHoverPort(newHover){
+  if (lastHoverPortEl && (!newHover || newHover.comp.ports[newHover.key].el !== lastHoverPortEl)){
+    lastHoverPortEl.setAttribute('fill', '#fff');
+    lastHoverPortEl = null;
+  }
+  hoverPort = newHover;
+  if (hoverPort){
+    const el = hoverPort.comp.ports[hoverPort.key].el;
+    el.setAttribute('fill', '#e9f6ff');
+    lastHoverPortEl = el;
+  }
+}
+
+/* ---------- Ghost-wire (preview) ---------- */
+let tempPreviewPath = null;
+function ensurePreviewPath(){
+  if (tempPreviewPath) return tempPreviewPath;
+  tempPreviewPath = document.createElementNS('http://www.w3.org/2000/svg','path');
+  tempPreviewPath.setAttribute('class','wire preview');
+  tempPreviewPath.style.pointerEvents = 'none';
+  connLayer.appendChild(tempPreviewPath);
+  return tempPreviewPath;
+}
+function removePreviewPath(){
+  tempPreviewPath?.remove();
+  tempPreviewPath = null;
 }
 
 /* ---------- Hit-test för trådar ---------- */
@@ -697,6 +772,23 @@ window.addEventListener('click', (e)=>{
   const px = e.clientX - rect.left;
   const py = e.clientY - rect.top;
 
+  // Om vi håller på att länka och står ovanpå en port -> avsluta till den porten
+  if (pendingPort && hoverPort){
+    finalizeWire(pendingPort, { id:hoverPort.comp.id, port:hoverPort.key });
+
+    const prevComp = components.find(c=>c.id===pendingPort.id);
+    prevComp?.ports[pendingPort.port]?.el?.setAttribute('fill','#fff');
+
+    setHoverPort(null);
+    removePreviewPath();
+    pendingPort = null;
+    document.body.style.cursor = '';
+    pushHistory('Create wire (snap-to-port)');
+    redrawConnections();
+    e.stopPropagation(); e.preventDefault();
+    return;
+  }
+
   // Länkning mot tråd ⇒ skapa junction
   if (pendingPort && !(e.target && e.target.classList?.contains('port'))){
     const hit = hitTestWire(px, py, 8);
@@ -713,6 +805,9 @@ window.addEventListener('click', (e)=>{
 
       const prevComp = components.find(c=>c.id===pendingPort.id);
       prevComp?.ports[pendingPort.port]?.el?.setAttribute('fill','#fff');
+
+      setHoverPort(null);
+      removePreviewPath();
       pendingPort = null;
       document.body.style.cursor = '';
 
@@ -772,6 +867,35 @@ window.addEventListener('contextmenu', (e)=>{
     showCtxMenu(e.clientX, e.clientY, { type:'wire', payload:{ conn:hit.conn, hit, x:px, y:py } });
     e.stopPropagation(); e.preventDefault();
   }
+}, true);
+
+/* ---------- Magnetisk port + ghost-wire under länkning ---------- */
+window.addEventListener('mousemove', (e)=>{
+  if (!pendingPort) return;
+
+  const rect = workspaceBBox();
+  const px = e.clientX - rect.left;
+  const py = e.clientY - rect.top;
+
+  const near = findNearestPort(px, py, pendingPort);
+  setHoverPort(near);
+
+  const srcComp = components.find(c=>c.id===pendingPort.id);
+  if (!srcComp) return;
+  const a = portGlobalPosition(srcComp, pendingPort.port);
+  const b = near ? { x:near.x, y:near.y } : { x:px, y:py };
+
+  const orientA = getPortEntryOrientation(srcComp, pendingPort.port);
+  const stubA = isValvePilotPort(srcComp, pendingPort.port)
+    ? { x: a.x + ((pendingPort.port==='12')?+1:-1) * WIRE_STUB, y: a.y }
+    : makeEndpointStub(a, b, orientA);
+
+  const inner = routeAuto(stubA.x, stubA.y, b.x, b.y);
+  const pts = [a];
+  if (stubA.x!==a.x || stubA.y!==a.y) pts.push(stubA);
+  pts.push(...inner.points.slice(1));
+
+  ensurePreviewPath().setAttribute('d', pathFromPoints(pts));
 }, true);
 
 /* ---------- Marquee (lasso) ---------- */
@@ -866,6 +990,8 @@ function handlePortClick(comp, portKey, portEl){
   if (pendingPort.id === comp.id && pendingPort.port === portKey){
     pendingPort = null;
     portEl.setAttribute('fill', '#fff');
+    setHoverPort(null);
+    removePreviewPath();
     document.body.style.cursor = '';
     return;
   }
@@ -876,6 +1002,8 @@ function handlePortClick(comp, portKey, portEl){
   if (prevComp) prevComp.ports[pendingPort.port]?.el?.setAttribute('fill','#fff');
 
   pendingPort = null;
+  setHoverPort(null);
+  removePreviewPath();
   document.body.style.cursor = '';
   pushHistory('Create wire');
 }
@@ -1125,7 +1253,11 @@ function snapshotProject(){
   const conns = connections.map(conn=>({
     from:{ id:conn.from.id, port:conn.from.port },
     to:  { id:conn.to.id,   port:conn.to.port },
-    guides: (Array.isArray(conn.guides) && conn.guides.length>0) ? conn.guides.map(g=>({type:g.type,pos:g.pos})) : []
+    guides: (Array.isArray(conn.guides) && conn.guides.length>0)
+              ? conn.guides.map(g=>({type:g.type,pos:g.pos}))
+              : [],
+    stubStartLen: (typeof conn.stubStartLen === 'number') ? conn.stubStartLen : null,
+    stubEndLen:   (typeof conn.stubEndLen   === 'number') ? conn.stubEndLen   : null
   }));
   return { version: 17, comps, conns };
 }
@@ -1204,6 +1336,9 @@ async function loadProject(data){
     } else if (typeof conn.ctrlY === 'number'){ // Bakåtkomp från äldre version
       c.guides = [{ type:'H', pos: conn.ctrlY }];
     }
+    // återställ justerbara pilot-stubbar
+    if (typeof conn.stubStartLen === 'number') c.stubStartLen = conn.stubStartLen;
+    if (typeof conn.stubEndLen   === 'number') c.stubEndLen   = conn.stubEndLen;
   }
 
   redrawConnections();
@@ -1319,7 +1454,16 @@ function wrapValveToggleGuard(valveComp){
 (function injectOverlayCSS(){
   if (document.getElementById('overlayCSS')) return;
   const css = `
-    .wire { stroke:#000; stroke-width:2; fill:none; }
+    /* Workspace-grid */
+    #compLayer {
+      background-image:
+        linear-gradient(to right, rgba(0,0,0,.06) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(0,0,0,.06) 1px, transparent 1px);
+      background-size: ${GRID_SIZE}px ${GRID_SIZE}px;
+    }
+
+    .wire { stroke:#000; stroke-width:2; fill:none; vector-effect: non-scaling-stroke; }
+    .wire.preview { stroke:#888; stroke-dasharray:4 4; }
     .wire.active { stroke:#d00; stroke-dasharray:6 6; animation: wireflow 1.2s linear infinite; }
     @keyframes wireflow { to { stroke-dashoffset: -12; } }
     .wire.selected { stroke:#0a74ff; stroke-width:3; }
@@ -1468,6 +1612,27 @@ addButtons();
 window.addEventListener('load', ()=>{
   const r = workspaceBBox();
   addSource(r.width*0.15, r.height*0.50, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
+
+  // säkerställ wire markörer (pilar) om du vill aktivera dem
+  (function ensureWireMarkers(){
+    if (connLayer.__markersReady) return;
+    const defs = document.createElementNS('http://www.w3.org/2000/svg','defs');
+    const marker = document.createElementNS('http://www.w3.org/2000/svg','marker');
+    marker.setAttribute('id','arrow');
+    marker.setAttribute('markerWidth','8');
+    marker.setAttribute('markerHeight','8');
+    marker.setAttribute('refX','8');
+    marker.setAttribute('refY','4');
+    marker.setAttribute('orient','auto-start-reverse');
+    const path = document.createElementNS('http://www.w3.org/2000/svg','path');
+    path.setAttribute('d','M0,0 L8,4 L0,8 Z');
+    path.setAttribute('fill','#000');
+    marker.appendChild(path);
+    defs.appendChild(marker);
+    connLayer.appendChild(defs);
+    connLayer.__markersReady = true;
+  })();
+
   const v = addValve52(r.width*0.40, r.height*0.50, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
   v._pilot12Prev = false; v._pilot14Prev = false;
   wrapValveToggleGuard(v);
@@ -1510,7 +1675,7 @@ function nearestGuideIndex(conn, px, py){
   return bestIdx;
 }
 
-/* ---------- Handtag för segment ---------- */
+/* ---------- Handtag för segment (inkl. 12/14-stubbar) ---------- */
 function destroyHandlesForConnection(conn){
   if (Array.isArray(conn.handleEls)){
     conn.handleEls.forEach(el=> el?.remove());
@@ -1531,9 +1696,11 @@ function refreshHandlesForConnection(conn, repositionOnly=false){
 
   if (!Array.isArray(conn.guides)) conn.guides = [];
 
-  // Skapa eller enbart repositionera
+  // Skapa handtag för guider och piloter
   if (!repositionOnly){
     destroyHandlesForConnection(conn);
+
+    // --- Guide-handtag (H/V) ---
     conn.handleEls = conn.guides.map((g, idx)=>{
       const el = document.createElement('div');
       el.className = 'ctrlHandle ' + (g.type==='H' ? 'h' : 'v');
@@ -1592,6 +1759,84 @@ function refreshHandlesForConnection(conn, repositionOnly=false){
 
       return el;
     });
+
+    // --- Pilot-stubb-handtag (start) ---
+    if (isPilotEndpoint(conn,'start')){
+      const el = document.createElement('div');
+      el.className = 'ctrlHandle v';
+      el.title = 'Dra för att ändra stubblängd (12/14)';
+      compLayer.appendChild(el);
+      conn.handleEls.push(el);
+
+      let dragging=false, baseX=0, baseLen=Number(conn.stubStartLen ?? WIRE_STUB);
+      const onDown = (e)=>{
+        if (!canEdit()) return;
+        dragging = true;
+        const c1 = components.find(c=>c.id===conn.from.id);
+        const aPort = portGlobalPosition(c1, conn.from.port);
+        baseX = aPort.x;
+        baseLen = Number(conn.stubStartLen ?? WIRE_STUB);
+        const move = (ev)=>{
+          if (!dragging) return;
+          const rect = workspaceBBox();
+          const mx = ev.clientX - rect.left;
+          const dir = pilotDir(conn,'start');
+          let L = Math.max(6, Math.abs(mx - baseX));
+          if (dir>0 && mx < baseX) L = Math.max(6, baseLen);
+          if (dir<0 && mx > baseX) L = Math.max(6, baseLen);
+          conn.stubStartLen = L;
+          redrawConnections();
+        };
+        const up = ()=>{
+          dragging=false;
+          pushHistory('Resize pilot stub (start)');
+          window.removeEventListener('mousemove', move);
+        };
+        window.addEventListener('mousemove', move);
+        window.addEventListener('mouseup', up, { once:true });
+        e.stopPropagation(); e.preventDefault();
+      };
+      el.addEventListener('mousedown', onDown);
+    }
+
+    // --- Pilot-stubb-handtag (end) ---
+    if (isPilotEndpoint(conn,'end')){
+      const el = document.createElement('div');
+      el.className = 'ctrlHandle v';
+      el.title = 'Dra för att ändra stubblängd (12/14)';
+      compLayer.appendChild(el);
+      conn.handleEls.push(el);
+
+      let dragging=false, baseX=0, baseLen=Number(conn.stubEndLen ?? WIRE_STUB);
+      const onDown = (e)=>{
+        if (!canEdit()) return;
+        dragging = true;
+        const c2 = components.find(c=>c.id===conn.to.id);
+        const bPort = portGlobalPosition(c2, conn.to.port);
+        baseX = bPort.x;
+        baseLen = Number(conn.stubEndLen ?? WIRE_STUB);
+        const move = (ev)=>{
+          if (!dragging) return;
+          const rect = workspaceBBox();
+          const mx = ev.clientX - rect.left;
+          const dir = pilotDir(conn,'end');
+          let L = Math.max(6, Math.abs(mx - baseX));
+          if (dir>0 && mx < baseX) L = Math.max(6, baseLen);
+          if (dir<0 && mx > baseX) L = Math.max(6, baseLen);
+          conn.stubEndLen = L;
+          redrawConnections();
+        };
+        const up = ()=>{
+          dragging=false;
+          pushHistory('Resize pilot stub (end)');
+          window.removeEventListener('mousemove', move);
+        };
+        window.addEventListener('mousemove', move);
+        window.addEventListener('mouseup', up, { once:true });
+        e.stopPropagation(); e.preventDefault();
+      };
+      el.addEventListener('mousedown', onDown);
+    }
   }
 
   // Positionera handtag
@@ -1608,4 +1853,32 @@ function refreshHandlesForConnection(conn, repositionOnly=false){
       el.style.top  = (yMid - 6) + 'px';
     }
   });
+
+  // Positionera pilot-stubb-handtag (efter guide-handtag)
+  let idxOffset = conn.guides.length;
+  const c1 = components.find(c=>c.id===conn.from.id);
+  const c2 = components.find(c=>c.id===conn.to.id);
+  const aPort = portGlobalPosition(c1, conn.from.port);
+  const bPort = portGlobalPosition(c2, conn.to.port);
+
+  if (isPilotEndpoint(conn,'start')){
+    const el = conn.handleEls[idxOffset++];
+    if (el){
+      const dir = pilotDir(conn,'start');
+      const L = Number(conn.stubStartLen ?? WIRE_STUB);
+      const hx = aPort.x + dir * L;
+      el.style.left = (hx - 6) + 'px';
+      el.style.top  = (aPort.y - 6) + 'px';
+    }
+  }
+  if (isPilotEndpoint(conn,'end')){
+    const el = conn.handleEls[idxOffset++];
+    if (el){
+      const dir = pilotDir(conn,'end');
+      const L = Number(conn.stubEndLen ?? WIRE_STUB);
+      const hx = bPort.x + dir * L;
+      el.style.left = (hx - 6) + 'px';
+      el.style.top  = (bPort.y - 6) + 'px';
+    }
+  }
 }
