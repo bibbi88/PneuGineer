@@ -107,6 +107,10 @@ function getPortEntryOrientation(comp, portKey){
     // OUT uppåt ⇒ vertikal in/ut; A/B på sidor ⇒ horisontell in/ut
     return (portKey === 'OUT') ? 'V' : 'H';
   }
+    if (comp?.type === 'orValve') {
+    // OUT uppåt ⇒ vertikal in/ut; A/B på sidor ⇒ horisontell in/ut
+    return (portKey === 'OUT') ? 'V' : 'H';
+  }
   return 'V';
 }
 

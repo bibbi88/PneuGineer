@@ -15,7 +15,7 @@ export function addAndValve(
 
   // Geometri
   const SVG_W=200, SVG_H=180, GX=10, GY=20;
-  const HUS_X=40, HUS_Y=60, HUS_W=120, HUS_H=70;
+  const HUS_X=40, HUS_Y=60, HUS_W=100, HUS_H=60;
 
   const NS = 'http://www.w3.org/2000/svg';
 
@@ -48,12 +48,6 @@ export function addAndValve(
     r.setAttribute('fill','#fff'); r.setAttribute('stroke','#000'); r.setAttribute('stroke-width', s(2));
     return r;
   };
-  const circle = (cx,cy,r)=>{
-    const c = document.createElementNS(NS,'circle');
-    c.setAttribute('cx', s(cx)); c.setAttribute('cy', s(cy)); c.setAttribute('r', s(r));
-    c.setAttribute('fill','#fff'); c.setAttribute('stroke','#000'); c.setAttribute('stroke-width', s(2));
-    return c;
-  };
 
   // Hus
   const hus = rect(HUS_X, HUS_Y, HUS_W, HUS_H);
@@ -62,7 +56,7 @@ export function addAndValve(
   const leftX  = HUS_X + 35;
   const rightX = HUS_X + HUS_W - 35;
 
-  // Tillbakaventiler mot centrum (kula + sned säte)
+  // Tillbakaventiler mot centrum (enkelt ritat)
   const lBlock1 = line(leftX-20,   HUS_Y, leftX-20,   HUS_Y+23);
   const lShuttle = line(leftX-27,   HUS_Y+15, leftX-27,   HUS_Y+HUS_H-15);
   const lBlock2 = line(leftX-20,   HUS_Y+HUS_H, leftX-20,   HUS_Y+HUS_H-23);
@@ -71,8 +65,7 @@ export function addAndValve(
   const rShuttle = line(rightX+27,   HUS_Y+15, rightX+27,   HUS_Y+HUS_H-15);
   const rBlock2 = line(rightX+20, HUS_Y+HUS_H, rightX+20, HUS_Y+HUS_H-23);
 
- // const topLink = line(leftX+28, yMid-10, rightX-28, yMid-10);
-  const chamber = line(leftX-27,  yMid, rightX+27,   yMid);
+  const hShuttle = line(leftX-27,  yMid, rightX+27,   yMid);
 
   // === Portpunkter: A (vänster), B (höger), OUT (uppe) ===
   const LEFT_PORT_X  = HUS_X - 20;           // portcentrum till vänster
@@ -83,7 +76,7 @@ export function addAndValve(
   const B   = { cx: RIGHT_PORT_X, cy: yMid };
   const OUT = { cx: HUS_X + HUS_W/2, cy: TOP_PORT_Y };
 
-  // Inre anslutningslinjer: A/B horisontellt in från sidorna, OUT vertikalt ner från toppen
+  // Inre anslutningslinjer
   const aLine = line(HUS_X,        A.cy,   A.cx+6, A.cy);
   const bLine = line(HUS_X+HUS_W,  B.cy,   B.cx-6, B.cy);
   const outLn = line(OUT.cx,       OUT.cy+6, OUT.cx, HUS_Y);
@@ -91,7 +84,7 @@ export function addAndValve(
   g.append(hus,
            lBlock1, lShuttle, lBlock2,
            rBlock1, rShuttle, rBlock2,
-           chamber,
+           hShuttle,
            aLine, bLine, outLn);
 
   // Portar (klickbara) med smart textplacering
@@ -108,9 +101,10 @@ export function addAndValve(
     } else if (side==='R'){
       t.setAttribute('x', s(p.cx + 14)); t.setAttribute('y', s(p.cy + 4));
       t.setAttribute('text-anchor','start');
-    } else { // T (top)
-      t.setAttribute('x', s(p.cx)); t.setAttribute('y', s(p.cy - 10));
-      t.setAttribute('text-anchor','middle');
+    } else { // T (top) – flytta OUT-texten lite åt höger
+      t.setAttribute('x', s(p.cx + 12));
+      t.setAttribute('y', s(p.cy - 10));
+      t.setAttribute('text-anchor','start');
     }
     t.setAttribute('font-size', Math.max(9, 11*SCALE));
     t.textContent = key;
@@ -128,7 +122,7 @@ export function addAndValve(
   el.append(svg);
   compLayer.appendChild(el);
 
-  // Komponent-API (ingen etikett längre)
+  // Komponent-API
   const comp = {
     id, type:'andValve', el, x, y,
     svgW: s(SVG_W), svgH: s(SVG_H),
