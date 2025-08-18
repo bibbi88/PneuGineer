@@ -1,6 +1,6 @@
 # pneumaSim
 
-Pneumasim is a light pneumatic simulation program aimed solely for educational purposes.
+PneuGineer is a light pneumatic simulation program aimed solely for educational purposes.
 
 ## What's new
 
