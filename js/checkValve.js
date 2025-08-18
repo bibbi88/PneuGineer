@@ -1,7 +1,7 @@
 
 // js/checkValve.js
-// Backventil (check valve). Portar: IN nere, OUT uppe. Släpper IN→OUT, spärr OUT→IN.
-// Skala för ALLA backventiler:
+// Check valve. Ports: IN bottom, OUT top. Allows IN→OUT, blocks OUT→IN.
+// Scale for ALL check valves:
 const SCALE = 0.5;
 
 export function addCheckValve(
@@ -20,7 +20,7 @@ export function addCheckValve(
 
   const label = document.createElement('div');
   label.className = 'label';
-  label.textContent = 'Backventil';
+  label.textContent = 'Check Valve';
 
   const NS = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(NS,'svg');
@@ -42,7 +42,7 @@ export function addCheckValve(
   hus.setAttribute('stroke','#000');
   hus.setAttribute('stroke-width', s(2));
 
-  // Kula + säte (ISO-stil) – flöde uppåt
+  // Ball + seat (ISO style) – flow upwards
   const cx = HUS_X + HUS_W/2;
   const yMid = HUS_Y + HUS_H/2;
   const ball = document.createElementNS(NS,'circle');
@@ -53,12 +53,12 @@ export function addCheckValve(
   ball.setAttribute('stroke','#000');
   ball.setAttribute('stroke-width', s(2));
 
-  const seat = document.createElementNS(NS,'line'); // sned sätesyta ↑
+  const seat = document.createElementNS(NS,'line'); // slanted seat surface ↑
   seat.setAttribute('x1', s(cx-14)); seat.setAttribute('y1', s(yMid-8));
   seat.setAttribute('x2', s(cx+14)); seat.setAttribute('y2', s(yMid));
   seat.setAttribute('stroke','#000'); seat.setAttribute('stroke-width', s(2));
 
-  // Portar: OUT uppe, IN nere
+  // Ports: OUT top, IN bottom
   const OUT = { cx: cx, cy: HUS_Y-18 };
   const IN  = { cx: cx, cy: HUS_Y+HUS_H+18 };
 

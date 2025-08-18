@@ -69,7 +69,7 @@ export function addValve52(
 
   const label = document.createElement('div');
   label.className = 'label';
-  label.textContent = '5/2-ventil';
+  label.textContent = '5/2 valve';
 
   const NS  = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(NS, 'svg');

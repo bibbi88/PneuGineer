@@ -1,11 +1,11 @@
 // js/pushButton32.js
-// Tryckknapp 3/2 (momentan): hela ventilen (ram, inre lådor, lodrätt aktiveringsstreck, fjäder)
-// skuffas vid aktivering; porterna ligger kvar på plats.
+// Push-button 3/2 (momentary): the whole valve (frame, inner boxes, vertical actuator rod, spring)
+// is shifted while activated; ports remain fixed.
 //
-// Vänster (AKTIV): 2→1, 3 block (T)
-// Höger  (VILA):  2→3, 1 block (T)
+// Left (ACTIVE): 2→1, 3 blocked
+// Right  (REST):   2→3, 1 blocked
 //
-// Signatur (matchar din main.js):
+// Signature (matches main.js):
 // addPushButton32(x,y, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid)
 
 export function addPushButton32(
@@ -16,23 +16,23 @@ export function addPushButton32(
 ){
   const id = uid();
 
-  // Geometri
+  // Geometry
   const W = 140, H = 60;
   const NS = 'http://www.w3.org/2000/svg';
   const midX = W / 2;
 
-  // Portpositioner (bara i höger cell; utanför ramen för lättare koppling)
+  // Port positions (only in the right cell; outside the frame for easier wiring)
   const insetRight = Math.round((W - midX) * 0.25); // ~¼ in i högra halvan
   const P2 = { cx: midX + insetRight, cy: -10  };   // 2 (uppe)
   const P1 = { cx: midX + insetRight, cy: H + 10 }; // 1 (nere)
   const P3 = { cx: W - 12,            cy: H + 10 }; // 3 (nere höger)
 
-  // Motsv. lägen i vänster cell (för inre grafik)
+  // Corresponding positions in the left cell (for inner graphics)
   const L2 = { cx: insetRight, cy: P2.cy };
   const L1 = { cx: insetRight, cy: P1.cy };
   const L3 = { cx: midX - 12,  cy: P3.cy };
 
-  // Rot
+  // Root
   const el = document.createElement('div');
   el.className = 'comp';
   el.style.left = x + 'px';
@@ -40,7 +40,7 @@ export function addPushButton32(
 
   const label = document.createElement('div');
   label.className = 'label';
-  label.textContent = 'Tryckknapp 3/2';
+  label.textContent = 'Push Button 3/2';
   el.appendChild(label);
 
   const svg = document.createElementNS(NS,'svg');
@@ -114,17 +114,17 @@ export function addPushButton32(
   gRight.appendChild(path(`M ${P2.cx} ${P2.cy + 10} L ${P3.cx} ${P3.cy - 10}`, { arrow:'end' }));
   gRight.appendChild(tBlock(P1.cx, H-18, P1.cy - 8));
 
-  // Aktiveringsstreck (ersätter rulle) – följer med ventilen
+  // Actuator rod (replaces roller) — moves with the valve
   const actuator = document.createElementNS(NS,'line');
   actuator.setAttribute('x1', -20); actuator.setAttribute('y1', 10);
   actuator.setAttribute('x2', -20); actuator.setAttribute('y2', H-10);
   actuator.setAttribute('stroke', '#000'); actuator.setAttribute('stroke-width', '2');
 
-  // NYTT: två horisontella streck från aktiveringsstrecket in mot lådan
+  // NEW: two horizontal strokes from the actuator rod into the box
   const forkTop = path(`M -20 20 L 0 20`);
   const forkBot = path(`M -20 ${H-20} L 0 ${H-20}`);
 
-  // Fjäder (höger) – följer med ventilen
+  // Spring (right) — moves with the valve
   const spring = document.createElementNS(NS,'g');
   spring.setAttribute('transform', `translate(${W}, ${H/2})`);
   spring.append(
@@ -150,7 +150,7 @@ export function addPushButton32(
   const port3El = makePort(P3, '3');
   svg.append(port2El, port1El, port3El);
 
-  // === Tillstånd / interaktion (momentan) ==================================
+  // === State / interaction (momentary) ==================================
   let isActive = false;
 
   function applyTransforms(active){
@@ -166,7 +166,7 @@ export function addPushButton32(
     redrawConnections();
   }
 
-  // Aktivera vid nedtryck i vänster halva, släpp återställer
+  // Activate when pressed in the left half; releasing resets
   function isInLeftHalf(evt){
     const rect = svg.getBoundingClientRect();
     const x = (evt.touches?.[0]?.clientX ?? evt.clientX) - rect.left;

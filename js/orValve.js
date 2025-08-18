@@ -1,6 +1,6 @@
 // js/orValve.js
 // OR (Shuttle) – ISO/Festo-stil.
-// Portlayout: A (vänster sida), B (höger sida), OUT (uppe).
+// Port layout: A (left side), B (right side), OUT (top).
 // Länkar: A/B horisontellt in från sidorna, OUT vertikalt ned från toppen.
 
 const SCALE = 1;
@@ -13,13 +13,13 @@ export function addOrValve(
   const id = uid();
   const s = (n)=> n * SCALE;
 
-  // Geometri
+  // Geometry
   const SVG_W=200, SVG_H=180, GX=10, GY=20;
   const HUS_X=40, HUS_Y=60, HUS_W=100, HUS_H=60;
 
   const NS = 'http://www.w3.org/2000/svg';
 
-  // Rot
+  // Root element
   const el = document.createElement('div');
   el.className = 'comp';
   el.style.left = x + 'px';
@@ -64,7 +64,7 @@ export function addOrValve(
   const yMid   = HUS_Y + HUS_H/2;
   const xMid   = HUS_X + HUS_W/2;
 
-  // === Portpunkter: A (vänster), B (höger), OUT (uppe) ===
+  // === Port points: A (left), B (right), OUT (top) ===
   const LEFT_PORT_X  = HUS_X - 20;           // portcentrum till vänster
   const RIGHT_PORT_X = HUS_X + HUS_W + 20;   // portcentrum till höger
   const TOP_PORT_Y   = HUS_Y - 20;           // portcentrum ovanför hus
@@ -86,18 +86,18 @@ export function addOrValve(
   const midChLeft  = line(HUS_X, yMid, leftSeatX, yMid);
   const midChRight = line(rightSeatX, yMid, HUS_X+HUS_W, yMid);
 
-  // Säte vänster (sned stängning mot centrum)
+  // Left seat (angled closure toward center)
   const lSeat1 = line(leftSeatX, yMid, leftSeatX+15, yMid-12);
   const lSeat2 = line(leftSeatX, yMid, leftSeatX+15, yMid+12);
 
-  // Säte höger (sned stängning mot centrum)
+  // Right seat (angled closure toward center)
   const rSeat1 = line(rightSeatX, yMid, rightSeatX-15, yMid-12);
   const rSeat2 = line(rightSeatX, yMid, rightSeatX-15, yMid+12);
 
-  // Shuttle-kula i mitten (förskjuten mot vänster för att indikera läge)
+  // Shuttle ball in the middle (offset to the left to indicate position)
   const shuttle = circle(xMid-19, yMid, 8);
 
-  // Vertikal kanal från mitten upp mot OUT + liten mittlänk
+  // Vertical channel from center up to OUT + small center link
   const stem  = line(xMid, yMid, xMid, HUS_Y);
   const stem2 = line(rightSeatX, yMid, leftSeatX+23, yMid);
 
@@ -109,7 +109,7 @@ export function addOrValve(
     aLine, bLine, outLn
   );
 
-  // Portar (klickbara) med smart textplacering
+  // Ports (clickable) with smart text placement
   function makePort(key, p, side){ // side: 'L' | 'R' | 'T'
     const c = document.createElementNS(NS,'circle');
     c.setAttribute('class','port'); c.setAttribute('r', s(6));
