@@ -1,5 +1,5 @@
 // js/cylinderDouble.js
-// Dubbelverkande cylinder. Portar: Cap (vänster botten), Rod (höger botten).
+// Double-acting cylinder. Ports: Cap (left bottom), Rod (right bottom).
 // Justera storlek för ALLA cylindrar här:
 const SCALE = 1;
 
@@ -144,23 +144,23 @@ export function addCylinderDouble(
       }
     },
 
-    // Byt bokstav (A–Z). Uppdaterar etikett och signal-nycklar.
+    // Change letter (A–Z). Updates label and signal keys.
     setLetter(newLetterRaw){
       if (!newLetterRaw) return;
       const L = String(newLetterRaw).trim().toUpperCase();
-      if (!/^[A-Z]$/.test(L)) return; // kräver en (1) bokstav A–Z
+  if (!/^[A-Z]$/.test(L)) return; // requires a single letter A–Z
 
       const prevLower = this.lower;
       const nextLower = L.toLowerCase();
 
-      // Tysta gamla signaler så de inte "hänger kvar"
+  // Silence old signals so they don't "linger"
       setSignal(`${prevLower}0`, false);
       setSignal(`${prevLower}1`, false);
 
       this.letter = L;
       this.lower  = nextLower;
 
-      // Uppdatera etikett
+  // Update label
       label.textContent = `Cylinder ${this.letter}`;
 
       // Publicera nya signaler enligt aktuellt läge
@@ -171,15 +171,15 @@ export function addCylinderDouble(
     getLetter(){ return this.letter; }
   };
 
-  // Init-etikett & position/signaler
+  // Init label & position/signals
   comp.setLetter(initialLetter);
   comp.setPos(comp.pos);
 
-  // ====== UI: Byt bokstav via dubbelklick på etiketten ======
+  // ====== UI: Change letter via double-click on the label ======
   label.addEventListener('dblclick', (e)=>{
     e.stopPropagation();
-    const answer = window.prompt('Ange cylinderbokstav (A–Z):', comp.letter);
-    if (answer === null) return; // avbrutet
+    const answer = window.prompt('Enter cylinder letter (A–Z):', comp.letter);
+    if (answer === null) return; // cancelled
     comp.setLetter(answer);
   });
 

@@ -1,6 +1,6 @@
 // js/restrictor.js
-// Stryp (restrictor): IN nere, OUT uppe. Släpper igenom men med fördröjning (tau).
-// Skala för ALLA stryp:
+// Restrictor: IN bottom, OUT top. Passes flow but with a delay (tau).
+// Scale for ALL restrictors:
 const SCALE = 0.5;
 
 export function addRestrictor(
@@ -10,7 +10,7 @@ export function addRestrictor(
   const id = uid();
   const s = (n)=> n * SCALE;
 
-  // visuell symbol: liten rektangel med smalning
+  // visual symbol: small rectangle with a narrowing
   const SVG_W=120, SVG_H=140, GX=10, GY=20;
 
   const el = document.createElement('div');
@@ -20,7 +20,7 @@ export function addRestrictor(
 
   const label = document.createElement('div');
   label.className = 'label';
-  label.textContent = 'Stryp';
+  label.textContent = 'Restrictor';
 
   const NS = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(NS,'svg');
@@ -48,7 +48,7 @@ export function addRestrictor(
   `);
   path.setAttribute('stroke', '#000'); path.setAttribute('fill','none'); path.setAttribute('stroke-width', s(2));
 
-  // Portar IN nere, OUT uppe
+  // Ports: IN bottom, OUT top
   const IN  = { cx: HUS_X + HUS_W/2, cy: HUS_Y + HUS_H + 18 };
   const OUT = { cx: HUS_X + HUS_W/2, cy: HUS_Y - 18 };
 
@@ -92,7 +92,7 @@ export function addRestrictor(
     },
     // enkel tidskonstant (sekunder) – kan du senare göra inställningsbar
     tau: 0.25,
-    // internt tillstånd: när IN blev trycksatt / släppt
+  // internal state: when IN was pressurized / released
     _inPress: false,
     _timer: 0
   };

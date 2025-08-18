@@ -1,5 +1,5 @@
 // js/source.js
-// Tryckkälla – enkel symbol med utgång på ovansidan.
+// Pressure source — simple symbol with an OUT port on the top.
 // Global skala:
 const SCALE = 1;
 
@@ -16,7 +16,7 @@ export function addSource(x, y, compLayer, components, handlePortClick, makeDrag
 
   const label = document.createElement('div');
   label.className = 'label';
-  label.textContent = 'Tryckkälla';
+  label.textContent = 'Pressure Source';
 
   const NS = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(NS,'svg');

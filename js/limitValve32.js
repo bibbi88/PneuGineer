@@ -1,14 +1,14 @@
 // js/limitValve32.js
-// 3/2 gränslägesventil där hela ventilen (ram, inre lådor, rulle/skalen, fjäder)
-// skjuts med SVG-transform vid aktivering; porterna lämnas på plats.
+// 3/2 limit valve where the whole valve (frame, inner boxes, roller/shaft, spring)
+// is shifted using an SVG transform when activated; ports remain in place.
 //
-// Vänster cell (AKTIV): 2→1, 3 block (T)
-// Höger  cell (VILA):  2→3, 1 block (T)
+// Left cell (ACTIVE): 2→1, 3 blocked
+// Right cell (REST):  2→3, 1 blocked
 //
-// Etikett: ett SVG-textobjekt precis ovanför rullen (följer med). Visar endast sensornyckeln (t.ex. a0).
-// Klick på etiketten / dubbelklick på komponenten / S-tangent = bind sensor.
+// Label: an SVG text element just above the roller (moves with the roller). Shows only the sensor key (e.g. a0).
+// Click the label / double-click the component / press 'S' to bind a sensor.
 //
-// Signatur (matchar main.js):
+// Signature (matches main.js):
 // addLimitValve32(x,y, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid, getSignal)
 
 export function addLimitValve32(
@@ -25,13 +25,13 @@ export function addLimitValve32(
   const NS = 'http://www.w3.org/2000/svg';
   const midX = W / 2;
 
-  // Portpositioner (höger cell)
+  // Port positions (right cell)
   const insetRight = Math.round((W - midX) * 0.25); // ~¼ in i högra halvan
   const P2 = { cx: midX + insetRight, cy: -10  };   // 2 (uppe, mitt ovanför 1)
   const P1 = { cx: midX + insetRight, cy: H + 10 }; // 1 (nere)
   const P3 = { cx: W - 12,            cy: H + 10 }; // 3 (nere höger)
 
-  // Motsv. lägen i vänster cell (för inre grafik)
+  // Corresponding positions in the left cell (for inner graphics)
   const L2 = { cx: insetRight, cy: P2.cy };
   const L1 = { cx: insetRight, cy: P1.cy };
   const L3 = { cx: midX - 12,  cy: P3.cy };
@@ -42,7 +42,7 @@ export function addLimitValve32(
   el.style.left = x + 'px';
   el.style.top  = y + 'px';
 
-  // Tom HTML-label (vi visar ingen “3/2-ventil”-text i överkant)
+  // Empty HTML label (we don't show a '3/2 valve' text above the component)
   const htmlLabel = document.createElement('div');
   htmlLabel.className = 'label';
   htmlLabel.textContent = ''; // håll tom
@@ -98,7 +98,7 @@ export function addLimitValve32(
     return frag;
   };
 
-  // Inre "lådor"
+  // Inner "boxes"
   const boxLeft  = document.createElementNS(NS,'rect');
   boxLeft.setAttribute('x', 0); boxLeft.setAttribute('y', 0);
   boxLeft.setAttribute('width', midX); boxLeft.setAttribute('height', H);
@@ -109,12 +109,12 @@ export function addLimitValve32(
   boxRight.setAttribute('width', midX); boxRight.setAttribute('height', H);
   boxRight.setAttribute('fill','#fff'); boxRight.setAttribute('stroke','#000'); boxRight.setAttribute('stroke-width','1.6');
 
-  // Vänster cell (AKTIV): 2→1, 3 block (T)
+  // Left cell (ACTIVE): 2→1, 3 blocked (T)
   const gLeft = document.createElementNS(NS,'g');
   gLeft.appendChild(path(`M ${L1.cx } ${L1.cy -10} L ${L2.cx} ${L2.cy + 10}`, { arrow:'end' }));
   gLeft.appendChild(tBlock(L3.cx, H-24, L3.cy-10));
 
-  // Höger cell (VILA): 2→3, 1 block (T)
+  // Right cell (REST): 2→3, 1 blocked (T)
   const gRight = document.createElementNS(NS,'g');
   gRight.appendChild(path(`M ${P2.cx} ${P2.cy + 10} L ${P3.cx} ${P3.cy - 10}`, { arrow:'end' }));
   gRight.appendChild(tBlock(P1.cx, H-24, P1.cy-10));
@@ -132,7 +132,7 @@ export function addLimitValve32(
   rollerInner.setAttribute('cx', 4); rollerInner.setAttribute('cy', 0); rollerInner.setAttribute('r', 6);
   rollerInner.setAttribute('fill','#fff'); rollerInner.setAttribute('stroke','#000'); rollerInner.setAttribute('stroke-width','2');
 
-  // Etikett: precis ovanför rullen (följer med mover)
+  // Label: just above the roller (follows the mover)
   const rollLabel = document.createElementNS(NS,'text');
   rollLabel.setAttribute('x', 4);
   rollLabel.setAttribute('y', -18);
@@ -143,7 +143,7 @@ export function addLimitValve32(
 
   rollerGroup.append(rollerOuter, rollerInner, rollLabel);
 
-  // Fjäder (följer med)
+  // Spring (follows with the mover)
   const spring = document.createElementNS(NS,'g');
   spring.setAttribute('transform', `translate(${W}, ${H/2})`);
   spring.append(
@@ -155,7 +155,7 @@ export function addLimitValve32(
   mover.append(body, boxLeft, boxRight, gLeft, gRight, rollerGroup, spring);
   svg.appendChild(mover);
 
-  // === PORTER (statiska) ====================================================
+  // === PORTS (static) ====================================================
   const makePort = (pos, key)=>{
     const c = document.createElementNS(NS,'circle');
     c.setAttribute('class','port');
@@ -170,7 +170,7 @@ export function addLimitValve32(
   const port3El = makePort(P3, '3');
   svg.append(port2El, port1El, port3El);
 
-  // === Tillstånd / interaktion =============================================
+  // === State / interaction =============================================
   let sensorKey = null;   // 'a0', 'a1', ...
   let manualActive = false;
 
@@ -191,7 +191,7 @@ export function addLimitValve32(
   }
 
   function promptBind(){
-    const k = window.prompt('Ange sensor (t.ex. a0, a1, b0, b1):', sensorKey || '');
+    const k = window.prompt('Enter sensor (e.g. a0, a1, b0, b1):', sensorKey || '');
     if (k !== null){
       setSensor(String(k));
     }

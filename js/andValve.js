@@ -1,7 +1,7 @@
 // js/andValve.js
-// AND (Two-pressure) – ISO/Festo-stil.
-// Portlayout: A (vänster sida), B (höger sida), OUT (uppe).
-// Länkar: A/B horisontellt in från sidorna, OUT vertikalt ned från toppen.
+// AND (Two-pressure) – ISO/Festo style.
+// Port layout: A (left side), B (right side), OUT (top).
+// Links: A/B enter horizontally from the sides, OUT exits vertically from the top.
 
 const SCALE = 1;
 
@@ -56,7 +56,7 @@ export function addAndValve(
   const leftX  = HUS_X + 35;
   const rightX = HUS_X + HUS_W - 35;
 
-  // Tillbakaventiler mot centrum (enkelt ritat)
+  // Check valves toward the center (simple drawing)
   const lBlock1 = line(leftX-20,   HUS_Y, leftX-20,   HUS_Y+23);
   const lShuttle = line(leftX-27,   HUS_Y+15, leftX-27,   HUS_Y+HUS_H-15);
   const lBlock2 = line(leftX-20,   HUS_Y+HUS_H, leftX-20,   HUS_Y+HUS_H-23);
@@ -67,9 +67,9 @@ export function addAndValve(
 
   const hShuttle = line(leftX-27,  yMid, rightX+27,   yMid);
 
-  // === Portpunkter: A (vänster), B (höger), OUT (uppe) ===
-  const LEFT_PORT_X  = HUS_X - 20;           // portcentrum till vänster
-  const RIGHT_PORT_X = HUS_X + HUS_W + 20;   // portcentrum till höger
+  // === Port points: A (left), B (right), OUT (top) ===
+  const LEFT_PORT_X  = HUS_X - 20;           // port center left
+  const RIGHT_PORT_X = HUS_X + HUS_W + 20;   // port center right
   const TOP_PORT_Y   = HUS_Y - 20;           // portcentrum ovanför hus
 
   const A   = { cx: LEFT_PORT_X,  cy: yMid };
@@ -87,7 +87,7 @@ export function addAndValve(
            hShuttle,
            aLine, bLine, outLn);
 
-  // Portar (klickbara) med smart textplacering
+  // Ports (clickable) with smart text placement
   function makePort(key, p, side){ // side: 'L' | 'R' | 'T'
     const c = document.createElementNS(NS,'circle');
     c.setAttribute('class','port'); c.setAttribute('r', s(6));

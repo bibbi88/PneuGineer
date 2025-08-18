@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="sv">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Pneumatik – ISO-symboler (moduler)</title>
+  <title>Pneumatics – ISO Symbols (Modules)</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
     :root {
@@ -36,7 +36,7 @@
     .draggable { cursor: move; }
     .hint { position: absolute; bottom: 8px; left: 8px; padding: 6px 8px; font-size: 12px; color: #333; background: #ffffffcc; border: 1px solid #ddd; border-radius: 6px; z-index: 3; }
 
-    /* Hjälp-modal + FAB */
+    /* Help modal + FAB */
     .help-fab {
       position: absolute; right: 14px; bottom: 14px; z-index: 4;
       border: 1px solid #c8d3ff; background: #eff3ff; color: #234;
@@ -72,100 +72,98 @@
 <body>
   <div class="app">
     <aside class="sidebar">
-      <h2>Komponentbibliotek</h2>
-      <button class="btn" id="addValve52">➕ 5/2-ventil</button>
-      <button class="btn" id="addCylDouble">➕ Cylinder, dubbelverkande</button>
-      <button class="btn" id="addSource">➕ Tryckkälla</button>
-      <button class="btn" id="addAnd">➕ OCH-ventil</button>
-      <button class="btn" id="addOr">➕ ELLER-ventil</button>
-      <button class="btn" id="addLimit32">➕ 3/2 gränslägesventil</button>
-      <button class="btn" id="addPush32">➕ Tryckknapp 3/2</button>
+      <h2>Component Library</h2>
+      <!-- Component buttons; other controls (Play/Pause, Step, Stop, Undo/Redo, Save/Load, Toggle Grid) are injected by main.js -->
+      <button class="btn" id="addValve52">➕ 5/2 valve</button>
+      <button class="btn" id="addCylDouble">➕ Cylinder, double-acting</button>
+  <button class="btn" id="addCylSingle">➕ Cylinder, single-acting</button>
+      <button class="btn" id="addSource">➕ Pressure source</button>
+      <button class="btn" id="addAnd">➕ AND valve</button>
+      <button class="btn" id="addOr">➕ OR valve</button>
+      <button class="btn" id="addLimit32">➕ 3/2 limit valve</button>
+      <button class="btn" id="addPush32">➕ 3/2 push button</button>
+      <button class="btn" id="addAir32">➕ 3/2 air-piloted</button>
       <hr>
-      <!-- Ingen hjälptext här längre -->
+      <!-- Play/Pause, Step, Stop, Undo, Redo, Save, Load, Toggle Grid will be added via ensureButton() -->
     </aside>
 
     <main class="workspace">
       <svg id="connLayer" class="layer"></svg>
       <div id="compLayer" class="layer"></div>
-      <div class="hint">Tips: Tryck <b>?</b> för hjälp. Koppla P→ventil→Cylinder. Cylinder ger signaler a0/a1 för gränslägesventiler.</div>
+      <div class="hint">Tip: press <b>?</b> for help. Connect P → valve → cylinder. Cylinders expose signals a0/a1 for limit valves.</div>
 
-      <!-- Flytande hjälpknapp -->
-      <button id="helpToggle" class="help-fab">? Hjälp</button>
+      <!-- Floating help button -->
+      <button id="helpToggle" class="help-fab">? Help</button>
     </main>
   </div>
 
-  <!-- Hjälp-modal -->
+  <!-- Help modal -->
   <dialog id="helpDialog" class="help-dialog">
-    <div class="help-head">Hjälp & snabbguide</div>
+    <div class="help-head">Help & Quick Guide</div>
     <div class="help-body">
       <div class="help-grid">
         <div>
-          <h3>Komponenter & lägen</h3>
+          <h3>Components & Modes</h3>
           <ul>
-            <li>Skapa: <span class="pill">Tryckkälla</span>, <span class="pill">5/2-ventil</span>, <span class="pill">Cylinder (DV)</span>, <span class="pill">AND</span>, <span class="pill">OR</span>, <span class="pill">3/2 gränsläge</span>, <span class="pill">Tryckknapp 3/2</span>.</li>
-            <li>Dra för att flytta (endast i <strong>STOP</strong>-läge).</li>
-            <li><strong>PLAY</strong> kör simulering, <strong>PAUSE</strong> fryser, <strong>STOP</strong> rensar overlay & låser redigering.</li>
-            <li>5/2 kan togglas manuellt i <strong>PLAY</strong> (klick i box). Pilot <code>12</code>/<code>14</code> växlar på puls.</li>
+            <li>Create: <span class="pill">Pressure Source</span>, <span class="pill">5/2 Valve</span>, <span class="pill">Cylinder (DA)</span>, <span class="pill">Cylinder (Single-acting)</span>, <span class="pill">AND</span>, <span class="pill">OR</span>, <span class="pill">3/2 Limit</span>, <span class="pill">3/2 Push Button</span>, <span class="pill">3/2 Air-Piloted</span>.</li>
+            <li>Drag to move components (only in <strong>STOP</strong> mode).</li>
+            <li><strong>PLAY</strong> runs simulation, <strong>PAUSE</strong> freezes, <strong>STOP</strong> clears overlay & locks editing.</li>
+            <li>5/2 can be toggled manually in <strong>PLAY</strong> (click inside a box). Pilots <code>12</code>/<code>14</code> switch on pressure pulses.</li>
+            <li>3/2 air-piloted uses pilot <code>12</code> with triangle + horizontal link outside the housing.</li>
           </ul>
 
-          <h3>Länka portar & junctions</h3>
+          <h3>Link Ports & Junctions</h3>
           <ul>
-            <li>Klicka en port → korsmarkör → klicka nästa port för tråd.</li>
-            <li>Under länkning: klick på tråd skapar <em>kopplingspunkt (J)</em> och ansluter där. Tråden delas automatiskt.</li>
-            <li>Portar har <em>hover-prioritet</em> framför trådar.</li>
-            <li>Trådar är ortogonala. Pilotportar <code>12</code>/<code>14</code> har horisontell inflygning och följer ventilens förskjutning.</li>
+            <li>Click a port → crosshair → click the next port to create a wire.</li>
+            <li>While linking: clicking on a wire creates a <em>junction (J)</em> and connects there. The wire is split automatically.</li>
+            <li>Ports have hover priority over wires.</li>
+            <li>Wires are orthogonal. Pilot ports <code>12</code>/<code>14</code> (5/2) and <code>12</code> (air 3/2) use horizontal entry stubs that follow valve displacement.</li>
           </ul>
 
-          <h3>Tråd-redigering</h3>
+          <h3>Edit Wires</h3>
           <ul>
-            <li><span class="kbd">Ctrl</span>/<span class="kbd">⌘</span>+klick på tråd → lägg <em>knä</em>. Dubbelklick på hörn → ta bort knä.</li>
-            <li>Välj tråd: kvadratiska handtag mitt på inre segment → dra för att flytta segmentet (ortogonalt bibehålls).</li>
-            <li><span class="kbd">Alt</span>+drag på inre segment → snabbjustering (auto→manuell vid behov).</li>
+            <li>Double-click on a wire to insert a bend (H/V). Right-click for a context menu to add/remove/clear segments.</li>
+            <li>Select a wire to reveal square handles on inner segments; drag to move the segment.</li>
+            <li>Pilot stubs (12/14 on 5/2, 12 on air 3/2) have draggable handles to adjust stub length.</li>
           </ul>
         </div>
 
         <div>
-          <h3>Markering, kopiera & klistra</h3>
+          <h3>Selection, Copy & Paste</h3>
           <ul>
-            <li>Dra på tom yta för <em>markeringsruta</em>. Släpp för att behålla valet. <span class="kbd">Shift</span> adderar i befintligt val.</li>
-            <li><span class="kbd">Ctrl</span>/<span class="kbd">⌘</span>+<span class="kbd">C</span> kopierar, <span class="kbd">X</span> klipper, <span class="kbd">V</span> klistrar nära senaste klickpunkt.</li>
-            <li>Kopierade trådar behåller ortogonala knän/segment; manuella punkter följer korrekt.</li>
-            <li><span class="kbd">Delete</span>/<span class="kbd">Backspace</span> tar bort val.</li>
+            <li>Drag on empty space to create a <em>marquee</em>. Release to select. <span class="kbd">Shift</span> adds to selection.</li>
+            <li><span class="kbd">Ctrl</span>/<span class="kbd">⌘</span>+<span class="kbd">C</span> copy, <span class="kbd">X</span> cut, <span class="kbd">V</span> paste near the last click.</li>
+            <li>Copied wires retain orthogonal bends; manual points follow correctly.</li>
+            <li><span class="kbd">Delete</span>/<span class="kbd">Backspace</span> removes selection.</li>
           </ul>
 
-          <h3>Tryck-overlay (bar)</h3>
+          <h3>Pressure Overlay (bar)</h3>
           <ul>
-            <li>I <strong>PLAY</strong>/<strong>PAUSE</strong> visas tryck i <em>bar</em> på varje tråd; aktiva blinkar rött.</li>
-            <li>Portar har tooltip med aktuellt tryck (<code>X: 0…6 bar</code>).</li>
-            <li>Modell: källa <strong>6.0 bar</strong>, avgångar <strong>0 bar</strong>, tryck sprids via max-regel i nätet.</li>
-          </ul>
-
-          <h3>Cylindrar & gränslägen</h3>
-          <ul>
-            <li>Cylindrar namnges automatiskt: <strong>A</strong>, <strong>B</strong>, …</li>
-            <li>Signaler: <code>a0</code> = A inne, <code>a1</code> = A ute (motsv. <code>b0</code>/<code>b1</code> …).</li>
-            <li>3/2-gränslägesventil kan lyssna på valfri sådan signal och visar kopplingen.</li>
-            <li>3/2-tryckknapp är momentan (aktiv vid klick, fjädrar tillbaka).</li>
+            <li>In <strong>PLAY</strong>/<strong>PAUSE</strong> each wire shows pressure in <em>bar</em>; active wires blink red.</li>
+            <li>Ports show a tooltip with current pressure (<code>X: 0…6 bar</code>).</li>
+            <li>Model: source <strong>6.0 bar</strong>, exhaust <strong>0 bar</strong>, pressure spreads via the graph.</li>
           </ul>
         </div>
       </div>
 
       <h3>Tips</h3>
       <ul>
-        <li>Tryck <strong>?</strong> för att öppna/stänga hjälpen.</li>
-        <li>ESC avbryter länkning.</li>
-        <li>Portar vinner hover när tråd passerar nära.</li>
+        <li>Press <strong>?</strong> to open/close this help.</li>
+            <li>Single-acting cylinder instances have a small mode toggle on the label: <strong>Push</strong> (A port at the cap end) or <strong>Pull</strong> (A port moved to the rod end and the cylinder defaults to extended).</li>
+        <li><strong>ESC</strong> cancels linking.</li>
+        <li>Ports win hover when a wire passes nearby.</li>
+        <li>Use the sidebar for <em>Play/Pause</em>, <em>Step</em>, <em>Stop & reset</em>, <em>Undo/Redo</em>, <em>Save/Load</em>, and <em>Toggle grid</em>.</li>
       </ul>
     </div>
     <div class="help-foot">
-      <button class="help-close" value="cancel">Stäng</button>
+      <button class="help-close" value="cancel">Close</button>
     </div>
   </dialog>
 
-  <!-- ES-moduler -->
+  <!-- ES modules -->
   <script type="module" src="./js/main.js"></script>
 
-  <!-- Hjälp-knapp + '?'-tangent -->
+  <!-- Help FAB + '?' key -->
   <script>
     (function(){
       const dlg = document.getElementById('helpDialog');
@@ -175,6 +173,10 @@
         if (!dlg.open) dlg.showModal(); else dlg.close();
       }
       btn.addEventListener('click', toggleHelp);
+
+      // Make "Close" button work
+      const closeBtn = dlg.querySelector('.help-close');
+      if (closeBtn) closeBtn.addEventListener('click', ()=> dlg.close());
 
       function isTypingTarget(el){
         if (!el) return false;

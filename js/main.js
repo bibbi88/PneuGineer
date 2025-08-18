@@ -1,31 +1,38 @@
+
+
 // js/main.js
-// Tryck-overlay (siffror på trådar) + Stega + riktade pilotsignaler (12 ⇒ state=1, 14 ⇒ state=0)
-// Junctions via hit-test + multimarkering (lasso) + gruppflytt/radering
-// ORTOGONALA TRÅDAR med FLERA SEGMENT (H/V-guider), dubbelklick för segment,
-// handtag för segment, contextmeny för att lägga till/ta bort/rensa segment.
-// Port 12/14 på 5/2 får alltid horisontell in-/utgång, och alltid utåt (12→+x, 14→-x).
-// Finjustera markerade komponenter med pilar (Shift = 10 px). Sparar cylinderbokstav & limit-sensornamn.
-// Nytt: 12/14-stubben behandlas som justerbart segment (egna handtag + persistens).
+// Pneumatics workspace with orthogonal multi-segment wires, junctions, selection,
+// history, and a simple pressure simulation.
+//
+// This build adds a new component: air-piloted 3/2 valve (airValve32).
+// - Its geometry matches the pushButton32 mover-style (ports static; body slides).
+// - Pilot port 12 is horizontal (snap/routing), and pilot pressure drives its state.
+// - Spring return when pilot pressure goes away.
+// UI: Play/Pause (single toggle), Step, Stop & Reset, Toggle Grid.
+// All UI text and comments are in English.
 
 import { addValve52 }        from './valve52.js';
 import { addCylinderDouble } from './cylinderDouble.js';
+import { addCylinderSingle } from './cylinderSingle.js';
 import { addSource }         from './source.js';
 import { addAndValve }       from './andValve.js';
 import { addOrValve }        from './orValve.js';
 import { addLimitValve32 }   from './limitValve32.js';
 import { addPushButton32 }   from './pushButton32.js';
+import { addAirValve32 }     from './airValve32.js';
 
-/* ---------- DOM-lager ---------- */
+/* ---------- DOM layers ---------- */
 const compLayer = document.getElementById('compLayer');
 const connLayer = document.getElementById('connLayer');
 
 connLayer.style.zIndex = '2';
 compLayer.style.zIndex = '1';
-connLayer.style.pointerEvents = 'none'; // vi gör egen hit-test i capture
+connLayer.style.pointerEvents = 'none'; // custom hit-test in this module
 
-/* ---------- App-state ---------- */
+/* ---------- App state ---------- */
 let components = [];
-// connection: {
+// connection shape:
+// {
 //   from:{id,port}, to:{id,port}, pathEl, labelEl,
 //   guides:[{type:'H'|'V',pos:number}], handleEls:[],
 //   stubStartLen?:number|null, stubEndLen?:number|null
@@ -34,7 +41,7 @@ let connections = [];
 let nextId = 1;
 let pendingPort = null;
 let isDirty = false;
-let currentProjectName = 'projekt';
+let currentProjectName = 'project';
 
 let selectedConnection = null;
 let selectedComponent  = null;
@@ -53,8 +60,9 @@ let future  = [];
 let isRestoring = false;
 
 /* ---------- Grid & Snap ---------- */
+let GRID_ENABLED = true;
 const GRID_SIZE = 10;
-function snap(v, g=GRID_SIZE){ return Math.round(v / g) * g; }
+function snap(v, g=GRID_SIZE){ return GRID_ENABLED ? Math.round(v / g) * g : v; }
 
 /* ---------- Utils ---------- */
 function uid(){ return nextId++; }
@@ -62,7 +70,7 @@ function workspaceBBox(){ return compLayer.getBoundingClientRect(); }
 function canEdit(){ return simMode === Modes.STOP; }
 function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
 
-/* Finjustering med piltangenter */
+/* Fine nudge with arrow keys (Shift = x10) */
 function nudgeSelectedComponents(dx, dy){
   if (!canEdit()) return;
   if (selectedComponents.size === 0) return;
@@ -78,7 +86,7 @@ function nudgeSelectedComponents(dx, dy){
   redrawConnections();
 }
 
-/* ---------- Signals & Cylinder-namn ---------- */
+/* ---------- Signals & cylinder names ---------- */
 const signals = {};
 function setSignal(key, value) {
   const v = !!value;
@@ -94,7 +102,7 @@ function getNextCylinderLetter() {
   return String.fromCharCode(code);
 }
 
-/* ---------- Port → globala koordinater ---------- */
+/* ---------- Port → global coordinates ---------- */
 function portGlobalPosition(comp, portKey){
   const p = comp.ports?.[portKey];
   if (!p) return { x: comp.x, y: comp.y };
@@ -106,21 +114,24 @@ function portGlobalPosition(comp, portKey){
   return { x: comp.x + p.cx, y: comp.y + p.cy };
 }
 
-/* ---------- Wires (ortogonalt) ---------- */
+/* ---------- Wires (orthogonal) ---------- */
 const WIRE_STUB = 14;
 
-// Port-orientering: 12/14 på 5/2 ska vara horisontell, övrigt vertikal
+// Port entry orientation: 12/14 on 5/2 must be horizontal; 12 on airValve32 is horizontal
 function getPortEntryOrientation(comp, portKey){
-  if (comp?.type === 'valve52' && (portKey === '12' || portKey === '14')) return 'H';
+  if (comp?.type === 'valve52'    && (portKey === '12' || portKey === '14')) return 'H';
+  if (comp?.type === 'airValve32' && (portKey === '12' || portKey === '14')) return 'H';
   if (comp?.type === 'andValve') return (portKey === 'OUT') ? 'V' : 'H';
   if (comp?.type === 'orValve')  return (portKey === 'OUT') ? 'V' : 'H';
   return 'V';
 }
 function isValvePilotPort(comp, portKey){
-  return comp?.type === 'valve52' && (portKey === '12' || portKey === '14');
+  if (comp?.type === 'valve52'    && (portKey === '12' || portKey === '14')) return true;
+  if (comp?.type === 'airValve32' && portKey === '12') return true;   // ⟵ add
+  return false;
 }
 
-// Skapa stub från porten i önskad riktning mot motparten
+// Make a short endpoint stub from pHere towards pOther along desired axis
 function makeEndpointStub(pHere, pOther, orient, len = WIRE_STUB){
   if (orient === 'H'){
     const dir = (pOther.x >= pHere.x) ? 1 : -1;
@@ -131,7 +142,7 @@ function makeEndpointStub(pHere, pOther, orient, len = WIRE_STUB){
   }
 }
 
-// Rutt utan guider (liten ortogonal avstickare)
+// Simple orthogonal auto route without guides
 function routeAuto(x1,y1,x2,y2){
   if (x1 === x2){
     return {
@@ -151,7 +162,7 @@ function routeAuto(x1,y1,x2,y2){
   };
 }
 
-// Hjälp: hitta nästa guide av typ t från index i+1, annars fallback (x2 eller y2)
+// Find next guide of type 'H' or 'V' or fallback to target axis
 function nextGuidePos(guides, i, type, fallback){
   for (let k=i+1;k<guides.length;k++){
     if (guides[k].type === type) return guides[k].pos;
@@ -159,7 +170,7 @@ function nextGuidePos(guides, i, type, fallback){
   return fallback;
 }
 
-// Manuell rutt med flera guider (H/V) i angiven ordning
+// Route with user guides (H/V, in order)
 function routeWithGuides(x1,y1,x2,y2, guides){
   const pts = [{x:x1,y:y1}];
   let cur = { x:x1, y:y1 };
@@ -219,18 +230,20 @@ function pathFromPoints(pts){
   return d;
 }
 
-/* ---------- Pilot-stubbar: hjälp ---------- */
+/* ---------- Pilot stubs helpers ---------- */
 function isPilotEndpoint(conn, which){ // 'start' | 'end'
   const end = (which==='start') ? conn.from : conn.to;
   const comp = components.find(c=> c.id === end.id);
   return isValvePilotPort(comp, end.port);
 }
-function pilotDir(conn, which){ // +1 för 12, -1 för 14
+function pilotDir(conn, which){ // +1 for 12, -1 for 14
   const end = (which==='start') ? conn.from : conn.to;
-  return (end.port === '12') ? +1 : -1;
+  if (end.port === '12') return +1;
+  if (end.port === '14') return -1;
+  return +1;
 }
 
-/* ---------- Geometri inkl. stubbar och 12/14 som alltid går utåt ---------- */
+/* ---------- Geometry incl. stubs and 12/14/12 rules ---------- */
 function computeConnectionGeometry(conn){
   const c1 = components.find(c=>c.id===conn.from.id);
   const c2 = components.find(c=>c.id===conn.to.id);
@@ -244,14 +257,14 @@ function computeConnectionGeometry(conn){
 
   let a0, b0;
   if (isValvePilotPort(c1, conn.from.port)){
-    const dir = (conn.from.port === '12') ? +1 : -1;
+    const dir = pilotDir(conn,'start');
     const L = Math.max(6, Number(conn.stubStartLen ?? WIRE_STUB));
     a0 = { x: a.x + dir*L, y: a.y };
   } else {
     a0 = makeEndpointStub(a, b, oStart);
   }
   if (isValvePilotPort(c2, conn.to.port)){
-    const dir = (conn.to.port === '12') ? +1 : -1;
+    const dir = pilotDir(conn,'end');
     const L = Math.max(6, Number(conn.stubEndLen ?? WIRE_STUB));
     b0 = { x: b.x + dir*L, y: b.y };
   } else {
@@ -291,7 +304,7 @@ function redrawConnections(){
   });
 }
 
-/* ---------- Val / radering ---------- */
+/* ---------- Selection / deletion ---------- */
 function applySelectedClasses(){
   components.forEach(c=>{
     c.el.classList.toggle('selected', selectedComponents.has(c));
@@ -334,9 +347,8 @@ function clearSelectedComponent(){
   applySelectedClasses();
 }
 
-/* --- Svälj bakgrundsklick efter lasso --- */
+/* --- Swallow background click after marquee --- */
 let suppressNextBackgroundClick = false;
-
 compLayer.addEventListener('click', (e)=>{
   if (suppressNextBackgroundClick){
     suppressNextBackgroundClick = false;
@@ -349,9 +361,9 @@ compLayer.addEventListener('click', (e)=>{
   }
 });
 
-/* ---------- Delete + piltangenter (nudge) ---------- */
+/* ---------- Delete + arrows (nudge) ---------- */
 window.addEventListener('keydown', (e)=>{
-  // ESC avbryter länkning
+  // ESC cancels linking
   if (e.key === 'Escape' && pendingPort){
     const prevComp = components.find(c=>c.id===pendingPort.id);
     if (prevComp) prevComp.ports[pendingPort.port]?.el?.setAttribute('fill','#fff');
@@ -362,7 +374,7 @@ window.addEventListener('keydown', (e)=>{
     return;
   }
 
-  // Radering
+  // Delete
   if ((e.key==='Delete' || e.key==='Backspace') && canEdit()){
     if (selectedConnection){
       removeConnection(selectedConnection);
@@ -412,7 +424,7 @@ window.addEventListener('keyup', (e)=>{
   }
 });
 
-/* ---------- Kontextmeny (högerklick) ---------- */
+/* ---------- Context menu ---------- */
 let ctxMenuEl = null;
 function hideCtxMenu(){ if (ctxMenuEl){ ctxMenuEl.remove(); ctxMenuEl = null; } }
 function showCtxMenu(x, y, { type, payload }){
@@ -435,7 +447,7 @@ function showCtxMenu(x, y, { type, payload }){
 
     if (hit){
       const segIsH = (hit.seg && hit.seg.A && hit.seg.B) ? (hit.seg.A.y === hit.seg.B.y) : false;
-      addBtn('➕ Lägg till segment här', ()=>{
+      addBtn('➕ Insert segment here', ()=>{
         if (!conn.guides) conn.guides = [];
         if (segIsH) conn.guides.push({ type:'H', pos: hit.y });
         else        conn.guides.push({ type:'V', pos: hit.x });
@@ -446,7 +458,7 @@ function showCtxMenu(x, y, { type, payload }){
     }
 
     if (Array.isArray(conn.guides) && conn.guides.length>0){
-      addBtn('➖ Ta bort närmaste segment', ()=>{
+      addBtn('➖ Remove nearest segment', ()=>{
         const idx = nearestGuideIndex(conn, hit?.x ?? payload.x, hit?.y ?? payload.y);
         if (idx>=0){
           conn.guides.splice(idx,1);
@@ -455,7 +467,7 @@ function showCtxMenu(x, y, { type, payload }){
           pushHistory('Remove nearest wire segment');
         }
       });
-      addBtn('🧹 Rensa alla segment', ()=>{
+      addBtn('🧹 Clear all segments', ()=>{
         conn.guides = [];
         refreshHandlesForConnection(conn);
         redrawConnections();
@@ -465,7 +477,7 @@ function showCtxMenu(x, y, { type, payload }){
   }
 
   const delBtn = document.createElement('button');
-  delBtn.textContent = canEdit() ? '🗑️ Ta bort' : '🔒 Redigering kräver STOP-läge';
+  delBtn.textContent = canEdit() ? '🗑️ Delete' : '🔒 Editing requires STOP';
   delBtn.disabled = !canEdit();
   delBtn.addEventListener('click', ()=>{
     if (!canEdit()) return;
@@ -483,7 +495,7 @@ function showCtxMenu(x, y, { type, payload }){
   });
 
   const cancelBtn = document.createElement('button');
-  cancelBtn.textContent = 'Avbryt';
+  cancelBtn.textContent = 'Cancel';
   cancelBtn.addEventListener('click', hideCtxMenu);
 
   m.append(delBtn, cancelBtn);
@@ -500,7 +512,7 @@ function showCtxMenu(x, y, { type, payload }){
   ctxMenuEl = m;
 }
 
-/* ---------- Komponentradering ---------- */
+/* ---------- Component deletion ---------- */
 function deleteComponent(comp){
   const toRemove = connections.filter(c => c.from.id===comp.id || c.to.id===comp.id);
   toRemove.forEach(c => removeConnection(c));
@@ -510,7 +522,7 @@ function deleteComponent(comp){
   redrawConnections();
 }
 
-/* ---------- Junction-komponent ---------- */
+/* ---------- Junction component ---------- */
 function addJunction(
   x, y,
   compLayer, components,
@@ -570,7 +582,7 @@ function addJunction(
   return comp;
 }
 
-/* ---------- Drag (singel + grupp) ---------- */
+/* ---------- Drag (single + group) ---------- */
 function makeDraggable(comp){
   let dragging=false, startMouseX=0, startMouseY=0;
   let offsets = null;
@@ -639,12 +651,11 @@ function makeDraggable(comp){
   });
 }
 
-/* ---------- Trådar ---------- */
+/* ---------- Wires ---------- */
 function createWirePath(){
   const path = document.createElementNS('http://www.w3.org/2000/svg','path');
   path.setAttribute('class','wire');
   path.style.pointerEvents = 'stroke';
-  // path.setAttribute('marker-end','url(#arrow)'); // aktivera pilar om du vill
   return path;
 }
 function createWireLabel(){
@@ -658,11 +669,11 @@ function createWireLabel(){
 
 function addConnection(from, to){
   const path = createWirePath();
-  const label = createWireLabel();
+  const label = createWireLabel(); // Create a label for the wire
   connLayer.appendChild(path);
   connLayer.appendChild(label);
 
-  // Pilot-portar? spara justerbara stubbar (horisontella)
+  // Pilot endpoints get adjustable horizontal stubs
   const cFrom = components.find(c=> c.id === from.id);
   const cTo   = components.find(c=> c.id === to.id);
   const startPilot = isValvePilotPort(cFrom, from.port);
@@ -735,7 +746,7 @@ function removePreviewPath(){
   tempPreviewPath = null;
 }
 
-/* ---------- Hit-test för trådar ---------- */
+/* ---------- Wire hit-test ---------- */
 function distPointToSegment(px, py, ax, ay, bx, by){
   const abx = bx - ax, aby = by - ay;
   const apx = px - ax, apy = py - ay;
@@ -764,7 +775,7 @@ function hitTestWire(px, py, threshold=8){
   return best;
 }
 
-/* ---------- Junction + val av tråd (capture) ---------- */
+/* ---------- Junction + select wire (capture) ---------- */
 window.addEventListener('click', (e)=>{
   if (!canEdit()) return;
 
@@ -772,7 +783,7 @@ window.addEventListener('click', (e)=>{
   const px = e.clientX - rect.left;
   const py = e.clientY - rect.top;
 
-  // Om vi håller på att länka och står ovanpå en port -> avsluta till den porten
+  // If we are linking and are over a port → finish to that port
   if (pendingPort && hoverPort){
     finalizeWire(pendingPort, { id:hoverPort.comp.id, port:hoverPort.key });
 
@@ -789,18 +800,18 @@ window.addEventListener('click', (e)=>{
     return;
   }
 
-  // Länkning mot tråd ⇒ skapa junction
+  // Linking to a wire ⇒ create junction
   if (pendingPort && !(e.target && e.target.classList?.contains('port'))){
     const hit = hitTestWire(px, py, 8);
     if (hit){
       const j = addJunction(hit.x, hit.y, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
 
-      // dela tråden
+      // split wire
       removeConnection(hit.conn);
       addConnection(hit.conn.from, { id:j.id, port:'J' });
       addConnection({ id:j.id, port:'J' }, hit.conn.to);
 
-      // anslut pågående länk till junction
+      // connect the pending endpoint to the junction
       addConnection(pendingPort, { id:j.id, port:'J' });
 
       const prevComp = components.find(c=>c.id===pendingPort.id);
@@ -819,7 +830,7 @@ window.addEventListener('click', (e)=>{
     return;
   }
 
-  // Markera tråd
+  // Select a wire if not currently linking
   if (!pendingPort){
     const hit = hitTestWire(px, py, 6);
     if (hit){
@@ -829,7 +840,7 @@ window.addEventListener('click', (e)=>{
   }
 }, true);
 
-// Dubbelklick: lägg till segment (H/V) där du klickar
+// Double-click: add a segment (H/V) at cursor
 window.addEventListener('dblclick', (e)=>{
   if (!canEdit()) return;
 
@@ -853,7 +864,7 @@ window.addEventListener('dblclick', (e)=>{
   e.stopPropagation(); e.preventDefault();
 }, true);
 
-// Contextmeny på tråd (med segmentåtgärder)
+// Context menu on wire
 window.addEventListener('contextmenu', (e)=>{
   if (!canEdit()) return;
 
@@ -869,7 +880,7 @@ window.addEventListener('contextmenu', (e)=>{
   }
 }, true);
 
-/* ---------- Magnetisk port + ghost-wire under länkning ---------- */
+/* ---------- Magnetic port + ghost-wire while linking ---------- */
 window.addEventListener('mousemove', (e)=>{
   if (!pendingPort) return;
 
@@ -975,7 +986,7 @@ compLayer.addEventListener('mousedown', (e)=>{
   e.stopPropagation();
 });
 
-/* ---------- Portkoppling ---------- */
+/* ---------- Port linking ---------- */
 function handlePortClick(comp, portKey, portEl){
   if (!canEdit()) return;
   hideCtxMenu();
@@ -1008,14 +1019,14 @@ function handlePortClick(comp, portKey, portEl){
   pushHistory('Create wire');
 }
 
-/* ---------- TRYCK-OVERLAY ---------- */
+/* ---------- PRESSURE OVERLAY ---------- */
 const SOURCE_PRESSURE = 6.0;
 
 function computePressureSet(){
   const key = (id,port)=> `${id}:${port}`;
 
-  // 1) graf av ledningar
-  const adj = new Map();
+  // 1) graph of wires
+  const adj = new Map(); // Adjacency list for the graph
   const addUndirected = (a,b)=>{
     if (!adj.has(a)) adj.set(a, new Set());
     if (!adj.has(b)) adj.set(b, new Set());
@@ -1025,7 +1036,7 @@ function computePressureSet(){
     addUndirected(key(conn.from.id, conn.from.port), key(conn.to.id, conn.to.port));
   });
 
-  // 2) start = tryckkällor
+  // 2) start from sources
   const start = [];
   components.forEach(c=>{
     if (c.type==='source'){
@@ -1034,7 +1045,7 @@ function computePressureSet(){
     }
   });
 
-  // 3) flood via kablage
+  // 3) flood through wiring
   const pressurized = new Set(start);
   const q = [...start];
   while(q.length){
@@ -1046,12 +1057,12 @@ function computePressureSet(){
     }
   }
 
-  // 4) komponentlogik + flood igen vid förändring
+  // 4) component logic + re-flood if changed
   let changed = true;
   while (changed){
     changed = false;
 
-    // 5/2: 1 <-> (4 eller 2)
+    // 5/2: 1 <-> (4 or 2) depending on state
     components.forEach(v=>{
       if (v.type!=='valve52') return;
       const a = (v.state===0) ? '4' : '2';
@@ -1062,7 +1073,7 @@ function computePressureSet(){
       if (pressurized.size !== before) changed = true;
     });
 
-    // AND
+    // AND valve
     components.forEach(av=>{
       if (av.type!=='andValve') return;
       const nA = `${av.id}:A`, nB = `${av.id}:B`, nO = `${av.id}:OUT`;
@@ -1080,7 +1091,7 @@ function computePressureSet(){
       if (pressurized.size !== before) changed = true;
     });
 
-    // 3/2 gränslägesventil
+    // 3/2 limit valve
     components.forEach(lv=>{
       if (lv.type!=='limit32') return;
       const active = !!lv.state?.active;
@@ -1092,11 +1103,22 @@ function computePressureSet(){
       if (pressurized.size !== before) changed = true;
     });
 
-    // 3/2 tryckknapp (momentan)
+    // 3/2 pushbutton (momentary)
     components.forEach(pv=>{
       if (pv.type!=='push32') return;
       const a = pv.state?.active ? '1' : '3';
       const n2 = `${pv.id}:2`, nx = `${pv.id}:${a}`;
+      const before = pressurized.size;
+      if (pressurized.has(n2)) pressurized.add(nx);
+      if (pressurized.has(nx)) pressurized.add(n2);
+      if (pressurized.size !== before) changed = true;
+    });
+
+    // 3/2 air-piloted (NEW): same mapping as pushbutton, driven by state.active
+    components.forEach(av=>{
+      if (av.type!=='airValve32') return;
+      const a = av.state?.active ? '1' : '3';
+      const n2 = `${av.id}:2`, nx = `${av.id}:${a}`;
       const before = pressurized.size;
       if (pressurized.has(n2)) pressurized.add(nx);
       if (pressurized.has(nx)) pressurized.add(n2);
@@ -1130,13 +1152,14 @@ function simulate(dt){
     if (typeof c.recompute === 'function') c.recompute();
   });
 
-  if (playing){
+  if (playing){ // If the simulation is playing
     lastPressure = computePressureSet();
   } else if (simMode === Modes.STOP){
     lastPressure = new Set();
   }
 
   if (playing){
+    // 5/2 pilot edges (12 ⇒ state=1, 14 ⇒ state=0)
     components.forEach(v=>{
       if (v.type!=='valve52') return;
       if (v._pilot12Prev === undefined) v._pilot12Prev = false;
@@ -1154,9 +1177,21 @@ function simulate(dt){
       v._pilot12Prev = p12;
       v._pilot14Prev = p14;
     });
+
+    // 3/2 air-piloted: pilot 12 ⇒ active (2↔1), else inactive (2↔3)
+    components.forEach(v=>{
+      if (v.type!=='airValve32') return;
+      const p12 = lastPressure.has(`${v.id}:12`);
+      const desired = !!p12;
+      if (v.state?.active !== desired){
+        // Support both setActive and setState alias
+        if (typeof v.setActive === 'function') v.setActive(desired);
+        else if (typeof v.setState === 'function') v.setState(desired ? 1 : 0);
+      }
+    });
   }
 
-  // port overlay + title med bar
+  // port overlay + title with bar
   components.forEach(c=>{
     if (!c.ports) return;
     for (const k of Object.keys(c.ports)){
@@ -1165,30 +1200,59 @@ function simulate(dt){
       c.ports[k].el?.classList.toggle('pressurized', pressed);
       if (simMode!==Modes.STOP) c.ports[k].el?.setAttribute('title', `${k}: ${pressed ? SOURCE_PRESSURE.toFixed(1) : '0.0'} bar`);
       else c.ports[k].el?.removeAttribute('title');
+      // determine if this port has any connection
+      // Note: some components (e.g. source) may expose the same DOM element under multiple port keys
+      // (e.g. OUT and P). To avoid false negatives we compare the actual port element used by
+      // connections rather than only the port key.
+      const portEl = c.ports[k]?.el;
+      const hasConn = connections.some(conn => {
+        if (conn.from.id === c.id){ const fromEl = c.ports?.[conn.from.port]?.el; if (fromEl && fromEl === portEl) return true; }
+        if (conn.to.id === c.id){ const toEl = c.ports?.[conn.to.port]?.el; if (toEl && toEl === portEl) return true; }
+        return false;
+      });
+      if (pressed && !hasConn){
+        c.ports[k].el?.classList.add('unconnected');
+      } else {
+        c.ports[k].el?.classList.remove('unconnected');
+      }
     }
   });
 
-  // cylinder-rörelse
+    // cylinder movement
   if (playing){
-    components.filter(c=>c.type==='cylDouble' || c.type==='cylinder').forEach(cyl=>{
+    components.filter(c=> c.type==='cylDouble' || c.type==='cylinder' || c.type==='cylSingle').forEach(cyl=>{
       const isPress = (id,port)=> lastPressure.has(`${id}:${port}`);
 
-      let capPress=false, rodPress=false;
-      const capConns = connections.filter(c=> (c.from.id===cyl.id && c.from.port==='Cap') || (c.to.id===cyl.id && c.to.port==='Cap'));
-      const rodConns = connections.filter(c=> (c.from.id===cyl.id && c.from.port==='Rod') || (c.to.id===cyl.id && c.to.port==='Rod'));
-
-      capConns.forEach(conn=>{
-        const other = (conn.from.id===cyl.id) ? conn.to : conn.from;
-        if (isPress(other.id, other.port)) capPress = true;
-      });
-      rodConns.forEach(conn=>{
-        const other = (conn.from.id===cyl.id) ? conn.to : conn.from;
-        if (isPress(other.id, other.port)) rodPress = true;
-      });
-
       let target = cyl.pos;
-      if (capPress && !rodPress) target = 1;
-      else if (!capPress && rodPress) target = 0;
+
+      if (cyl.type === 'cylSingle'){
+        // single-acting: behavior depends on mode ('push' extends on A press, 'pull' retracts on A press)
+        let aPress = false;
+        const aConns = connections.filter(c=> (c.from.id===cyl.id && c.from.port==='A') || (c.to.id===cyl.id && c.to.port==='A'));
+        aConns.forEach(conn=>{
+          const other = (conn.from.id===cyl.id) ? conn.to : conn.from;
+          if (isPress(other.id, other.port)) aPress = true;
+        });
+        if ((cyl.mode ?? 'push') === 'push') target = aPress ? 1 : 0;
+        else target = aPress ? 0 : 1;
+      } else {
+        // double-acting behavior: Cap vs Rod
+        let capPress=false, rodPress=false;
+        const capConns = connections.filter(c=> (c.from.id===cyl.id && c.from.port==='Cap') || (c.to.id===cyl.id && c.to.port==='Cap'));
+        const rodConns = connections.filter(c=> (c.from.id===cyl.id && c.from.port==='Rod') || (c.to.id===cyl.id && c.to.port==='Rod'));
+
+        capConns.forEach(conn=>{
+          const other = (conn.from.id===cyl.id) ? conn.to : conn.from;
+          if (isPress(other.id, other.port)) capPress = true;
+        });
+        rodConns.forEach(conn=>{
+          const other = (conn.from.id===cyl.id) ? conn.to : conn.from;
+          if (isPress(other.id, other.port)) rodPress = true;
+        });
+
+        if (capPress && !rodPress) target = 1;
+        else if (!capPress && rodPress) target = 0;
+      }
 
       const speed = 0.8;
       const dir = Math.sign(target - cyl.pos);
@@ -1196,7 +1260,7 @@ function simulate(dt){
     });
   }
 
-  // wires: aktiv & etikett
+  // wires: active & label
   connections.forEach(conn=>{
     const aKey = `${conn.from.id}:${conn.from.port}`;
     const bKey = `${conn.to.id}:${conn.to.port}`;
@@ -1216,7 +1280,7 @@ function simulate(dt){
   stepOnceFlag = false;
 }
 
-/* ---------- RAF-loop ---------- */
+/* ---------- RAF loop ---------- */
 let last = performance.now();
 function tick(t){
   const dt = Math.min(0.05, (t-last)/1000);
@@ -1226,7 +1290,7 @@ function tick(t){
 }
 requestAnimationFrame(tick);
 
-/* ---------- Historik + persistens (inkl. cylinderbokstav & limit-sensor) ---------- */
+/* ---------- History & persistence ---------- */
 function readCylinderLetterFromComp(comp){
   try {
     const txt = comp.el?.querySelector('.label')?.textContent || '';
@@ -1238,10 +1302,16 @@ function readCylinderLetterFromComp(comp){
 function snapshotProject(){
   const comps = components.map(c=>{
     const base = { id:c.id, type:c.type, x:c.x, y:c.y };
-    if (c.type==='valve52') return { ...base, state:c.state };
-    if (c.type==='cylDouble' || c.type==='cylinder'){
+  if (c.type==='valve52') return { ...base, state:c.state };
+  if (c.type==='airValve32') return { ...base, active: !!(c.state?.active) };
+    if (c.type==='cylDouble' || c.type==='cylinder' || c.type==='cylSingle'){
       const letter = readCylinderLetterFromComp(c);
-      return { ...base, pos:c.pos??0, letter };
+      const out = { ...base, pos:c.pos??0, letter };
+      if (c.type==='cylSingle'){
+        out.mode = c.mode ?? 'push';
+        out.normallyExtended = !!c.normallyExtended;
+      }
+      return out;
     }
     if (c.type==='push32')  return { ...base, active: !!(c.state?.active) };
     if (c.type==='limit32'){
@@ -1259,7 +1329,7 @@ function snapshotProject(){
     stubStartLen: (typeof conn.stubStartLen === 'number') ? conn.stubStartLen : null,
     stubEndLen:   (typeof conn.stubEndLen   === 'number') ? conn.stubEndLen   : null
   }));
-  return { version: 17, comps, conns };
+  return { version: 18, comps, conns };
 }
 function clearProject(){
   connections.forEach(c=>removeConnection(c));
@@ -1269,8 +1339,8 @@ function clearProject(){
   nextId = 1;
   pendingPort = null;
 
-  cylinderCount = 0;                 // börja bokstavsräkning från A igen
-  for (const k of Object.keys(signals)) delete signals[k]; // städa gamla sensorer
+  cylinderCount = 0;                 // restart letter counter
+  for (const k of Object.keys(signals)) delete signals[k]; // cleanup old sensors
 
   clearSelectedConnection();
   clearSelectedComponent();
@@ -1294,9 +1364,25 @@ async function loadProject(data){
       v._pilot12Prev = false; v._pilot14Prev = false;
       wrapValveToggleGuard(v);
       comp = v;
+    } else if (sc.type === 'airValve32'){
+      comp = addAirValve32(sc.x, sc.y, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
+      if (typeof sc.active==='boolean'){
+        if (typeof comp.setActive==='function') comp.setActive(sc.active);
+        else if (typeof comp.setState==='function') comp.setState(sc.active ? 1 : 0);
+      }
     } else if (sc.type === 'cylDouble' || sc.type==='cylinder'){
       const letterProvider = sc.letter ? (()=> sc.letter) : getNextCylinderLetter;
       comp = addCylinderDouble(sc.x, sc.y, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid, letterProvider, setSignal);
+      if (typeof sc.pos==='number' && typeof comp.setPos==='function') comp.setPos(sc.pos);
+      if (sc.letter){
+        const idx = sc.letter.toUpperCase().charCodeAt(0) - 'A'.charCodeAt(0);
+        if (!Number.isNaN(idx)) _maxCylIndex = Math.max(_maxCylIndex, idx);
+      }
+    } else if (sc.type === 'cylSingle' || sc.type === 'cylinderSingle'){
+      const letterProvider = sc.letter ? (()=> sc.letter) : getNextCylinderLetter;
+      // allow storing pos, letter, mode and normallyExtended
+      const opts = { normallyExtended: !!sc.normallyExtended, mode: sc.mode };
+      comp = addCylinderSingle(sc.x, sc.y, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid, letterProvider, setSignal, opts);
       if (typeof sc.pos==='number' && typeof comp.setPos==='function') comp.setPos(sc.pos);
       if (sc.letter){
         const idx = sc.letter.toUpperCase().charCodeAt(0) - 'A'.charCodeAt(0);
@@ -1323,7 +1409,7 @@ async function loadProject(data){
     idMap.set(sc.id, comp.id);
   }
 
-  // justera räknaren för nästa cylinderbokstav
+  // adjust next cylinder letter
   cylinderCount = (_maxCylIndex >= 0) ? (_maxCylIndex + 1) : 0;
 
   for (const conn of data.conns){
@@ -1333,10 +1419,9 @@ async function loadProject(data){
     const c = finalizeWire({ id:newFromId, port:conn.from.port }, { id:newToId, port:conn.to.port });
     if (Array.isArray(conn.guides)){
       c.guides = conn.guides.map(g=>({ type:(g.type==='V'?'V':'H'), pos: Number(g.pos) }));
-    } else if (typeof conn.ctrlY === 'number'){ // Bakåtkomp från äldre version
+    } else if (typeof conn.ctrlY === 'number'){ // backward compat
       c.guides = [{ type:'H', pos: conn.ctrlY }];
     }
-    // återställ justerbara pilot-stubbar
     if (typeof conn.stubStartLen === 'number') c.stubStartLen = conn.stubStartLen;
     if (typeof conn.stubEndLen   === 'number') c.stubEndLen   = conn.stubEndLen;
   }
@@ -1345,7 +1430,7 @@ async function loadProject(data){
   isRestoring = false;
 }
 
-/* ---------- Undo/Redo ---------- */
+/* ---------- History ---------- */
 function pushHistory(_label=''){
   if (isRestoring) return;
   const snap = snapshotProject();
@@ -1375,7 +1460,7 @@ function redo(){
   loadProject(next).then(()=>{ isRestoring = false; updateUndoRedoButtons(); });
 }
 
-/* ---------- UI ---------- */
+/* ---------- UI helpers ---------- */
 function ensureButton(id, label, onClick){
   let btn = document.getElementById(id);
   if (!btn){
@@ -1398,21 +1483,7 @@ function setMode(m){
     connections.forEach(conn => conn.pathEl.classList.remove('active'));
   }
 }
-function updateModeButtons(){
-  ensureButton('btnPlay',  simMode===Modes.PLAY  ? '▶️ Spelar…' : '▶️ Spela', ()=> setMode(Modes.PLAY));
-  ensureButton('btnStep',  '⏭️ Stega', ()=>{
-    stepOnceFlag = true;
-    simulate(0.02);
-  });
-  ensureButton('btnPause', simMode===Modes.PAUSE ? '⏸️ Paus'   : '⏸️ Pausa', ()=> setMode(Modes.PAUSE));
-  ensureButton('btnStop',  '⏹️ Stoppa & återställ', ()=> resetSystem());
 
-  const editableButtons = ['addSource','addValve52','addCylDouble','addAnd','addOr','addLimit32','addPush32','saveProj','loadProj','undoBtn','redoBtn'];
-  editableButtons.forEach(id=>{
-    const b = document.getElementById(id);
-    if (b) b.disabled = !canEdit();
-  });
-}
 function updateUndoRedoButtons(){
   const undoBtn = document.getElementById('undoBtn');
   const redoBtn = document.getElementById('redoBtn');
@@ -1420,11 +1491,17 @@ function updateUndoRedoButtons(){
   if (redoBtn) redoBtn.disabled = !canEdit() || future.length === 0;
 }
 
+/* ---------- Reset system ---------- */
 function resetSystem(){
   setMode(Modes.STOP);
   components.forEach(c=>{
     if (c.type==='valve52' && typeof c.setState==='function') c.setState(DEFAULT_VALVE_STATE);
-    else if ((c.type==='cylDouble'||c.type==='cylinder') && typeof c.setPos==='function') c.setPos(DEFAULT_CYL_POS);
+    else if (c.type==='airValve32'){
+      if (typeof c.setActive==='function') c.setActive(false);
+      else if (typeof c.setState==='function') c.setState(0);
+    }
+  else if (c.type==='cylSingle' && typeof c.setPos==='function') c.setPos(c.normallyExtended ? 1 : 0);
+  else if ((c.type==='cylDouble'||c.type==='cylinder') && typeof c.setPos==='function') c.setPos(DEFAULT_CYL_POS);
     else if (c.type==='push32'){ c.state.active=false; c.recompute?.(); }
     if (c.type==='valve52'){ c._pilot12Prev=false; c._pilot14Prev=false; }
   });
@@ -1443,34 +1520,39 @@ function resetSystem(){
   pushHistory('Reset');
 }
 
-/* ---- Lås manuell växling av 5/2 till PLAY ---- */
+/* ---- Lock manual toggle of 5/2 to PLAY ---- */
 function wrapValveToggleGuard(valveComp){
   if (!valveComp || typeof valveComp.toggle!=='function') return;
   const original = valveComp.toggle.bind(valveComp);
   valveComp.toggle = function(){ if (simMode!==Modes.PLAY) return; original(); };
 }
 
-/* ---------- UI/CSS-injektion ---------- */
+/* ---------- Inject CSS overlay ---------- */
 (function injectOverlayCSS(){
   if (document.getElementById('overlayCSS')) return;
   const css = `
-    /* Workspace-grid */
+    /* Workspace grid */
     #compLayer {
-      background-image:
+      ${GRID_ENABLED ? `background-image:
         linear-gradient(to right, rgba(0,0,0,.06) 1px, transparent 1px),
         linear-gradient(to bottom, rgba(0,0,0,.06) 1px, transparent 1px);
-      background-size: ${GRID_SIZE}px ${GRID_SIZE}px;
+      background-size: ${GRID_SIZE}px ${GRID_SIZE}px;` : ''}
     }
 
     .wire { stroke:#000; stroke-width:2; fill:none; vector-effect: non-scaling-stroke; }
     .wire.preview { stroke:#888; stroke-dasharray:4 4; }
-    .wire.active { stroke:#d00; stroke-dasharray:6 6; animation: wireflow 1.2s linear infinite; }
+  /* Active wires (pressurized) use the port color (blue) */
+  .wire.active { stroke: var(--port); stroke-dasharray:6 6; animation: wireflow 1.2s linear infinite; }
     @keyframes wireflow { to { stroke-dashoffset: -12; } }
     .wire.selected { stroke:#0a74ff; stroke-width:3; }
     .comp.selected { outline: 2px dashed #0a74ff; outline-offset: 2px; }
 
-    .port { fill:#fff; stroke:#0a74ff; stroke-width:1.5; cursor: crosshair; }
-    .port.pressurized { fill:#e6f3ff; stroke:#0073e6; stroke-width:2; }
+  .port { fill:#fff; stroke:#0a74ff; stroke-width:1.5; cursor: crosshair; }
+  /* Ports that are pressurized during simulation are highlighted in the port color (blue) */
+  .port.pressurized { fill: var(--port); stroke: var(--port); stroke-width:2; }
+  /* If a pressurized port is not connected to any other component, blink it red to draw attention */
+  .port.pressurized.unconnected { fill: var(--accent); stroke: var(--accent); animation: portBlink 1.8s linear infinite; }
+  @keyframes portBlink { 0%,100% { opacity: 1; } 50% { opacity: 0.25; } }
 
     .wireLabel {
       font-family: system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
@@ -1520,15 +1602,62 @@ function wrapValveToggleGuard(valveComp){
   document.head.appendChild(style);
 })();
 
-/* ---- Knappar ---- */
+/* ---------- Buttons ---------- */
+function ensureGridStyle(){
+  const style = document.getElementById('overlayCSS');
+  if (!style) return;
+  const enabled = GRID_ENABLED;
+  const repl = style.textContent.replace(
+    /#compLayer\s*\{[\s\S]*?\}/,
+    `#compLayer { ${enabled ? `
+      background-image:
+        linear-gradient(to right, rgba(0,0,0,.06) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(0,0,0,.06) 1px, transparent 1px);
+      background-size: ${GRID_SIZE}px ${GRID_SIZE}px;` : ''} }`
+  );
+  style.textContent = repl;
+}
+
+function updateModeButtons(){
+  ensureButton('btnPlayPause',
+    simMode===Modes.PLAY ? '⏸️ Pause' : '▶️ Play',
+    ()=>{
+      if (simMode===Modes.PLAY){ setMode(Modes.PAUSE); }
+      else { setMode(Modes.PLAY); }
+    }
+  );
+  ensureButton('btnStep',  '⏭️ Step', ()=>{
+    stepOnceFlag = true;
+    simulate(0.02);
+  });
+  ensureButton('btnStop',  '⏹️ Stop & Reset', ()=> resetSystem());
+  ensureButton('btnToggleGrid', GRID_ENABLED ? '🔳 Hide Grid' : '🔲 Show Grid', ()=>{
+    GRID_ENABLED = !GRID_ENABLED;
+    ensureGridStyle();
+  });
+
+  const editableButtons = ['addSource','addValve52','addAir32','addCylDouble','addCylSingle','addAnd','addOr','addLimit32','addPush32','saveProj','loadProj','undoBtn','redoBtn'];
+  editableButtons.forEach(id=>{
+    const b = document.getElementById(id);
+    if (b) b.disabled = !canEdit();
+  });
+
+  // Hide per-component single-acting mode buttons while simulation is running
+  const shouldShowModeBtns = canEdit(); // only show when STOP/edit mode
+  components.forEach(c=>{
+    if (c && c.modeBtn && c.modeBtn.style){
+      c.modeBtn.style.display = shouldShowModeBtns ? '' : 'none';
+    }
+  });
+}
 function addButtons(){
-  ensureButton('addSource',  '➕ Tryckkälla', ()=>{
+  ensureButton('addSource',  '➕ Pressure source', ()=>{
     if (!canEdit()) return;
     const r = workspaceBBox();
     addSource(r.width*0.15, r.height*0.50, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
     pushHistory('Add source');
   });
-  ensureButton('addValve52', '➕ 5/2-ventil', ()=>{
+  ensureButton('addValve52', '➕ 5/2 valve', ()=>{
     if (!canEdit()) return;
     const r = workspaceBBox();
     const v = addValve52(r.width*0.40, r.height*0.50, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
@@ -1536,45 +1665,61 @@ function addButtons(){
     wrapValveToggleGuard(v);
     pushHistory('Add valve52');
   });
-  ensureButton('addCylDouble','➕ Cylinder, dubbelverkande', ()=>{
+  ensureButton('addAir32',   '➕ 3/2 air-piloted', ()=>{
+    if (!canEdit()) return;
+    const r = workspaceBBox();
+    addAirValve32(r.width*0.33, r.height*0.35, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
+    pushHistory('Add airValve32');
+  });
+
+
+
+
+  ensureButton('addCylDouble','➕ Cylinder (double-acting)', ()=>{
     if (!canEdit()) return;
     const r = workspaceBBox();
     addCylinderDouble(r.width*0.70, r.height*0.50, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid, getNextCylinderLetter, setSignal);
     pushHistory('Add cylinder');
   });
-  ensureButton('addAnd',     '➕ AND-ventil', ()=>{
+  ensureButton('addCylSingle','➕ Cylinder (single-acting)', ()=>{
+    if (!canEdit()) return;
+    const r = workspaceBBox();
+    addCylinderSingle(r.width*0.70, r.height*0.60, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid, getNextCylinderLetter, setSignal);
+    pushHistory('Add single cylinder');
+  });
+  ensureButton('addAnd',     '➕ AND valve', ()=>{
     if (!canEdit()) return;
     const r = workspaceBBox();
     addAndValve(r.width*0.25, r.height*0.35, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
     pushHistory('Add AND');
   });
-  ensureButton('addOr',      '➕ OR-ventil', ()=>{
+  ensureButton('addOr',      '➕ OR valve', ()=>{
     if (!canEdit()) return;
     const r = workspaceBBox();
     addOrValve(r.width*0.25, r.height*0.65, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
     pushHistory('Add OR');
   });
-  ensureButton('addLimit32', '➕ 3/2 gränslägesventil', ()=>{
+  ensureButton('addLimit32', '➕ 3/2 limit valve', ()=>{
     if (!canEdit()) return;
     const r = workspaceBBox();
     addLimitValve32(r.width*0.52, r.height*0.28, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid, getSignal);
     pushHistory('Add limit32');
   });
-  ensureButton('addPush32',  '➕ Tryckknapp 3/2', ()=>{
+  ensureButton('addPush32',  '➕ 3/2 pushbutton', ()=>{
     if (!canEdit()) return;
     const r = workspaceBBox();
     addPushButton32(r.width*0.25, r.height*0.50, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
     pushHistory('Add push32');
   });
 
-  ensureButton('saveProj', '💾 Spara projekt', ()=>{
+  ensureButton('saveProj', '💾 Save project', ()=>{
     if (!canEdit()) return;
     const snap = snapshotProject();
-    const defaultName = currentProjectName || 'projekt';
-    const answer = window.prompt('Ange ett namn för projektet (utan filändelse):', defaultName);
+    const defaultName = currentProjectName || 'project';
+    const answer = window.prompt('Enter a name for the project (without extension):', defaultName);
     if (answer === null) return;
     let name = (answer.trim() || defaultName).replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, '_');
-    if (!name) name = 'projekt';
+    if (!name) name = 'project';
     currentProjectName = name;
     const filename = /\.json$/i.test(name) ? name : `${name}.json`;
     const a = document.createElement('a');
@@ -1587,7 +1732,7 @@ function addButtons(){
     isDirty = false;
   });
 
-  ensureButton('loadProj', '📂 Ladda projekt', ()=>{
+  ensureButton('loadProj', '📂 Load project', ()=>{
     if (!canEdit()) return;
     const inp = document.createElement('input');
     inp.type = 'file'; inp.accept = 'application/json';
@@ -1595,25 +1740,25 @@ function addButtons(){
       const file = e.target.files?.[0]; if (!file) return;
       currentProjectName = file.name.replace(/\.json$/i, '');
       try { const data = JSON.parse(await file.text()); await loadProject(data); pushHistory('Load project'); }
-      catch(err){ console.error('Fel vid laddning:', err); alert('Ogiltig projektfil.'); }
+      catch(err){ console.error('Load error:', err); alert('Invalid project file.'); }
     };
     inp.click();
   });
 
-  ensureButton('undoBtn', '↩️ Ångra', ()=> { if (canEdit()) undo(); });
-  ensureButton('redoBtn', '↪️ Gör om', ()=> { if (canEdit()) redo(); });
+  ensureButton('undoBtn', '↩️ Undo', ()=> { if (canEdit()) undo(); });
+  ensureButton('redoBtn', '↪️ Redo', ()=> { if (canEdit()) redo(); });
 
   updateModeButtons();
   updateUndoRedoButtons();
 }
 addButtons();
 
-/* ---------- Startlayout ---------- */
+/* ---------- Initial layout ---------- */
 window.addEventListener('load', ()=>{
   const r = workspaceBBox();
   addSource(r.width*0.15, r.height*0.50, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
 
-  // säkerställ wire markörer (pilar) om du vill aktivera dem
+  // ensure wire arrow markers if you want to enable them
   (function ensureWireMarkers(){
     if (connLayer.__markersReady) return;
     const defs = document.createElementNS('http://www.w3.org/2000/svg','defs');
@@ -1640,31 +1785,27 @@ window.addEventListener('load', ()=>{
   pushHistory('Initial');
 });
 
-// Varnar vid sidstängning/uppdatering om osparade ändringar finns
+// Warn if closing with unsaved changes
 window.addEventListener('beforeunload', (e)=>{
   if (!isDirty) return;
   e.preventDefault();
   e.returnValue = '';
 });
 
-/* ---------- Segment-hjälpfunktioner ---------- */
-
-// Om inga guider: skapa en första som passar geometri (H om x1!=x2 annars V)
-function maybeSeedFirstGuide(conn){
-  if (Array.isArray(conn.guides) && conn.guides.length>0) return;
-  const geom = computeConnectionGeometry({ ...conn, guides: [] });
-  if (!geom) return;
-  const { a, b } = geom;
-  if (a.x !== b.x){
-    const y = (a.y + b.y)/2;
-    conn.guides = [{ type:'H', pos:y }];
-  } else {
-    const x = (a.x + b.x)/2;
-    conn.guides = [{ type:'V', pos:x }];
-  }
-}
-
-// Returnera index för närmaste guide mot punkt (px,py)
+/* ---------- Segment helpers ---------- */
+// function maybeSeedFirstGuide(conn){
+//   if (Array.isArray(conn.guides) && conn.guides.length>0) return;
+//   const geom = computeConnectionGeometry({ ...conn, guides: [] });
+//   if (!geom) return;
+//   const { a, b } = geom;
+//   if (a.x !== b.x){
+//     const y = (a.y + b.y)/2;
+//     conn.guides = [{ type:'H', pos:y }];
+//   } else {
+//     const x = (a.x + b.x)/2;
+//     conn.guides = [{ type:'V', pos:x }];
+//   }
+// }
 function nearestGuideIndex(conn, px, py){
   if (!Array.isArray(conn.guides) || conn.guides.length===0) return -1;
   let bestIdx = -1, bestD = Infinity;
@@ -1675,7 +1816,7 @@ function nearestGuideIndex(conn, px, py){
   return bestIdx;
 }
 
-/* ---------- Handtag för segment (inkl. 12/14-stubbar) ---------- */
+/* ---------- Handles for segments (incl. pilot stubs) ---------- */
 function destroyHandlesForConnection(conn){
   if (Array.isArray(conn.handleEls)){
     conn.handleEls.forEach(el=> el?.remove());
@@ -1684,7 +1825,7 @@ function destroyHandlesForConnection(conn){
 }
 
 function refreshHandlesForConnection(conn, repositionOnly=false){
-  // Bara synligt om valt
+  // Only when selected
   if (selectedConnection !== conn){
     destroyHandlesForConnection(conn);
     return;
@@ -1696,16 +1837,16 @@ function refreshHandlesForConnection(conn, repositionOnly=false){
 
   if (!Array.isArray(conn.guides)) conn.guides = [];
 
-  // Skapa handtag för guider och piloter
+  // Create handles
   if (!repositionOnly){
     destroyHandlesForConnection(conn);
 
-    // --- Guide-handtag (H/V) ---
+    // --- Guide handles (H/V) ---
     conn.handleEls = conn.guides.map((g, idx)=>{
       const el = document.createElement('div');
       el.className = 'ctrlHandle ' + (g.type==='H' ? 'h' : 'v');
-      el.title = g.type==='H' ? 'Dra upp/ner för att flytta horisontellt segment'
-                              : 'Dra vänster/höger för att flytta vertikalt segment';
+      el.title = g.type==='H' ? 'Drag up/down to move a horizontal segment'
+                              : 'Drag left/right to move a vertical segment';
       compLayer.appendChild(el);
 
       let dragging=false, startOff=0;
@@ -1760,11 +1901,11 @@ function refreshHandlesForConnection(conn, repositionOnly=false){
       return el;
     });
 
-    // --- Pilot-stubb-handtag (start) ---
+    // --- Pilot stub handle (start) ---
     if (isPilotEndpoint(conn,'start')){
       const el = document.createElement('div');
       el.className = 'ctrlHandle v';
-      el.title = 'Dra för att ändra stubblängd (12/14)';
+      el.title = 'Drag to change pilot stub length';
       compLayer.appendChild(el);
       conn.handleEls.push(el);
 
@@ -1776,12 +1917,14 @@ function refreshHandlesForConnection(conn, repositionOnly=false){
         const aPort = portGlobalPosition(c1, conn.from.port);
         baseX = aPort.x;
         baseLen = Number(conn.stubStartLen ?? WIRE_STUB);
+        const dir0 = pilotDir(conn,'start');
         const move = (ev)=>{
           if (!dragging) return;
           const rect = workspaceBBox();
           const mx = ev.clientX - rect.left;
-          const dir = pilotDir(conn,'start');
+          const dir = dir0;
           let L = Math.max(6, Math.abs(mx - baseX));
+          // enforce outward direction
           if (dir>0 && mx < baseX) L = Math.max(6, baseLen);
           if (dir<0 && mx > baseX) L = Math.max(6, baseLen);
           conn.stubStartLen = L;
@@ -1799,11 +1942,11 @@ function refreshHandlesForConnection(conn, repositionOnly=false){
       el.addEventListener('mousedown', onDown);
     }
 
-    // --- Pilot-stubb-handtag (end) ---
+    // --- Pilot stub handle (end) ---
     if (isPilotEndpoint(conn,'end')){
       const el = document.createElement('div');
       el.className = 'ctrlHandle v';
-      el.title = 'Dra för att ändra stubblängd (12/14)';
+      el.title = 'Drag to change pilot stub length';
       compLayer.appendChild(el);
       conn.handleEls.push(el);
 
@@ -1815,11 +1958,12 @@ function refreshHandlesForConnection(conn, repositionOnly=false){
         const bPort = portGlobalPosition(c2, conn.to.port);
         baseX = bPort.x;
         baseLen = Number(conn.stubEndLen ?? WIRE_STUB);
+        const dir0 = pilotDir(conn,'end');
         const move = (ev)=>{
           if (!dragging) return;
           const rect = workspaceBBox();
           const mx = ev.clientX - rect.left;
-          const dir = pilotDir(conn,'end');
+          const dir = dir0;
           let L = Math.max(6, Math.abs(mx - baseX));
           if (dir>0 && mx < baseX) L = Math.max(6, baseLen);
           if (dir<0 && mx > baseX) L = Math.max(6, baseLen);
@@ -1839,7 +1983,7 @@ function refreshHandlesForConnection(conn, repositionOnly=false){
     }
   }
 
-  // Positionera handtag
+  // Position handles (guides)
   conn.guides.forEach((g, i)=>{
     const el = conn.handleEls[i];
     if (!el) return;
@@ -1854,7 +1998,7 @@ function refreshHandlesForConnection(conn, repositionOnly=false){
     }
   });
 
-  // Positionera pilot-stubb-handtag (efter guide-handtag)
+  // Position pilot stub handles (after guide handles)
   let idxOffset = conn.guides.length;
   const c1 = components.find(c=>c.id===conn.from.id);
   const c2 = components.find(c=>c.id===conn.to.id);
@@ -1882,3 +2026,26 @@ function refreshHandlesForConnection(conn, repositionOnly=false){
     }
   }
 }
+
+/* ---------- Help: seed first guide if none ---------- */
+function maybeSeedFirstGuide(conn){
+  if (Array.isArray(conn.guides) && conn.guides.length>0) return;
+  const geom = computeConnectionGeometry({ ...conn, guides: [] });
+  if (!geom) return;
+  const { a, b } = geom;
+  if (a.x !== b.x){
+    const y = (a.y + b.y)/2;
+    conn.guides = [{ type:'H', pos:y }];
+  } else {
+    const x = (a.x + b.x)/2;
+    conn.guides = [{ type:'V', pos:x }];
+  }
+}
+
+/* ---------- Buttons state ---------- */
+// function updateUndoRedoButtons(){
+//   const undoBtn = document.getElementById('undoBtn');
+//   const redoBtn = document.getElementById('redoBtn');
+//   if (undoBtn) undoBtn.disabled = !canEdit() || history.length < 2;
+//   if (redoBtn) redoBtn.disabled = !canEdit() || future.length === 0;
+// }
