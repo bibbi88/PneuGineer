@@ -26,8 +26,12 @@ export function addCylinderSingle(
   const id = uid();
   const s = (n)=> n * SCALE;
 
-  // Defaults: normally retracted (spring pushes piston in when no pressure)
-  const normallyExtended = !!opts.normallyExtended;
+  // Mode: 'push' (default) = extend when A pressurized; 'pull' = retract when A pressurized
+  const initialMode = (opts && opts.mode === 'pull') ? 'pull' : 'push';
+  // Defaults: normally retracted unless explicitly set; but pull-mode defaults to extended
+  const normallyExtended = (opts && typeof opts.normallyExtended !== 'undefined')
+    ? !!opts.normallyExtended
+    : (initialMode === 'pull');
 
   // ===== Letter init =====
   const initialLetter = (typeof getNextCylinderLetter === 'function')
@@ -52,6 +56,18 @@ export function addCylinderSingle(
   const label = document.createElement('div');
   label.className = 'label';
   label.style.pointerEvents = 'auto'; // allow dblclick edit
+  // label contains text and a small mode toggle button
+  const labelText = document.createElement('span');
+  const modeBtn = document.createElement('button');
+  modeBtn.className = 'cylModeBtn';
+  modeBtn.style.marginLeft = '6px';
+  modeBtn.style.fontSize = '10px';
+  modeBtn.style.padding = '2px 6px';
+  modeBtn.style.borderRadius = '6px';
+  modeBtn.style.cursor = 'pointer';
+  modeBtn.title = 'Toggle single-acting mode (push/pull)';
+  label.appendChild(labelText);
+  label.appendChild(modeBtn);
   el.appendChild(label);
 
   const NS = 'http://www.w3.org/2000/svg';
@@ -110,10 +126,11 @@ export function addCylinderSingle(
   spring.setAttribute('stroke-width', s(2));
 
   // --- Ports (only A) ---
-  const ports = {
-    A: { cx: 12, cy: H + PORT_MARGIN } // bottom-left under cap side
-  };
+  // Position A on left for 'push', on right for 'pull'
+  const A_cx = (initialMode === 'pull') ? (W - 12) : 12;
+  const ports = { A: { cx: A_cx, cy: H + PORT_MARGIN } };
   const portEls = {};
+  const portTextEls = {};
   Object.keys(ports).forEach(key=>{
     const p = ports[key];
     const c = document.createElementNS(NS,'circle');
@@ -129,6 +146,7 @@ export function addCylinderSingle(
 
     g.append(c, t);
     portEls[key] = c;
+    portTextEls[key] = t;
   });
 
   // Mount graphics
@@ -147,6 +165,10 @@ export function addCylinderSingle(
 
     // Position (0=retracted, 1=extended)
     pos: normallyExtended ? 1 : 0,
+
+  // persistable properties
+  mode: initialMode,
+  normallyExtended: normallyExtended,
 
     // Letter / signals
     letter: initialLetter,
@@ -198,7 +220,8 @@ export function addCylinderSingle(
       this.letter = L;
       this.lower  = nextLower;
 
-      label.textContent = `Cylinder ${this.letter} (single-acting)`;
+  labelText.textContent = `Cylinder ${this.letter} (single-acting)`;
+  modeBtn.textContent = this.mode === 'push' ? 'push' : 'pull';
 
       // Re-publish current state under new keys
       this.setPos(this.pos);
@@ -208,9 +231,32 @@ export function addCylinderSingle(
     getLetter(){ return this.letter; }
   };
 
-  // Init label & position/signals
+    // Init label & position/signals
   comp.setLetter(initialLetter);
   comp.setPos(comp.pos);
+
+    // expose the mode button so the outer UI can hide/show it during simulation
+    comp.modeBtn = modeBtn;
+
+  // mode toggle handler — move port and set default position
+  modeBtn.addEventListener('click', (e)=>{
+    e.stopPropagation();
+    comp.mode = (comp.mode === 'push') ? 'pull' : 'push';
+    modeBtn.textContent = comp.mode === 'push' ? 'push' : 'pull';
+
+    // move port to other end
+    const newCx = (comp.mode === 'pull') ? (W - 12) : 12;
+    const pEl = portEls.A; const tEl = portTextEls.A;
+    pEl.setAttribute('cx', s(newCx));
+    tEl.setAttribute('x', s(newCx));
+    comp.ports.A.cx = s(newCx);
+
+    // when switching to pull, default to extended; when switching to push, default to retracted
+    comp.normallyExtended = (comp.mode === 'pull');
+    comp.setPos(comp.normallyExtended ? 1 : 0);
+
+    redrawConnections?.();
+  });
 
   // Letter edit on dblclick
   label.addEventListener('dblclick', (e)=>{

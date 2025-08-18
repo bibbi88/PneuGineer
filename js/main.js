@@ -669,7 +669,7 @@ function createWireLabel(){
 
 function addConnection(from, to){
   const path = createWirePath();
-  const label = createWireLabel();
+  const label = createWireLabel(); // Create a label for the wire
   connLayer.appendChild(path);
   connLayer.appendChild(label);
 
@@ -1026,7 +1026,7 @@ function computePressureSet(){
   const key = (id,port)=> `${id}:${port}`;
 
   // 1) graph of wires
-  const adj = new Map();
+  const adj = new Map(); // Adjacency list for the graph
   const addUndirected = (a,b)=>{
     if (!adj.has(a)) adj.set(a, new Set());
     if (!adj.has(b)) adj.set(b, new Set());
@@ -1152,7 +1152,7 @@ function simulate(dt){
     if (typeof c.recompute === 'function') c.recompute();
   });
 
-  if (playing){
+  if (playing){ // If the simulation is playing
     lastPressure = computePressureSet();
   } else if (simMode === Modes.STOP){
     lastPressure = new Set();
@@ -1200,6 +1200,21 @@ function simulate(dt){
       c.ports[k].el?.classList.toggle('pressurized', pressed);
       if (simMode!==Modes.STOP) c.ports[k].el?.setAttribute('title', `${k}: ${pressed ? SOURCE_PRESSURE.toFixed(1) : '0.0'} bar`);
       else c.ports[k].el?.removeAttribute('title');
+      // determine if this port has any connection
+      // Note: some components (e.g. source) may expose the same DOM element under multiple port keys
+      // (e.g. OUT and P). To avoid false negatives we compare the actual port element used by
+      // connections rather than only the port key.
+      const portEl = c.ports[k]?.el;
+      const hasConn = connections.some(conn => {
+        if (conn.from.id === c.id){ const fromEl = c.ports?.[conn.from.port]?.el; if (fromEl && fromEl === portEl) return true; }
+        if (conn.to.id === c.id){ const toEl = c.ports?.[conn.to.port]?.el; if (toEl && toEl === portEl) return true; }
+        return false;
+      });
+      if (pressed && !hasConn){
+        c.ports[k].el?.classList.add('unconnected');
+      } else {
+        c.ports[k].el?.classList.remove('unconnected');
+      }
     }
   });
 
@@ -1211,14 +1226,15 @@ function simulate(dt){
       let target = cyl.pos;
 
       if (cyl.type === 'cylSingle'){
-        // single-acting: port A extends when pressurized, springs back when not
+        // single-acting: behavior depends on mode ('push' extends on A press, 'pull' retracts on A press)
         let aPress = false;
         const aConns = connections.filter(c=> (c.from.id===cyl.id && c.from.port==='A') || (c.to.id===cyl.id && c.to.port==='A'));
         aConns.forEach(conn=>{
           const other = (conn.from.id===cyl.id) ? conn.to : conn.from;
           if (isPress(other.id, other.port)) aPress = true;
         });
-        target = aPress ? 1 : 0;
+        if ((cyl.mode ?? 'push') === 'push') target = aPress ? 1 : 0;
+        else target = aPress ? 0 : 1;
       } else {
         // double-acting behavior: Cap vs Rod
         let capPress=false, rodPress=false;
@@ -1288,9 +1304,14 @@ function snapshotProject(){
     const base = { id:c.id, type:c.type, x:c.x, y:c.y };
   if (c.type==='valve52') return { ...base, state:c.state };
   if (c.type==='airValve32') return { ...base, active: !!(c.state?.active) };
-  if (c.type==='cylDouble' || c.type==='cylinder' || c.type==='cylSingle'){
+    if (c.type==='cylDouble' || c.type==='cylinder' || c.type==='cylSingle'){
       const letter = readCylinderLetterFromComp(c);
-      return { ...base, pos:c.pos??0, letter };
+      const out = { ...base, pos:c.pos??0, letter };
+      if (c.type==='cylSingle'){
+        out.mode = c.mode ?? 'push';
+        out.normallyExtended = !!c.normallyExtended;
+      }
+      return out;
     }
     if (c.type==='push32')  return { ...base, active: !!(c.state?.active) };
     if (c.type==='limit32'){
@@ -1359,8 +1380,9 @@ async function loadProject(data){
       }
     } else if (sc.type === 'cylSingle' || sc.type === 'cylinderSingle'){
       const letterProvider = sc.letter ? (()=> sc.letter) : getNextCylinderLetter;
-      // allow storing pos and letter
-      comp = addCylinderSingle(sc.x, sc.y, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid, letterProvider, setSignal);
+      // allow storing pos, letter, mode and normallyExtended
+      const opts = { normallyExtended: !!sc.normallyExtended, mode: sc.mode };
+      comp = addCylinderSingle(sc.x, sc.y, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid, letterProvider, setSignal, opts);
       if (typeof sc.pos==='number' && typeof comp.setPos==='function') comp.setPos(sc.pos);
       if (sc.letter){
         const idx = sc.letter.toUpperCase().charCodeAt(0) - 'A'.charCodeAt(0);
@@ -1478,7 +1500,8 @@ function resetSystem(){
       if (typeof c.setActive==='function') c.setActive(false);
       else if (typeof c.setState==='function') c.setState(0);
     }
-    else if ((c.type==='cylDouble'||c.type==='cylinder') && typeof c.setPos==='function') c.setPos(DEFAULT_CYL_POS);
+  else if (c.type==='cylSingle' && typeof c.setPos==='function') c.setPos(c.normallyExtended ? 1 : 0);
+  else if ((c.type==='cylDouble'||c.type==='cylinder') && typeof c.setPos==='function') c.setPos(DEFAULT_CYL_POS);
     else if (c.type==='push32'){ c.state.active=false; c.recompute?.(); }
     if (c.type==='valve52'){ c._pilot12Prev=false; c._pilot14Prev=false; }
   });
@@ -1518,13 +1541,18 @@ function wrapValveToggleGuard(valveComp){
 
     .wire { stroke:#000; stroke-width:2; fill:none; vector-effect: non-scaling-stroke; }
     .wire.preview { stroke:#888; stroke-dasharray:4 4; }
-    .wire.active { stroke:#d00; stroke-dasharray:6 6; animation: wireflow 1.2s linear infinite; }
+  /* Active wires (pressurized) use the port color (blue) */
+  .wire.active { stroke: var(--port); stroke-dasharray:6 6; animation: wireflow 1.2s linear infinite; }
     @keyframes wireflow { to { stroke-dashoffset: -12; } }
     .wire.selected { stroke:#0a74ff; stroke-width:3; }
     .comp.selected { outline: 2px dashed #0a74ff; outline-offset: 2px; }
 
-    .port { fill:#fff; stroke:#0a74ff; stroke-width:1.5; cursor: crosshair; }
-    .port.pressurized { fill:#e6f3ff; stroke:#0073e6; stroke-width:2; }
+  .port { fill:#fff; stroke:#0a74ff; stroke-width:1.5; cursor: crosshair; }
+  /* Ports that are pressurized during simulation are highlighted in the port color (blue) */
+  .port.pressurized { fill: var(--port); stroke: var(--port); stroke-width:2; }
+  /* If a pressurized port is not connected to any other component, blink it red to draw attention */
+  .port.pressurized.unconnected { fill: var(--accent); stroke: var(--accent); animation: portBlink 1.8s linear infinite; }
+  @keyframes portBlink { 0%,100% { opacity: 1; } 50% { opacity: 0.25; } }
 
     .wireLabel {
       font-family: system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
@@ -1612,6 +1640,14 @@ function updateModeButtons(){
   editableButtons.forEach(id=>{
     const b = document.getElementById(id);
     if (b) b.disabled = !canEdit();
+  });
+
+  // Hide per-component single-acting mode buttons while simulation is running
+  const shouldShowModeBtns = canEdit(); // only show when STOP/edit mode
+  components.forEach(c=>{
+    if (c && c.modeBtn && c.modeBtn.style){
+      c.modeBtn.style.display = shouldShowModeBtns ? '' : 'none';
+    }
   });
 }
 function addButtons(){
