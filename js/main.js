@@ -13,6 +13,7 @@
 
 import { addValve52 }        from './valve52.js';
 import { addCylinderDouble } from './cylinderDouble.js';
+import { addCylinderSingle } from './cylinderSingle.js';
 import { addSource }         from './source.js';
 import { addAndValve }       from './andValve.js';
 import { addOrValve }        from './orValve.js';
@@ -1202,27 +1203,40 @@ function simulate(dt){
     }
   });
 
-  // cylinder movement
+    // cylinder movement
   if (playing){
-    components.filter(c=>c.type==='cylDouble' || c.type==='cylinder').forEach(cyl=>{
+    components.filter(c=> c.type==='cylDouble' || c.type==='cylinder' || c.type==='cylSingle').forEach(cyl=>{
       const isPress = (id,port)=> lastPressure.has(`${id}:${port}`);
 
-      let capPress=false, rodPress=false;
-      const capConns = connections.filter(c=> (c.from.id===cyl.id && c.from.port==='Cap') || (c.to.id===cyl.id && c.to.port==='Cap'));
-      const rodConns = connections.filter(c=> (c.from.id===cyl.id && c.from.port==='Rod') || (c.to.id===cyl.id && c.to.port==='Rod'));
-
-      capConns.forEach(conn=>{
-        const other = (conn.from.id===cyl.id) ? conn.to : conn.from;
-        if (isPress(other.id, other.port)) capPress = true;
-      });
-      rodConns.forEach(conn=>{
-        const other = (conn.from.id===cyl.id) ? conn.to : conn.from;
-        if (isPress(other.id, other.port)) rodPress = true;
-      });
-
       let target = cyl.pos;
-      if (capPress && !rodPress) target = 1;
-      else if (!capPress && rodPress) target = 0;
+
+      if (cyl.type === 'cylSingle'){
+        // single-acting: port A extends when pressurized, springs back when not
+        let aPress = false;
+        const aConns = connections.filter(c=> (c.from.id===cyl.id && c.from.port==='A') || (c.to.id===cyl.id && c.to.port==='A'));
+        aConns.forEach(conn=>{
+          const other = (conn.from.id===cyl.id) ? conn.to : conn.from;
+          if (isPress(other.id, other.port)) aPress = true;
+        });
+        target = aPress ? 1 : 0;
+      } else {
+        // double-acting behavior: Cap vs Rod
+        let capPress=false, rodPress=false;
+        const capConns = connections.filter(c=> (c.from.id===cyl.id && c.from.port==='Cap') || (c.to.id===cyl.id && c.to.port==='Cap'));
+        const rodConns = connections.filter(c=> (c.from.id===cyl.id && c.from.port==='Rod') || (c.to.id===cyl.id && c.to.port==='Rod'));
+
+        capConns.forEach(conn=>{
+          const other = (conn.from.id===cyl.id) ? conn.to : conn.from;
+          if (isPress(other.id, other.port)) capPress = true;
+        });
+        rodConns.forEach(conn=>{
+          const other = (conn.from.id===cyl.id) ? conn.to : conn.from;
+          if (isPress(other.id, other.port)) rodPress = true;
+        });
+
+        if (capPress && !rodPress) target = 1;
+        else if (!capPress && rodPress) target = 0;
+      }
 
       const speed = 0.8;
       const dir = Math.sign(target - cyl.pos);
@@ -1272,9 +1286,9 @@ function readCylinderLetterFromComp(comp){
 function snapshotProject(){
   const comps = components.map(c=>{
     const base = { id:c.id, type:c.type, x:c.x, y:c.y };
-    if (c.type==='valve52') return { ...base, state:c.state };
-    if (c.type==='airValve32') return { ...base, active: !!(c.state?.active) };
-    if (c.type==='cylDouble' || c.type==='cylinder'){
+  if (c.type==='valve52') return { ...base, state:c.state };
+  if (c.type==='airValve32') return { ...base, active: !!(c.state?.active) };
+  if (c.type==='cylDouble' || c.type==='cylinder' || c.type==='cylSingle'){
       const letter = readCylinderLetterFromComp(c);
       return { ...base, pos:c.pos??0, letter };
     }
@@ -1338,6 +1352,15 @@ async function loadProject(data){
     } else if (sc.type === 'cylDouble' || sc.type==='cylinder'){
       const letterProvider = sc.letter ? (()=> sc.letter) : getNextCylinderLetter;
       comp = addCylinderDouble(sc.x, sc.y, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid, letterProvider, setSignal);
+      if (typeof sc.pos==='number' && typeof comp.setPos==='function') comp.setPos(sc.pos);
+      if (sc.letter){
+        const idx = sc.letter.toUpperCase().charCodeAt(0) - 'A'.charCodeAt(0);
+        if (!Number.isNaN(idx)) _maxCylIndex = Math.max(_maxCylIndex, idx);
+      }
+    } else if (sc.type === 'cylSingle' || sc.type === 'cylinderSingle'){
+      const letterProvider = sc.letter ? (()=> sc.letter) : getNextCylinderLetter;
+      // allow storing pos and letter
+      comp = addCylinderSingle(sc.x, sc.y, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid, letterProvider, setSignal);
       if (typeof sc.pos==='number' && typeof comp.setPos==='function') comp.setPos(sc.pos);
       if (sc.letter){
         const idx = sc.letter.toUpperCase().charCodeAt(0) - 'A'.charCodeAt(0);
@@ -1585,7 +1608,7 @@ function updateModeButtons(){
     ensureGridStyle();
   });
 
-  const editableButtons = ['addSource','addValve52','addAir32','addCylDouble','addAnd','addOr','addLimit32','addPush32','saveProj','loadProj','undoBtn','redoBtn'];
+  const editableButtons = ['addSource','addValve52','addAir32','addCylDouble','addCylSingle','addAnd','addOr','addLimit32','addPush32','saveProj','loadProj','undoBtn','redoBtn'];
   editableButtons.forEach(id=>{
     const b = document.getElementById(id);
     if (b) b.disabled = !canEdit();
@@ -1621,6 +1644,12 @@ function addButtons(){
     const r = workspaceBBox();
     addCylinderDouble(r.width*0.70, r.height*0.50, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid, getNextCylinderLetter, setSignal);
     pushHistory('Add cylinder');
+  });
+  ensureButton('addCylSingle','➕ Cylinder (single-acting)', ()=>{
+    if (!canEdit()) return;
+    const r = workspaceBBox();
+    addCylinderSingle(r.width*0.70, r.height*0.60, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid, getNextCylinderLetter, setSignal);
+    pushHistory('Add single cylinder');
   });
   ensureButton('addAnd',     '➕ AND valve', ()=>{
     if (!canEdit()) return;
