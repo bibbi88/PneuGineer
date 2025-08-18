@@ -1,6 +1,6 @@
 # PneuGineer
 
-Pneumasim is a light pneumatic simulation program aimed solely for educational purposes. The program has basic fundtionalities. Future development might add more components, but the aim is only to focus on flow logic, not flow calculations.
+PneuGineer is a light pneumatic simulation program aimed solely for educational purposes. The program has basic fundtionalities. Future development might add more components, but the aim is only to focus on flow logic, not flow calculations.
 
 ## What's new
 
