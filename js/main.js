@@ -96,8 +96,8 @@ function screenToWorld(clientX, clientY){
 
 function workspaceWorldSize(){
   const rect = workspaceBBox();
-  // Lock workspace scale to 1 (disable viewport zoom influence on geometry)
-  const scale = 1;
+  let scale = 1;
+  try { if (window.viewportHelpers && typeof window.viewportHelpers.getTransform === 'function') scale = window.viewportHelpers.getTransform().scale; } catch(e){}
   return { width: rect.width / scale, height: rect.height / scale, rect };
 }
 
@@ -105,8 +105,7 @@ function worldToScreen(wx, wy){
   // map world coords back to client coords (approx)
   try {
   const t = window.viewportHelpers?.getTransform?.();
-  // Ignore t.scale to enforce fixed-size components; only respect translation (tx/ty)
-  if (t){ return { x: t.tx + wx, y: t.ty + wy }; }
+  if (t){ return { x: t.tx + wx * t.scale, y: t.ty + wy * t.scale }; }
   } catch(e){}
   const rect = workspaceBBox();
   return { x: rect.left + wx, y: rect.top + wy };
