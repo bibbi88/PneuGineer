@@ -278,10 +278,18 @@ function polylineMidpoint(pts){
 }
 
 function pathFromPoints(pts){
-  let d = `M ${pts[0].x},${pts[0].y}`;
+  if (!pts || pts.length === 0) return '';
+  // collapse consecutive identical (or nearly identical) points to avoid zero-length segments
+  const out = [pts[0]];
   for (let i=1;i<pts.length;i++){
-    d += ` L ${pts[i].x},${pts[i].y}`;
+    const A = out[out.length-1];
+    const B = pts[i];
+    if (Math.abs(A.x - B.x) < 0.5 && Math.abs(A.y - B.y) < 0.5) continue;
+    out.push(B);
   }
+  if (out.length === 0) return '';
+  let d = `M ${out[0].x},${out[0].y}`;
+  for (let i=1;i<out.length;i++) d += ` L ${out[i].x},${out[i].y}`;
   return d;
 }
 
@@ -313,17 +321,21 @@ function computeConnectionGeometry(conn){
   let a0, b0;
   if (isValvePilotPort(c1, conn.from.port)){
     const dir = pilotDir(conn,'start');
-    const L = Math.max(6, Number(conn.stubStartLen ?? WIRE_STUB));
-    a0 = { x: a.x + dir*L, y: a.y };
+    const Lraw = Number(conn.stubStartLen ?? WIRE_STUB);
+    const L = (Lraw === 0) ? 0 : Math.max(6, Lraw);
+    a0 = (L === 0) ? { x: a.x, y: a.y } : { x: a.x + dir*L, y: a.y };
   } else {
-    a0 = makeEndpointStub(a, b, oStart);
+    const Lraw = Number(conn.stubStartLen ?? WIRE_STUB);
+    a0 = (Lraw === 0) ? { x: a.x, y: a.y } : makeEndpointStub(a, b, oStart);
   }
   if (isValvePilotPort(c2, conn.to.port)){
     const dir = pilotDir(conn,'end');
-    const L = Math.max(6, Number(conn.stubEndLen ?? WIRE_STUB));
-    b0 = { x: b.x + dir*L, y: b.y };
+    const Lraw = Number(conn.stubEndLen ?? WIRE_STUB);
+    const L = (Lraw === 0) ? 0 : Math.max(6, Lraw);
+    b0 = (L === 0) ? { x: b.x, y: b.y } : { x: b.x + dir*L, y: b.y };
   } else {
-    b0 = makeEndpointStub(b, a, oEnd);
+    const Lraw = Number(conn.stubEndLen ?? WIRE_STUB);
+    b0 = (Lraw === 0) ? { x: b.x, y: b.y } : makeEndpointStub(b, a, oEnd);
   }
 
   const guides = Array.isArray(conn.guides) ? conn.guides : [];
@@ -621,7 +633,8 @@ function addJunction(
 
   const label = document.createElement('div');
   label.className = 'label';
-  label.textContent = 'J';
+  // hide the textual label for junctions — render a solid black ball instead
+  label.textContent = '';
 
   const svg = document.createElementNS(NS,'svg');
   svg.classList.add('compSvg');
@@ -633,22 +646,21 @@ function addJunction(
   const GX = 12, GY = 12;
   g.setAttribute('transform', `translate(${GX},${GY})`);
 
-  const dot = document.createElementNS(NS,'circle');
-  dot.setAttribute('cx', 0); dot.setAttribute('cy', 0);
-  dot.setAttribute('r', 3);
-  dot.setAttribute('fill', '#000');
-
+  // Single solid port circle (black) used as the junction ball and clickable port
   const port = document.createElementNS(NS,'circle');
   port.setAttribute('class','port');
-  port.setAttribute('r', 6);
+  port.setAttribute('r', 4);
   port.setAttribute('cx', 0);
   port.setAttribute('cy', 0);
+  // Use inline style so the global .port CSS rule (which sets fill to white) doesn't override
+  // the junction appearance. Inline style has higher priority than the stylesheet.
+  port.setAttribute('style', 'fill:#000; stroke:#000; stroke-width:1px;');
   port.addEventListener('click', (e)=>{
     e.stopPropagation();
     handlePortClick(comp, 'J', port);
   });
 
-  g.append(dot, port);
+  g.append(port);
   svg.appendChild(g);
   el.append(label, svg);
   compLayer.appendChild(el);
@@ -888,12 +900,23 @@ window.addEventListener('click', (e)=>{
       const j = addJunction(hit.x, hit.y, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
 
       // split wire
-      removeConnection(hit.conn);
-      addConnection(hit.conn.from, { id:j.id, port:'J' });
-      addConnection({ id:j.id, port:'J' }, hit.conn.to);
+      // split wire: preserve guides and avoid extra stubbed segments at the split
+      const old = hit.conn;
+      removeConnection(old);
+      const aConn = addConnection(old.from, { id:j.id, port:'J' });
+      const bConn = addConnection({ id:j.id, port:'J' }, old.to);
+      // copy guides from the original connection to both new segments where sensible
+      if (Array.isArray(old.guides) && old.guides.length>0){
+        aConn.guides = old.guides.slice();
+        bConn.guides = old.guides.slice();
+      }
+      // set zero-length stubs at the junction so the path does not add small extra segments
+      aConn.stubEndLen = 0;
+      bConn.stubStartLen = 0;
 
-      // connect the pending endpoint to the junction
-      addConnection(pendingPort, { id:j.id, port:'J' });
+      // connect the pending endpoint to the junction (no extra stub)
+      const pConn = addConnection(pendingPort, { id:j.id, port:'J' });
+      pConn.stubEndLen = 0; pConn.stubStartLen = 0;
 
       const prevComp = components.find(c=>c.id===pendingPort.id);
       prevComp?.ports[pendingPort.port]?.el?.setAttribute('fill','#fff');
