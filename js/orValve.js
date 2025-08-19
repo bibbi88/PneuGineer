@@ -3,15 +3,13 @@
 // Port layout: A (left side), B (right side), OUT (top).
 // Länkar: A/B horisontellt in från sidorna, OUT vertikalt ned från toppen.
 
-const SCALE = 1;
-
 export function addOrValve(
   x, y,
   compLayer, components,
   handlePortClick, makeDraggable, redrawConnections, uid
 ){
   const id = uid();
-  const s = (n)=> n * SCALE;
+  const s = (n)=> n; // no scaling
 
   // Geometry
   const SVG_W=200, SVG_H=180, GX=10, GY=20;
@@ -117,18 +115,11 @@ export function addOrValve(
     c.addEventListener('click', (e)=>{ e.stopPropagation(); handlePortClick(comp, key, c); });
 
     const t = document.createElementNS(NS,'text');
-    if (side==='L'){
-      t.setAttribute('x', s(p.cx - 14)); t.setAttribute('y', s(p.cy + 4));
-      t.setAttribute('text-anchor','end');
-    } else if (side==='R'){
-      t.setAttribute('x', s(p.cx + 14)); t.setAttribute('y', s(p.cy + 4));
-      t.setAttribute('text-anchor','start');
-    } else { // T (top) – flytta OUT-texten lite åt höger
-      t.setAttribute('x', s(p.cx + 12));
-      t.setAttribute('y', s(p.cy - 10));
-      t.setAttribute('text-anchor','start');
-    }
-    t.setAttribute('font-size', Math.max(9, 11*SCALE));
+  // Place all port labels to the left of the port
+  t.setAttribute('x', s(p.cx - 14));
+  t.setAttribute('y', s(p.cy + 4));
+  t.setAttribute('text-anchor','end');
+  t.setAttribute('font-size', Math.max(9, 11));
     t.textContent = key;
 
     return { c, t };

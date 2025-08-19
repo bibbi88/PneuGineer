@@ -20,6 +20,8 @@ import { addOrValve }        from './orValve.js';
 import { addLimitValve32 }   from './limitValve32.js';
 import { addPushButton32 }   from './pushButton32.js';
 import { addAirValve32 }     from './airValve32.js';
+import { addRestrictor }     from './restrictor.js';
+import { addCheckValve }     from './checkValve.js';
 
 /* ---------- DOM layers ---------- */
 const compLayer = document.getElementById('compLayer');
@@ -70,15 +72,55 @@ function workspaceBBox(){ return compLayer.getBoundingClientRect(); }
 function canEdit(){ return simMode === Modes.STOP; }
 function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
 
+function rotateComponent(comp, angle){
+  if (!comp || !comp.el) return;
+  const prev = Number(comp.el.dataset.rot || 0);
+  const next = (prev + angle) % 360;
+  comp.el.dataset.rot = next;
+  // preserve existing translate(-50%,-50%) used for centering
+  comp.el.style.transform = `translate(-50%,-50%) rotate(${next}deg)`;
+  // if component has ports with absolute coords inside svg, we may need to recompute;
+  if (typeof comp.recompute === 'function') comp.recompute();
+}
+
+// Map screen (client) coordinates into workspace world coordinates (taking viewport pan/zoom into account)
+function screenToWorld(clientX, clientY){
+  try {
+    if (window.viewportHelpers && typeof window.viewportHelpers.clientToWorld === 'function'){
+      return window.viewportHelpers.clientToWorld(clientX, clientY);
+    }
+  } catch(e){}
+  const rect = workspaceBBox();
+  return { x: clientX - rect.left, y: clientY - rect.top };
+}
+
+function workspaceWorldSize(){
+  const rect = workspaceBBox();
+  let scale = 1;
+  try { if (window.viewportHelpers && typeof window.viewportHelpers.getTransform === 'function') scale = window.viewportHelpers.getTransform().scale; } catch(e){}
+  return { width: rect.width / scale, height: rect.height / scale, rect };
+}
+
+function worldToScreen(wx, wy){
+  // map world coords back to client coords (approx)
+  try {
+  const t = window.viewportHelpers?.getTransform?.();
+  if (t){ return { x: t.tx + wx * t.scale, y: t.ty + wy * t.scale }; }
+  } catch(e){}
+  const rect = workspaceBBox();
+  return { x: rect.left + wx, y: rect.top + wy };
+}
+
 /* Fine nudge with arrow keys (Shift = x10) */
 function nudgeSelectedComponents(dx, dy){
   if (!canEdit()) return;
   if (selectedComponents.size === 0) return;
 
   const rect = workspaceBBox();
+  const ws = workspaceWorldSize();
   selectedComponents.forEach(c=>{
-    const nx = snap(clamp(c.x + dx, 40, rect.width  - 40));
-    const ny = snap(clamp(c.y + dy, 40, rect.height - 40));
+    const nx = snap(clamp(c.x + dx, 40, ws.width  - 40));
+    const ny = snap(clamp(c.y + dy, 40, ws.height - 40));
     c.x = nx; c.y = ny;
     c.el.style.left = nx + 'px';
     c.el.style.top  = ny + 'px';
@@ -106,12 +148,23 @@ function getNextCylinderLetter() {
 function portGlobalPosition(comp, portKey){
   const p = comp.ports?.[portKey];
   if (!p) return { x: comp.x, y: comp.y };
+  // If the port DOM element exists, compute its center in world coordinates (respects rotation/transform)
+  try {
+    if (p.el instanceof Element){
+      const r = p.el.getBoundingClientRect();
+      const cx = r.left + r.width/2;
+      const cy = r.top  + r.height/2;
+      const world = screenToWorld(cx, cy);
+      return { x: world.x, y: world.y };
+    }
+  } catch(e){}
+  // Fallback to component-local coordinates (SVG-origin aware)
   if (comp.svgW && comp.svgH && (comp.gx !== undefined) && (comp.gy !== undefined)){
     const svg0x = comp.x - comp.svgW/2;
     const svg0y = comp.y - comp.svgH/2;
-    return { x: svg0x + comp.gx + p.cx, y: svg0y + comp.gy + p.cy };
+    return { x: svg0x + comp.gx + (p.cx ?? 0), y: svg0y + comp.gy + (p.cy ?? 0) };
   }
-  return { x: comp.x + p.cx, y: comp.y + p.cy };
+  return { x: comp.x + (p.cx ?? 0), y: comp.y + (p.cy ?? 0) };
 }
 
 /* ---------- Wires (orthogonal) ---------- */
@@ -127,7 +180,9 @@ function getPortEntryOrientation(comp, portKey){
 }
 function isValvePilotPort(comp, portKey){
   if (comp?.type === 'valve52'    && (portKey === '12' || portKey === '14')) return true;
-  if (comp?.type === 'airValve32' && portKey === '12') return true;   // ⟵ add
+  // air-piloted 3/2 may expose pilot as either 12 or 14 depending on implementation;
+  // treat both as pilots so routing/stubs and pilot logic work regardless.
+  if (comp?.type === 'airValve32' && (portKey === '12' || portKey === '14')) return true;
   return false;
 }
 
@@ -223,10 +278,18 @@ function polylineMidpoint(pts){
 }
 
 function pathFromPoints(pts){
-  let d = `M ${pts[0].x},${pts[0].y}`;
+  if (!pts || pts.length === 0) return '';
+  // collapse consecutive identical (or nearly identical) points to avoid zero-length segments
+  const out = [pts[0]];
   for (let i=1;i<pts.length;i++){
-    d += ` L ${pts[i].x},${pts[i].y}`;
+    const A = out[out.length-1];
+    const B = pts[i];
+    if (Math.abs(A.x - B.x) < 0.5 && Math.abs(A.y - B.y) < 0.5) continue;
+    out.push(B);
   }
+  if (out.length === 0) return '';
+  let d = `M ${out[0].x},${out[0].y}`;
+  for (let i=1;i<out.length;i++) d += ` L ${out[i].x},${out[i].y}`;
   return d;
 }
 
@@ -258,17 +321,21 @@ function computeConnectionGeometry(conn){
   let a0, b0;
   if (isValvePilotPort(c1, conn.from.port)){
     const dir = pilotDir(conn,'start');
-    const L = Math.max(6, Number(conn.stubStartLen ?? WIRE_STUB));
-    a0 = { x: a.x + dir*L, y: a.y };
+    const Lraw = Number(conn.stubStartLen ?? WIRE_STUB);
+    const L = (Lraw === 0) ? 0 : Math.max(6, Lraw);
+    a0 = (L === 0) ? { x: a.x, y: a.y } : { x: a.x + dir*L, y: a.y };
   } else {
-    a0 = makeEndpointStub(a, b, oStart);
+    const Lraw = Number(conn.stubStartLen ?? WIRE_STUB);
+    a0 = (Lraw === 0) ? { x: a.x, y: a.y } : makeEndpointStub(a, b, oStart);
   }
   if (isValvePilotPort(c2, conn.to.port)){
     const dir = pilotDir(conn,'end');
-    const L = Math.max(6, Number(conn.stubEndLen ?? WIRE_STUB));
-    b0 = { x: b.x + dir*L, y: b.y };
+    const Lraw = Number(conn.stubEndLen ?? WIRE_STUB);
+    const L = (Lraw === 0) ? 0 : Math.max(6, Lraw);
+    b0 = (L === 0) ? { x: b.x, y: b.y } : { x: b.x + dir*L, y: b.y };
   } else {
-    b0 = makeEndpointStub(b, a, oEnd);
+    const Lraw = Number(conn.stubEndLen ?? WIRE_STUB);
+    b0 = (Lraw === 0) ? { x: b.x, y: b.y } : makeEndpointStub(b, a, oEnd);
   }
 
   const guides = Array.isArray(conn.guides) ? conn.guides : [];
@@ -309,6 +376,7 @@ function applySelectedClasses(){
   components.forEach(c=>{
     c.el.classList.toggle('selected', selectedComponents.has(c));
   });
+  updateInspector();
 }
 function clearSelectedConnection(){
   if (selectedConnection){
@@ -476,6 +544,33 @@ function showCtxMenu(x, y, { type, payload }){
     }
   }
 
+  if (type==='component' && payload?.comp){
+    // expose current selection for external context menu handlers
+    try { window.selectedComponentsForRotate = [...selectedComponents]; } catch {}
+    addBtn('\u21bb Rotate clockwise', ()=>{
+      const sel = [...selectedComponents];
+      sel.forEach(c => rotateComponent(c, 90));
+      pushHistory('Rotate components');
+    });
+    addBtn('\u21ba Rotate counter-clockwise', ()=>{
+      const sel = [...selectedComponents];
+      sel.forEach(c => rotateComponent(c, -90));
+      pushHistory('Rotate components');
+    });
+    // Resolve a single component target robustly: prefer payload, else single selection, else element under cursor
+    let compTarget = payload?.comp || (selectedComponents.size===1 ? [...selectedComponents][0] : null);
+    if (!compTarget){
+      try {
+        const el = document.elementFromPoint(x, y);
+        const compEl = el ? el.closest('.comp') : null;
+        if (compEl){
+          compTarget = components.find(c=> c.el === compEl) || null;
+        }
+      } catch(e){ compTarget = null; }
+    }
+  // Restrictor editing temporarily hidden from context menu
+  }
+
   const delBtn = document.createElement('button');
   delBtn.textContent = canEdit() ? '🗑️ Delete' : '🔒 Editing requires STOP';
   delBtn.disabled = !canEdit();
@@ -538,7 +633,8 @@ function addJunction(
 
   const label = document.createElement('div');
   label.className = 'label';
-  label.textContent = 'J';
+  // hide the textual label for junctions — render a solid black ball instead
+  label.textContent = '';
 
   const svg = document.createElementNS(NS,'svg');
   svg.classList.add('compSvg');
@@ -550,22 +646,21 @@ function addJunction(
   const GX = 12, GY = 12;
   g.setAttribute('transform', `translate(${GX},${GY})`);
 
-  const dot = document.createElementNS(NS,'circle');
-  dot.setAttribute('cx', 0); dot.setAttribute('cy', 0);
-  dot.setAttribute('r', 3);
-  dot.setAttribute('fill', '#000');
-
+  // Single solid port circle (black) used as the junction ball and clickable port
   const port = document.createElementNS(NS,'circle');
   port.setAttribute('class','port');
-  port.setAttribute('r', 6);
+  port.setAttribute('r', 4);
   port.setAttribute('cx', 0);
   port.setAttribute('cy', 0);
+  // Use inline style so the global .port CSS rule (which sets fill to white) doesn't override
+  // the junction appearance. Inline style has higher priority than the stylesheet.
+  port.setAttribute('style', 'fill:#000; stroke:#000; stroke-width:1px;');
   port.addEventListener('click', (e)=>{
     e.stopPropagation();
     handlePortClick(comp, 'J', port);
   });
 
-  g.append(dot, port);
+  g.append(port);
   svg.appendChild(g);
   el.append(label, svg);
   compLayer.appendChild(el);
@@ -600,9 +695,8 @@ function makeDraggable(comp){
     }
 
     dragging = true;
-    const rect = workspaceBBox();
-    startMouseX = e.clientX - rect.left;
-    startMouseY = e.clientY - rect.top;
+  const p0 = screenToWorld(e.clientX, e.clientY);
+  startMouseX = p0.x; startMouseY = p0.y;
 
     const group = (selectedComponents.size > 1);
     if (group){
@@ -623,13 +717,13 @@ function makeDraggable(comp){
   }
   function onMove(e){
     if(!dragging) return;
-    const rect = workspaceBBox();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
+  const p1 = screenToWorld(e.clientX, e.clientY);
+  const mx = p1.x; const my = p1.y;
 
+    const ws = workspaceWorldSize();
     offsets.forEach(o=>{
-      const nx = snap(clamp(mx - o.dx, 40, rect.width-40));
-      const ny = snap(clamp(my - o.dy, 40, rect.height-40));
+      const nx = snap(clamp(mx - o.dx, 40, ws.width-40));
+      const ny = snap(clamp(my - o.dy, 40, ws.height-40));
       o.comp.x = nx; o.comp.y = ny;
       o.comp.el.style.left = nx + 'px';
       o.comp.el.style.top  = ny + 'px';
@@ -779,9 +873,8 @@ function hitTestWire(px, py, threshold=8){
 window.addEventListener('click', (e)=>{
   if (!canEdit()) return;
 
-  const rect = workspaceBBox();
-  const px = e.clientX - rect.left;
-  const py = e.clientY - rect.top;
+  const p = screenToWorld(e.clientX, e.clientY);
+  const px = p.x; const py = p.y;
 
   // If we are linking and are over a port → finish to that port
   if (pendingPort && hoverPort){
@@ -807,12 +900,23 @@ window.addEventListener('click', (e)=>{
       const j = addJunction(hit.x, hit.y, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
 
       // split wire
-      removeConnection(hit.conn);
-      addConnection(hit.conn.from, { id:j.id, port:'J' });
-      addConnection({ id:j.id, port:'J' }, hit.conn.to);
+      // split wire: preserve guides and avoid extra stubbed segments at the split
+      const old = hit.conn;
+      removeConnection(old);
+      const aConn = addConnection(old.from, { id:j.id, port:'J' });
+      const bConn = addConnection({ id:j.id, port:'J' }, old.to);
+      // copy guides from the original connection to both new segments where sensible
+      if (Array.isArray(old.guides) && old.guides.length>0){
+        aConn.guides = old.guides.slice();
+        bConn.guides = old.guides.slice();
+      }
+      // set zero-length stubs at the junction so the path does not add small extra segments
+      aConn.stubEndLen = 0;
+      bConn.stubStartLen = 0;
 
-      // connect the pending endpoint to the junction
-      addConnection(pendingPort, { id:j.id, port:'J' });
+      // connect the pending endpoint to the junction (no extra stub)
+      const pConn = addConnection(pendingPort, { id:j.id, port:'J' });
+      pConn.stubEndLen = 0; pConn.stubStartLen = 0;
 
       const prevComp = components.find(c=>c.id===pendingPort.id);
       prevComp?.ports[pendingPort.port]?.el?.setAttribute('fill','#fff');
@@ -844,9 +948,8 @@ window.addEventListener('click', (e)=>{
 window.addEventListener('dblclick', (e)=>{
   if (!canEdit()) return;
 
-  const rect = workspaceBBox();
-  const px = e.clientX - rect.left;
-  const py = e.clientY - rect.top;
+  const p = screenToWorld(e.clientX, e.clientY);
+  const px = p.x; const py = p.y;
 
   const hit = hitTestWire(px, py, 6);
   if (!hit) return;
@@ -868,9 +971,8 @@ window.addEventListener('dblclick', (e)=>{
 window.addEventListener('contextmenu', (e)=>{
   if (!canEdit()) return;
 
-  const rect = workspaceBBox();
-  const px = e.clientX - rect.left;
-  const py = e.clientY - rect.top;
+  const p = screenToWorld(e.clientX, e.clientY);
+  const px = p.x; const py = p.y;
 
   const hit = hitTestWire(px, py, 6);
   if (hit){
@@ -884,9 +986,8 @@ window.addEventListener('contextmenu', (e)=>{
 window.addEventListener('mousemove', (e)=>{
   if (!pendingPort) return;
 
-  const rect = workspaceBBox();
-  const px = e.clientX - rect.left;
-  const py = e.clientY - rect.top;
+  const p = screenToWorld(e.clientX, e.clientY);
+  const px = p.x; const py = p.y;
 
   const near = findNearestPort(px, py, pendingPort);
   setHoverPort(near);
@@ -945,10 +1046,9 @@ function endMarquee(x, y){
   const right  = Math.max(marqueeStart.x, x);
   const bottom = Math.max(marqueeStart.y, y);
 
-  const rect = workspaceBBox();
   const sel = components.filter(c=>{
-    const sx = rect.left + c.x;
-    const sy = rect.top  + c.y;
+    const screen = worldToScreen(c.x, c.y);
+    const sx = screen.x; const sy = screen.y;
     return sx>=left && sx<=right && sy>=top && sy<=bottom;
   });
 
@@ -1034,6 +1134,12 @@ function computePressureSet(){
   };
   connections.forEach(conn=>{
     addUndirected(key(conn.from.id, conn.from.port), key(conn.to.id, conn.to.port));
+  });
+
+  // Restrictors connect IN<->OUT for steady-state pressure propagation (dynamics handled elsewhere)
+  components.forEach(rs=>{
+    if (rs.type !== 'restrictor') return;
+    addUndirected(key(rs.id,'IN'), key(rs.id,'OUT'));
   });
 
   // 2) start from sources
@@ -1125,6 +1231,20 @@ function computePressureSet(){
       if (pressurized.size !== before) changed = true;
     });
 
+    // Check valves: allow IN->OUT only (treat as directional)
+    components.forEach(cv=>{
+      if (cv.type!=='checkValve') return;
+      const nIn = `${cv.id}:IN`, nOut = `${cv.id}:OUT`;
+      const before = pressurized.size;
+      if (pressurized.has(nIn)) pressurized.add(nOut);
+      // Do NOT propagate OUT->IN (one-way)
+      if (pressurized.size !== before) changed = true;
+    });
+
+  // Restrictors: their pass-state (_open) is handled separately in simulate() and
+  // exposed here via conditional adjacency added earlier.
+    // (restrictor state is not altering connectivity for steady-state pressure graph)
+
     if (changed){
       const queue = [...pressurized];
       while(queue.length){
@@ -1143,6 +1263,18 @@ function computePressureSet(){
 
 let lastPressure = new Set();
 let stepOnceFlag = false;
+// Debug overlay
+let __debugOverlay = null;
+function ensureDebugOverlay(){
+  if (__debugOverlay) return __debugOverlay;
+  const d = document.createElement('div');
+  d.style.position = 'fixed'; d.style.right = '8px'; d.style.top = '8px'; d.style.zIndex = 9999;
+  d.style.background = 'rgba(255,255,255,0.9)'; d.style.border = '1px solid #ccc'; d.style.padding = '6px'; d.style.fontSize='12px';
+  d.style.maxWidth = '320px'; d.style.maxHeight = '40vh'; d.style.overflow='auto'; d.id = '__debugOverlay';
+  document.body.appendChild(d);
+  __debugOverlay = d;
+  return d;
+}
 
 /* ---------- Simulation ---------- */
 function simulate(dt){
@@ -1178,13 +1310,14 @@ function simulate(dt){
       v._pilot14Prev = p14;
     });
 
-    // 3/2 air-piloted: pilot 12 ⇒ active (2↔1), else inactive (2↔3)
+    // 3/2 air-piloted: pilot (12 or 14) ⇒ active (2→1), else inactive (2→3)
     components.forEach(v=>{
       if (v.type!=='airValve32') return;
-      const p12 = lastPressure.has(`${v.id}:12`);
+      // Some air valve components expose pilot as '14' (moving port) while wiring or earlier logic
+      // might reference '12'. Treat either port as a pilot source.
+      const p12 = lastPressure.has(`${v.id}:12`) || lastPressure.has(`${v.id}:14`);
       const desired = !!p12;
       if (v.state?.active !== desired){
-        // Support both setActive and setState alias
         if (typeof v.setActive === 'function') v.setActive(desired);
         else if (typeof v.setState === 'function') v.setState(desired ? 1 : 0);
       }
@@ -1250,13 +1383,121 @@ function simulate(dt){
           if (isPress(other.id, other.port)) rodPress = true;
         });
 
-        if (capPress && !rodPress) target = 1;
-        else if (!capPress && rodPress) target = 0;
-      }
+          if (capPress && !rodPress) target = 1;
+          else if (!capPress && rodPress) target = 0;
+        }
 
-      const speed = 0.8;
-      const dir = Math.sign(target - cyl.pos);
-      if (dir!==0) cyl.setPos(cyl.pos + dir*speed*dt);
+        // Base speed (units/sec). We'll modulate speed by any restrictors encountered on the
+        // pressure path to the cylinder ports (multiplicative factors based on flowPct).
+        const baseSpeed = 0.8;
+
+        const computePortMultiplier = (startId, startPort)=>{
+          const startKey = `${startId}:${startPort}`;
+          // Find the shortest path from startKey to any pressurized source port
+          const sourceKeys = [];
+          components.forEach(c=>{
+            if (c.type === 'source'){
+              if (c.ports?.OUT) sourceKeys.push(`${c.id}:OUT`);
+              if (c.ports?.P)   sourceKeys.push(`${c.id}:P`);
+            }
+          });
+          // only consider sources that are actually pressurized in lastPressure
+          const targets = sourceKeys.filter(sk => lastPressure.has(sk));
+          if (targets.length === 0) return 1;
+
+          const parent = new Map();
+          const q = [startKey];
+          parent.set(startKey, null);
+          let foundTarget = null;
+          while(q.length && !foundTarget){
+            const cur = q.shift();
+            // early exit if cur is a pressurized source
+            if (targets.includes(cur)) { foundTarget = cur; break; }
+            for (const conn of connections){
+              const a = `${conn.from.id}:${conn.from.port}`;
+              const b = `${conn.to.id}:${conn.to.port}`;
+              let other = null;
+              if (a === cur) other = b;
+              else if (b === cur) other = a;
+              if (!other) continue;
+              if (!parent.has(other)){
+                parent.set(other, cur);
+                q.push(other);
+              }
+            }
+          }
+          if (!foundTarget) return 1;
+
+          // reconstruct path from startKey -> foundTarget
+          const path = [];
+          let cur = foundTarget;
+          while(cur !== null){ path.push(cur); cur = parent.get(cur); }
+          // path currently from target -> startKey, reverse it
+          path.reverse();
+
+          // collect unique restrictor components on the path
+          const restrictorIds = new Set();
+          for (const node of path){
+            const m = node.match(/^(\d+):(.+)$/);
+            if (!m) continue;
+            const cid = Number(m[1]);
+            const comp = components.find(cc=> cc.id === cid);
+            if (comp && comp.type === 'restrictor') restrictorIds.add(cid);
+          }
+          // Debug: show path and restrictors
+          try {
+            const dbg = ensureDebugOverlay();
+            const pathReadable = path.map(n=>{
+              const mm = n.match(/^(\d+):(.+)$/);
+              if (!mm) return n;
+              const cid = Number(mm[1]); const p = mm[2];
+              const comp = components.find(cc=> cc.id === cid);
+              return comp ? `${comp.type}:${cid}.${p}` : `${cid}:${p}`;
+            }).join(' -> ');
+            const rList = [...restrictorIds].map(id=>{
+              const rc = components.find(cc=> cc.id === id);
+              return rc ? `${id}(${rc.flowPct ?? 100}%)` : String(id);
+            }).join(', ');
+            const el = document.createElement('div');
+            el.style.fontSize='12px'; el.style.borderTop='1px dashed #ccc'; el.style.paddingTop='4px';
+            el.textContent = `PATH from ${startKey}: ${pathReadable} | restrictors: ${rList || 'none'}`;
+            dbg.appendChild(el);
+            while(dbg.childNodes.length > 80) dbg.removeChild(dbg.firstChild);
+          } catch(e){}
+
+          if (restrictorIds.size === 0) return 1;
+          let mul = 1;
+          for (const rid of restrictorIds){
+            const rc = components.find(cc=> cc.id === rid);
+            mul *= ((rc.flowPct ?? 100)/100);
+          }
+          return mul;
+        };
+
+    const dir = Math.sign(target - cyl.pos);
+    if (dir !== 0){
+          let multiplier = 1;
+          if (cyl.type === 'cylSingle'){
+            const aConns = connections.filter(c=> (c.from.id===cyl.id && c.from.port==='A') || (c.to.id===cyl.id && c.to.port==='A'));
+            aConns.forEach(conn=>{
+              const other = (conn.from.id===cyl.id) ? conn.to : conn.from;
+              multiplier *= computePortMultiplier(other.id, other.port);
+            });
+          } else {
+            const capConns = connections.filter(c=> (c.from.id===cyl.id && c.from.port==='Cap') || (c.to.id===cyl.id && c.to.port==='Cap'));
+            const rodConns = connections.filter(c=> (c.from.id===cyl.id && c.from.port==='Rod') || (c.to.id===cyl.id && c.to.port==='Rod'));
+            capConns.forEach(conn=>{ const other = (conn.from.id===cyl.id) ? conn.to : conn.from; multiplier *= computePortMultiplier(other.id, other.port); });
+            rodConns.forEach(conn=>{ const other = (conn.from.id===cyl.id) ? conn.to : conn.from; multiplier *= computePortMultiplier(other.id, other.port); });
+          }
+          const speed = baseSpeed * multiplier;
+          cyl.setPos(cyl.pos + dir*speed*dt);
+          try {
+            const dbg = ensureDebugOverlay();
+            const info = `Cyl ${cyl.id} mult=${multiplier.toFixed(3)} speed=${(baseSpeed*multiplier).toFixed(3)}`;
+            const el = document.createElement('div'); el.textContent = info; dbg.appendChild(el);
+            while(dbg.childNodes.length > 20) dbg.removeChild(dbg.firstChild);
+          } catch(e){}
+        }
     });
   }
 
@@ -1304,6 +1545,8 @@ function snapshotProject(){
     const base = { id:c.id, type:c.type, x:c.x, y:c.y };
   if (c.type==='valve52') return { ...base, state:c.state };
   if (c.type==='airValve32') return { ...base, active: !!(c.state?.active) };
+  if (c.type==='restrictor') return { ...base, flowPct: Number(c.flowPct ?? 100) };
+  if (c.type==='checkValve') return { ...base };
     if (c.type==='cylDouble' || c.type==='cylinder' || c.type==='cylSingle'){
       const letter = readCylinderLetterFromComp(c);
       const out = { ...base, pos:c.pos??0, letter };
@@ -1392,6 +1635,11 @@ async function loadProject(data){
       comp = addAndValve(sc.x, sc.y, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
     } else if (sc.type === 'orValve'){
       comp = addOrValve(sc.x, sc.y, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
+    } else if (sc.type === 'restrictor'){
+  comp = addRestrictor(sc.x, sc.y, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
+  if (typeof sc.flowPct === 'number') { comp.flowPct = sc.flowPct; comp.updateLabel?.(); }
+    } else if (sc.type === 'checkValve'){
+      comp = addCheckValve(sc.x, sc.y, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
     } else if (sc.type === 'limit32'){
       const lv = addLimitValve32(sc.x, sc.y, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid, getSignal);
       if (typeof sc.sensor === 'string' && sc.sensor.trim()){
@@ -1473,6 +1721,34 @@ function ensureButton(id, label, onClick){
   const fresh = btn.cloneNode(true);
   btn.replaceWith(fresh);
   fresh.addEventListener('click', onClick);
+}
+
+// Simple inspector: shows controls for a single selected component
+function ensureInspector(){
+  let insp = document.getElementById('inspector');
+  if (!insp){
+    insp = document.createElement('div'); insp.id = 'inspector'; insp.style.padding = '8px';
+    const side = document.querySelector('.sidebar') || document.body;
+    side.appendChild(insp);
+  }
+  return insp;
+}
+
+function updateInspector(){
+  const insp = ensureInspector();
+  insp.innerHTML = '';
+  if (selectedComponents.size !== 1) return;
+  const comp = [...selectedComponents][0];
+  if (!comp) return;
+  if (comp.type === 'restrictor'){
+    const title = document.createElement('div'); title.textContent = 'Restrictor'; title.style.fontWeight = '600'; insp.appendChild(title);
+    const label = document.createElement('div'); label.textContent = `Flow: ${Math.round(comp.flowPct ?? 100)}%`; label.style.margin = '6px 0'; insp.appendChild(label);
+    const input = document.createElement('input'); input.type = 'range'; input.min = '1'; input.max = '100'; input.value = String(comp.flowPct ?? 100);
+    input.addEventListener('input', ()=>{ comp.flowPct = Number(input.value); label.textContent = `Flow: ${Math.round(comp.flowPct)}%`; comp.updateLabel?.(); });
+    input.addEventListener('change', ()=>{ pushHistory('Set restrictor flow %'); });
+    insp.appendChild(input);
+  }
+  // cylinder flow-path debug temporarily hidden
 }
 
 function setMode(m){
@@ -1600,6 +1876,9 @@ function wrapValveToggleGuard(valveComp){
   style.id = 'overlayCSS';
   style.textContent = css;
   document.head.appendChild(style);
+  // debug highlight style
+  const dbgCss = document.createElement('style'); dbgCss.id='dbgCss'; dbgCss.textContent = `.dbg-highlight { outline: 3px solid orange !important; outline-offset: 3px; }`;
+  document.head.appendChild(dbgCss);
 })();
 
 /* ---------- Buttons ---------- */
@@ -1651,6 +1930,13 @@ function updateModeButtons(){
   });
 }
 function addButtons(){
+  // Remove any pre-existing restrictor add button that may exist in static HTML or an older bundle
+  try { const old = document.getElementById('addRestrictor'); if (old) old.remove(); } catch(e){}
+  try {
+    document.querySelectorAll('.sidebar .btn').forEach(b=>{
+      try { if ((b.textContent||'').toLowerCase().includes('restrictor')) b.remove(); } catch(e){}
+    });
+  } catch(e){}
   ensureButton('addSource',  '➕ Pressure source', ()=>{
     if (!canEdit()) return;
     const r = workspaceBBox();
@@ -1704,6 +1990,14 @@ function addButtons(){
     const r = workspaceBBox();
     addLimitValve32(r.width*0.52, r.height*0.28, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid, getSignal);
     pushHistory('Add limit32');
+  });
+  // Restrictor add button hidden temporarily (restrictor support remains in the app and can be
+  // loaded from project files; UI to add/edit restrictors was removed per user request).
+  ensureButton('addCheckValve', '➕ Check valve', ()=>{
+    if (!canEdit()) return;
+    const r = workspaceBBox();
+    addCheckValve(r.width*0.60, r.height*0.40, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
+    pushHistory('Add check valve');
   });
   ensureButton('addPush32',  '➕ 3/2 pushbutton', ()=>{
     if (!canEdit()) return;
@@ -1853,12 +2147,12 @@ function refreshHandlesForConnection(conn, repositionOnly=false){
       const onDown = (e)=>{
         if (!canEdit()) return;
         dragging = true;
-        const rect = workspaceBBox();
+        const p0 = screenToWorld(e.clientX, e.clientY);
         if (g.type==='H'){
-          startOff = (e.clientY - rect.top) - g.pos;
+          startOff = p0.y - g.pos;
           el.style.cursor = 'ns-resize';
         } else {
-          startOff = (e.clientX - rect.left) - g.pos;
+          startOff = p0.x - g.pos;
           el.style.cursor = 'ew-resize';
         }
         window.addEventListener('mousemove', onMove);
@@ -1867,14 +2161,15 @@ function refreshHandlesForConnection(conn, repositionOnly=false){
       };
       const onMove = (e)=>{
         if (!dragging) return;
-        const rect = workspaceBBox();
+        const p = screenToWorld(e.clientX, e.clientY);
+        const ws = workspaceWorldSize();
         if (g.type==='H'){
-          let y = e.clientY - rect.top - startOff;
-          y = clamp(y, 20, rect.height-20);
+          let y = p.y - startOff;
+          y = clamp(y, 20, ws.height-20);
           g.pos = y;
         } else {
-          let x = e.clientX - rect.left - startOff;
-          x = clamp(x, 20, rect.width-20);
+          let x = p.x - startOff;
+          x = clamp(x, 20, ws.width-20);
           g.pos = x;
         }
         redrawConnections();
@@ -1920,8 +2215,8 @@ function refreshHandlesForConnection(conn, repositionOnly=false){
         const dir0 = pilotDir(conn,'start');
         const move = (ev)=>{
           if (!dragging) return;
-          const rect = workspaceBBox();
-          const mx = ev.clientX - rect.left;
+          const p = screenToWorld(ev.clientX, ev.clientY);
+          const mx = p.x;
           const dir = dir0;
           let L = Math.max(6, Math.abs(mx - baseX));
           // enforce outward direction
@@ -1961,8 +2256,8 @@ function refreshHandlesForConnection(conn, repositionOnly=false){
         const dir0 = pilotDir(conn,'end');
         const move = (ev)=>{
           if (!dragging) return;
-          const rect = workspaceBBox();
-          const mx = ev.clientX - rect.left;
+          const p = screenToWorld(ev.clientX, ev.clientY);
+          const mx = p.x;
           const dir = dir0;
           let L = Math.max(6, Math.abs(mx - baseX));
           if (dir>0 && mx < baseX) L = Math.max(6, baseLen);

@@ -170,6 +170,30 @@ export function addLimitValve32(
   const port3El = makePort(P3, '3');
   svg.append(port2El, port1El, port3El);
 
+  // Add visible port number labels to the LEFT of each port (pushButton style)
+  const t2 = document.createElementNS(NS,'text');
+  t2.setAttribute('x', P2.cx - 14);
+  t2.setAttribute('y', P2.cy + 4);
+  t2.setAttribute('text-anchor', 'end');
+  t2.setAttribute('font-size', '12');
+  t2.textContent = '2';
+
+  const t1 = document.createElementNS(NS,'text');
+  t1.setAttribute('x', P1.cx - 14);
+  t1.setAttribute('y', P1.cy + 4);
+  t1.setAttribute('text-anchor', 'end');
+  t1.setAttribute('font-size', '12');
+  t1.textContent = '1';
+
+  const t3 = document.createElementNS(NS,'text');
+  t3.setAttribute('x', P3.cx - 14);
+  t3.setAttribute('y', P3.cy + 4);
+  t3.setAttribute('text-anchor', 'end');
+  t3.setAttribute('font-size', '12');
+  t3.textContent = '3';
+
+  svg.append(t2, t1, t3);
+
   // === State / interaction =============================================
   let sensorKey = null;   // 'a0', 'a1', ...
   let manualActive = false;

@@ -40,7 +40,7 @@ export function addPushButton32(
 
   const label = document.createElement('div');
   label.className = 'label';
-  label.textContent = 'Push Button 3/2';
+  label.textContent = '';
   el.appendChild(label);
 
   const svg = document.createElementNS(NS,'svg');
@@ -143,12 +143,23 @@ export function addPushButton32(
     c.setAttribute('cx', pos.cx);
     c.setAttribute('cy', pos.cy);
     c.addEventListener('click', (e)=>{ e.stopPropagation(); handlePortClick(comp, key, c); });
+
+    // text label to the LEFT of the port
+    const t = document.createElementNS(NS,'text');
+    t.setAttribute('x', pos.cx - 14);
+    t.setAttribute('y', pos.cy + 4);
+    t.setAttribute('text-anchor', 'end');
+    t.setAttribute('font-size', '12');
+    t.textContent = key;
+
+    // append both to svg and return the circle element for compatibility
+    svg.appendChild(c);
+    svg.appendChild(t);
     return c;
   };
   const port2El = makePort(P2, '2');
   const port1El = makePort(P1, '1');
   const port3El = makePort(P3, '3');
-  svg.append(port2El, port1El, port3El);
 
   // === State / interaction (momentary) ==================================
   let isActive = false;

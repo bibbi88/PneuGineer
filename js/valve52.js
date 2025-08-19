@@ -11,8 +11,7 @@ export function addValve52(
 ){
   const id = uid();
 
-  // ======= Geometry (scalable) =======
-  const scale   = 1;
+  // ======= Geometry (fixed sizes, no scaling) =======
   const W0      = 80;   // single cell width
   const H0      = 60;   // single cell height
   const CELLS   = 2;    // 2 cells for a 5/2 valve
@@ -21,16 +20,16 @@ export function addValve52(
   const gx0     = 115;
   const gy0     = 0;
 
-  const W       = W0 * scale;               // scaled cell width
-  const H       = H0 * scale;               // scaled cell height
+  const W       = W0;               // cell width (fixed)
+  const H       = H0;               // cell height (fixed)
   const BODY_W  = W * CELLS;                // housing total width (2 cells)
   const BODY_H  = H;
-  const SVG_W   = BODY_W + 110 * scale;     // extra for labels/triangles
+  const SVG_W   = BODY_W + 110;     // extra for labels/triangles
   const SVG_H   = BODY_H;
 
-  const STROKE  = 2 * scale;
-  const FONT    = 10 * scale;
-  const PORT_R  = 6 * scale;
+  const STROKE  = 2;
+  const FONT    = 10;
+  const PORT_R  = 6;
 
   // Pilot triangle dimensions
   const TRI_H   = BODY_H / 4;               // ≈ 1/3 of housing height
@@ -38,27 +37,27 @@ export function addValve52(
   const TRI_GAP = 7;                // gap from housing wall to triangle tip
 
   // How far pilot ports sit away from the housing (positive = farther from housing)
-  const PILOT_PORT_OFFSET = 24 * scale;     // tweak to move ports 12/14 farther/closer
+  const PILOT_PORT_OFFSET = 24;     // tweak to move ports 12/14 farther/closer
 
   // ======= Fixed port locations (relative to gRoot local coords; WITHOUT gx/gy) =======
   // 4,2 at top; 5,1,3 at bottom
   const portsFixed = {
-    "4": { cx: 10*scale,          cy: -10*scale },
-    "2": { cx: (W0-10)*scale,     cy: -10*scale },
-    "5": { cx: 10*scale,          cy: (H0+10)*scale },
-    "1": { cx: (W0/2)*scale,      cy: (H0+10)*scale },
-    "3": { cx: (W0-10)*scale,     cy: (H0+10)*scale }
+  "4": { cx: 10,          cy: -10 },
+  "2": { cx: (W0-10),     cy: -10 },
+  "5": { cx: 10,          cy: (H0+10) },
+  "1": { cx: (W0/2),      cy: (H0+10) },
+  "3": { cx: (W0-10),     cy: (H0+10) }
   };
 
   // Pilot triangle wall anchors (in gInner local coords; slide with state)
   // Left wall at x=0; right wall at x=BODY_W
-  const pilotCY   = (H0/2)*scale;
+  const pilotCY   = (H0/2);
   const triBase14 = { wallX: 0,       cy: pilotCY };       // left wall line x
   const triBase12 = { wallX: BODY_W,  cy: pilotCY };       // right wall line x
 
   // Pilot PORT centers (further from housing; in gInner local coords initially)
-  const port14LocalX = (-15*scale - PILOT_PORT_OFFSET);             // left side (negative is left)
-  const port12LocalX = (W0*2 + 15)*scale + PILOT_PORT_OFFSET;       // right side (positive is right)
+  const port14LocalX = (-15 - PILOT_PORT_OFFSET);             // left side (negative is left)
+  const port12LocalX = (W0*2 + 15) + PILOT_PORT_OFFSET;       // right side (positive is right)
 
   // ======= Wrapper =======
   const el = document.createElement('div');
@@ -69,7 +68,8 @@ export function addValve52(
 
   const label = document.createElement('div');
   label.className = 'label';
-  label.textContent = '5/2 valve';
+  // label intentionally blank per UI preference
+  label.textContent = '';
 
   const NS  = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(NS, 'svg');
@@ -85,8 +85,8 @@ export function addValve52(
   m.setAttribute('viewBox','0 0 10 10');
   m.setAttribute('refX','10');
   m.setAttribute('refY','5');
-  m.setAttribute('markerWidth',  String(6*scale));
-  m.setAttribute('markerHeight', String(6*scale));
+  m.setAttribute('markerWidth',  String(6));
+  m.setAttribute('markerHeight', String(6));
   m.setAttribute('orient','auto-start-reverse');
   const mp = document.createElementNS(NS,'path');
   mp.setAttribute('d','M 0 0 L 10 5 L 0 10 z');
@@ -97,7 +97,7 @@ export function addValve52(
 
   // ======= Layers: gRoot (fixed), gInner (slides) =======
   const gRoot  = document.createElementNS(NS,'g');
-  gRoot.setAttribute('transform', `translate(${gx0*scale},${gy0*scale})`);
+  gRoot.setAttribute('transform', `translate(${gx0},${gy0})`);
 
   // Single moving group (pushButton-like)
   const gInner = document.createElementNS(NS,'g');
@@ -130,8 +130,8 @@ export function addValve52(
   r0.setAttribute('stroke','#000');
   r0.setAttribute('stroke-width', String(STROKE));
   cell0.appendChild(r0);
-  addDoubleArrow(cell0, (W0/2)*scale, H, 10*scale, 0);
-  addDoubleArrow(cell0, (W0-10)*scale, 0, (W0-10)*scale, H);
+  addDoubleArrow(cell0, (W0/2), H, 10, 0);
+  addDoubleArrow(cell0, (W0-10), 0, (W0-10), H);
 
   // Cell 1 (right image)
   const cell1 = document.createElementNS(NS,'g');
@@ -144,8 +144,8 @@ export function addValve52(
   r1.setAttribute('stroke','#000');
   r1.setAttribute('stroke-width', String(STROKE));
   cell1.appendChild(r1);
-  addDoubleArrow(cell1, (W0/2)*scale, H, (W0-10)*scale, 0);
-  addDoubleArrow(cell1, 10*scale, 0, 10*scale, H);
+  addDoubleArrow(cell1, (W0/2), H, (W0-10), 0);
+  addDoubleArrow(cell1, 10, 0, 10, H);
 
   gSlide.append(cell0, cell1);
 
@@ -198,12 +198,19 @@ export function addValve52(
     c.setAttribute('cx', String(cx));
     c.setAttribute('cy', String(cy));
 
-    const t = document.createElementNS(NS,'text');
+  const t = document.createElementNS(NS,'text');
+  // For pilot ports 12/14 place the label centered above the port; otherwise keep left placement
+  if (key === '12' || key === '14'){
     t.setAttribute('x', String(cx));
-    t.setAttribute('y', String(cy - 10*scale));
+    t.setAttribute('y', String(cy - 10));
     t.setAttribute('text-anchor','middle');
-    t.setAttribute('font-size', String(FONT));
-    t.textContent = key;
+  } else {
+    t.setAttribute('x', String(cx - 14));
+    t.setAttribute('y', String(cy + 4));
+    t.setAttribute('text-anchor','end');
+  }
+  t.setAttribute('font-size', String(FONT));
+  t.textContent = key;
 
     const clickable = clickableEl || c;
     clickable.addEventListener('click', e=>{
@@ -211,7 +218,7 @@ export function addValve52(
       handlePortClick(comp, key, c);
     });
 
-    parent.append(c, t);
+  parent.append(c, t);
     return c;
   }
 
@@ -269,8 +276,8 @@ export function addValve52(
     el, x, y,
 
     // Expose offsets and SVG size for wiring/snap compatibility
-    gx: gx0 * scale,
-    gy: gy0 * scale,
+  gx: gx0,
+  gy: gy0,
     svgW: SVG_W,
     svgH: SVG_H,
 

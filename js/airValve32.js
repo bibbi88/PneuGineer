@@ -50,7 +50,7 @@ export function addAirValve32(
 
   const label = document.createElement('div');
   label.className = 'label';
-  label.textContent = '3/2 air-piloted';
+  label.textContent = '';
   el.appendChild(label);
 
   const svg = document.createElementNS(NS,'svg');
@@ -169,12 +169,23 @@ export function addAirValve32(
     c.setAttribute('cx', pos.cx);
     c.setAttribute('cy', pos.cy);
     c.addEventListener('click', (e)=>{ e.stopPropagation(); handlePortClick(comp, key, c); });
+
+    const t = document.createElementNS(NS,'text');
+    t.setAttribute('x', pos.cx - 14);
+    t.setAttribute('y', pos.cy + 4);
+    t.setAttribute('text-anchor', 'end');
+    t.setAttribute('font-size', '12');
+    t.textContent = key;
+
+    svg.appendChild(c);
+    svg.appendChild(t);
     return c;
   };
   const port2El  = makePort(P2,  '2');
   const port1El  = makePort(P1,  '1');
   const port3El  = makePort(P3,  '3');
-  svg.append(port2El, port1El, port3El);
+
+  // (No visible label for pilot port 14 on air-piloted 3/2 — pilot port number hidden)
 
   // ==== State / programmatic control (pilot-driven) ====
   let isActive = false; // ACTIVE => left cell under ports (2→1). INACTIVE => right cell (2→3)

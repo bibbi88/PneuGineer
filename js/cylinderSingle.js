@@ -14,8 +14,6 @@
 //   opts?    // { normallyExtended?: boolean } default false (normally retracted)
 // )
 
-const SCALE = 1;
-
 export function addCylinderSingle(
   x, y,
   compLayer, components,
@@ -24,7 +22,7 @@ export function addCylinderSingle(
   opts = {}
 ){
   const id = uid();
-  const s = (n)=> n * SCALE;
+  const s = (n)=> n; // no scaling
 
   // Mode: 'push' (default) = extend when A pressurized; 'pull' = retract when A pressurized
   const initialMode = (opts && opts.mode === 'pull') ? 'pull' : 'push';
@@ -140,8 +138,8 @@ export function addCylinderSingle(
 
     const t = document.createElementNS(NS,'text');
     t.setAttribute('x', s(p.cx)); t.setAttribute('y', s(p.cy - 8));
-    t.setAttribute('text-anchor','middle');
-    t.setAttribute('font-size', Math.max(9, 10*SCALE));
+  t.setAttribute('text-anchor','middle');
+  t.setAttribute('font-size', Math.max(9, 10));
     t.textContent = key;
 
     g.append(c, t);
