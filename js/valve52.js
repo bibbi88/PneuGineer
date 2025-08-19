@@ -200,9 +200,16 @@ export function addValve52(
     c.setAttribute('cy', String(cy));
 
   const t = document.createElementNS(NS,'text');
-  t.setAttribute('x', String(cx - 14));
-  t.setAttribute('y', String(cy + 4));
-  t.setAttribute('text-anchor','end');
+  // For pilot ports 12/14 place the label centered above the port; otherwise keep left placement
+  if (key === '12' || key === '14'){
+    t.setAttribute('x', String(cx));
+    t.setAttribute('y', String(cy - 10));
+    t.setAttribute('text-anchor','middle');
+  } else {
+    t.setAttribute('x', String(cx - 14));
+    t.setAttribute('y', String(cy + 4));
+    t.setAttribute('text-anchor','end');
+  }
   t.setAttribute('font-size', String(FONT));
   t.textContent = key;
 

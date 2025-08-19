@@ -185,14 +185,7 @@ export function addAirValve32(
   const port1El  = makePort(P1,  '1');
   const port3El  = makePort(P3,  '3');
 
-  // pilot port 14 moves with the mover; add left-aligned label for it as well
-  const t14 = document.createElementNS(NS,'text');
-  t14.setAttribute('x', P14_LOCAL.cx - 14);
-  t14.setAttribute('y', P14_LOCAL.cy + 4);
-  t14.setAttribute('text-anchor', 'end');
-  t14.setAttribute('font-size', '12');
-  t14.textContent = '14';
-  svg.appendChild(t14);
+  // (No visible label for pilot port 14 on air-piloted 3/2 — pilot port number hidden)
 
   // ==== State / programmatic control (pilot-driven) ====
   let isActive = false; // ACTIVE => left cell under ports (2→1). INACTIVE => right cell (2→3)
