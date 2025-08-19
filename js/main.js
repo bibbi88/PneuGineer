@@ -20,6 +20,8 @@ import { addOrValve }        from './orValve.js';
 import { addLimitValve32 }   from './limitValve32.js';
 import { addPushButton32 }   from './pushButton32.js';
 import { addAirValve32 }     from './airValve32.js';
+import { addRestrictor }     from './restrictor.js';
+import { addCheckValve }     from './checkValve.js';
 
 /* ---------- DOM layers ---------- */
 const compLayer = document.getElementById('compLayer');
@@ -127,7 +129,9 @@ function getPortEntryOrientation(comp, portKey){
 }
 function isValvePilotPort(comp, portKey){
   if (comp?.type === 'valve52'    && (portKey === '12' || portKey === '14')) return true;
-  if (comp?.type === 'airValve32' && portKey === '12') return true;   // ⟵ add
+  // air-piloted 3/2 may expose pilot as either 12 or 14 depending on implementation;
+  // treat both as pilots so routing/stubs and pilot logic work regardless.
+  if (comp?.type === 'airValve32' && (portKey === '12' || portKey === '14')) return true;
   return false;
 }
 
@@ -1125,6 +1129,19 @@ function computePressureSet(){
       if (pressurized.size !== before) changed = true;
     });
 
+    // Check valves: allow IN->OUT only (treat as directional)
+    components.forEach(cv=>{
+      if (cv.type!=='checkValve') return;
+      const nIn = `${cv.id}:IN`, nOut = `${cv.id}:OUT`;
+      const before = pressurized.size;
+      if (pressurized.has(nIn)) pressurized.add(nOut);
+      // Do NOT propagate OUT->IN (one-way)
+      if (pressurized.size !== before) changed = true;
+    });
+
+    // Restrictors: pass pressure both ways (no special logic here); component may implement dynamics
+    // (restrictor state is not altering connectivity for steady-state pressure graph)
+
     if (changed){
       const queue = [...pressurized];
       while(queue.length){
@@ -1178,13 +1195,14 @@ function simulate(dt){
       v._pilot14Prev = p14;
     });
 
-    // 3/2 air-piloted: pilot 12 ⇒ active (2↔1), else inactive (2↔3)
+    // 3/2 air-piloted: pilot (12 or 14) ⇒ active (2→1), else inactive (2→3)
     components.forEach(v=>{
       if (v.type!=='airValve32') return;
-      const p12 = lastPressure.has(`${v.id}:12`);
+      // Some air valve components expose pilot as '14' (moving port) while wiring or earlier logic
+      // might reference '12'. Treat either port as a pilot source.
+      const p12 = lastPressure.has(`${v.id}:12`) || lastPressure.has(`${v.id}:14`);
       const desired = !!p12;
       if (v.state?.active !== desired){
-        // Support both setActive and setState alias
         if (typeof v.setActive === 'function') v.setActive(desired);
         else if (typeof v.setState === 'function') v.setState(desired ? 1 : 0);
       }
@@ -1304,6 +1322,8 @@ function snapshotProject(){
     const base = { id:c.id, type:c.type, x:c.x, y:c.y };
   if (c.type==='valve52') return { ...base, state:c.state };
   if (c.type==='airValve32') return { ...base, active: !!(c.state?.active) };
+  if (c.type==='restrictor') return { ...base };
+  if (c.type==='checkValve') return { ...base };
     if (c.type==='cylDouble' || c.type==='cylinder' || c.type==='cylSingle'){
       const letter = readCylinderLetterFromComp(c);
       const out = { ...base, pos:c.pos??0, letter };
@@ -1392,6 +1412,10 @@ async function loadProject(data){
       comp = addAndValve(sc.x, sc.y, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
     } else if (sc.type === 'orValve'){
       comp = addOrValve(sc.x, sc.y, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
+    } else if (sc.type === 'restrictor'){
+      comp = addRestrictor(sc.x, sc.y, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
+    } else if (sc.type === 'checkValve'){
+      comp = addCheckValve(sc.x, sc.y, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
     } else if (sc.type === 'limit32'){
       const lv = addLimitValve32(sc.x, sc.y, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid, getSignal);
       if (typeof sc.sensor === 'string' && sc.sensor.trim()){
@@ -1704,6 +1728,18 @@ function addButtons(){
     const r = workspaceBBox();
     addLimitValve32(r.width*0.52, r.height*0.28, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid, getSignal);
     pushHistory('Add limit32');
+  });
+  ensureButton('addRestrictor', '➕ Restrictor', ()=>{
+    if (!canEdit()) return;
+    const r = workspaceBBox();
+    addRestrictor(r.width*0.60, r.height*0.60, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
+    pushHistory('Add restrictor');
+  });
+  ensureButton('addCheckValve', '➕ Check valve', ()=>{
+    if (!canEdit()) return;
+    const r = workspaceBBox();
+    addCheckValve(r.width*0.60, r.height*0.40, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
+    pushHistory('Add check valve');
   });
   ensureButton('addPush32',  '➕ 3/2 pushbutton', ()=>{
     if (!canEdit()) return;
