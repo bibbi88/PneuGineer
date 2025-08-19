@@ -1,14 +1,11 @@
 // js/restrictor.js
 // Restrictor: IN bottom, OUT top. Passes flow but with a delay (tau).
-// Scale for ALL restrictors:
-const SCALE = 0.5;
-
 export function addRestrictor(
   x, y,
   compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid
 ){
   const id = uid();
-  const s = (n)=> n * SCALE;
+  const s = (n)=> n; // no scaling
 
   // visual symbol: small rectangle with a narrowing
   const SVG_W=120, SVG_H=140, GX=10, GY=20;
@@ -70,8 +67,8 @@ export function addRestrictor(
     const t = document.createElementNS(NS,'text');
     t.setAttribute('x', s(p.cx));
     t.setAttribute('y', s(labelBelow ? p.cy+18 : p.cy-10));
-    t.setAttribute('text-anchor','middle');
-    t.setAttribute('font-size', Math.max(9, 11*SCALE));
+  t.setAttribute('text-anchor','middle');
+  t.setAttribute('font-size', Math.max(9, 11));
     t.textContent = key;
     return { c, t };
   }

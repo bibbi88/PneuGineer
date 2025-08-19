@@ -3,15 +3,13 @@
 // Port layout: A (left side), B (right side), OUT (top).
 // Links: A/B enter horizontally from the sides, OUT exits vertically from the top.
 
-const SCALE = 1;
-
 export function addAndValve(
   x, y,
   compLayer, components,
   handlePortClick, makeDraggable, redrawConnections, uid
 ){
   const id = uid();
-  const s = (n)=> n * SCALE;
+  const s = (n)=> n; // no scaling
 
   // Geometri
   const SVG_W=200, SVG_H=180, GX=10, GY=20;
@@ -99,7 +97,7 @@ export function addAndValve(
   t.setAttribute('x', s(p.cx - 14));
   t.setAttribute('y', s(p.cy + 4));
   t.setAttribute('text-anchor','end');
-    t.setAttribute('font-size', Math.max(9, 11*SCALE));
+  t.setAttribute('font-size', Math.max(9, 11));
     t.textContent = key;
 
     return { c, t };

@@ -1,8 +1,5 @@
 // js/cylinderDouble.js
 // Double-acting cylinder. Ports: Cap (left bottom), Rod (right bottom).
-// Justera storlek för ALLA cylindrar här:
-const SCALE = 1;
-
 export function addCylinderDouble(
   x, y,
   compLayer, components,
@@ -10,7 +7,7 @@ export function addCylinderDouble(
   getNextCylinderLetter, setSignal   // <-- behövs för auto-namn + signaler
 ){
   const id = uid();
-  const s = (n)=> n * SCALE;
+  const s = (n)=> n; // no scaling
 
   // ===== Init-namn =====
   const initialLetter = (typeof getNextCylinderLetter === 'function')
@@ -87,8 +84,8 @@ export function addCylinderDouble(
 
     const t = document.createElementNS(NS,'text');
     t.setAttribute('x', s(p.cx)); t.setAttribute('y', s(p.cy - 8));
-    t.setAttribute('text-anchor','middle');
-    t.setAttribute('font-size', Math.max(9, 10*SCALE));
+  t.setAttribute('text-anchor','middle');
+  t.setAttribute('font-size', Math.max(9, 10));
     t.textContent = key;
 
     g.append(c, t);

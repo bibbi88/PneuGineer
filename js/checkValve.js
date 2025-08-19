@@ -1,15 +1,12 @@
 
 // js/checkValve.js
 // Check valve. Ports: IN bottom, OUT top. Allows IN→OUT, blocks OUT→IN.
-// Scale for ALL check valves:
-const SCALE = 0.5;
-
 export function addCheckValve(
   x, y,
   compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid
 ){
   const id = uid();
-  const s = (n)=> n * SCALE;
+  const s = (n)=> n; // no scaling
 
   const SVG_W=120, SVG_H=140, GX=10, GY=20;
 
@@ -88,8 +85,8 @@ export function addCheckValve(
     const t = document.createElementNS(NS,'text');
     t.setAttribute('x', s(p.cx));
     t.setAttribute('y', s(labelBelow ? p.cy+18 : p.cy-10));
-    t.setAttribute('text-anchor','middle');
-    t.setAttribute('font-size', Math.max(9, 11*SCALE));
+  t.setAttribute('text-anchor','middle');
+  t.setAttribute('font-size', Math.max(9, 11));
   // hide port text for check valve (IN/OUT labels not shown)
   t.textContent = '';
     return { c, t };

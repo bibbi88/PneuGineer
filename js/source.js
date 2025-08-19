@@ -1,11 +1,8 @@
 // js/source.js
 // Pressure source — simple symbol with an OUT port on the top.
-// Global skala:
-const SCALE = 1;
-
 export function addSource(x, y, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid){
   const id = uid();
-  const s = (n)=> n * SCALE;
+  const s = (n)=> n; // no scaling
 
   const SVG_W=120, SVG_H=140, GX=10, GY=20;
 
@@ -61,7 +58,7 @@ export function addSource(x, y, compLayer, components, handlePortClick, makeDrag
 
   const t = document.createElementNS(NS,'text');
   t.setAttribute('x', s(OUT.cx)); t.setAttribute('y', s(OUT.cy - 10));
-  t.setAttribute('text-anchor','middle'); t.setAttribute('font-size', Math.max(9, 11*SCALE));
+  t.setAttribute('text-anchor','middle'); t.setAttribute('font-size', Math.max(9, 11));
   // hide OUT text on pressure source
   t.textContent = '';
 
