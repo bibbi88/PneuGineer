@@ -21,7 +21,11 @@
     .btn { display: block; width: 100%; margin: 6px 0; padding: 8px 10px; border: 1px solid #bbb; background: #fff; cursor: pointer; border-radius: 6px; text-align: left; }
     .btn:hover { background: #f8f8ff; }
 
-    .workspace { position: relative; overflow: hidden; }
+  .workspace { position: relative; overflow: hidden; }
+  /* Viewport wraps the drawing layers; we transform this for pan/zoom */
+  #viewport { position: absolute; inset: 0; overflow: hidden; transform-origin: 0 0; }
+  /* Grid background on the viewport so it covers the whole workspace */
+  #viewport { background-image: linear-gradient(to right, rgba(0,0,0,.04) 1px, transparent 1px), linear-gradient(to bottom, rgba(0,0,0,.04) 1px, transparent 1px); background-size: 10px 10px; }
     .layer { position: absolute; inset: 0; }
     #connLayer { z-index: 0; }
     #compLayer { z-index: 1; }
@@ -88,8 +92,10 @@
     </aside>
 
     <main class="workspace">
-      <svg id="connLayer" class="layer"></svg>
-      <div id="compLayer" class="layer"></div>
+      <div id="viewport">
+        <svg id="connLayer" class="layer"></svg>
+        <div id="compLayer" class="layer"></div>
+      </div>
       <div class="hint">Tip: press <b>?</b> for help. Connect P → valve → cylinder. Cylinders expose signals a0/a1 for limit valves.</div>
 
       <!-- Floating help button -->
@@ -161,6 +167,131 @@
   </dialog>
 
   <!-- ES modules -->
+  <script>
+    // Pan & Zoom + Context menu support for the workspace
+    (function(){
+      const viewport = () => document.getElementById('viewport');
+      let scale = 1.0, tx = 0, ty = 0;
+      let panning = false, panStart = {x:0,y:0}, originStart = {x:0,y:0};
+
+      function applyTransform(){
+        const v = viewport(); if (!v) return;
+        v.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+      }
+
+      function clientToWorld(cx, cy){
+        // client coords -> world coords inside viewport
+        const rect = document.querySelector('.workspace').getBoundingClientRect();
+        const x = (cx - rect.left - tx) / scale;
+        const y = (cy - rect.top  - ty) / scale;
+        return { x, y };
+      }
+
+      // Wheel zoom centered at cursor
+      window.addEventListener('wheel', (e)=>{
+        const rect = document.querySelector('.workspace').getBoundingClientRect();
+        if (!rect) return;
+        // require ctrlKey OR over workspace area
+        const over = e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom;
+        if (!over) return;
+        e.preventDefault();
+        const delta = -Math.sign(e.deltaY) * 0.12;
+        const newScale = Math.max(0.2, Math.min(4.0, scale * (1 + delta)));
+        // adjust tx/ty to zoom about mouse
+        const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+        const wx = (mx - tx) / scale, wy = (my - ty) / scale;
+        tx = mx - wx * newScale;
+        ty = my - wy * newScale;
+        scale = newScale;
+        applyTransform();
+      }, { passive:false });
+
+      // Middle-button or right-button drag pan
+      window.addEventListener('mousedown', (e)=>{
+        const rect = document.querySelector('.workspace').getBoundingClientRect();
+        if (!rect) return;
+        const over = e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom;
+        if (!over) return;
+        // start panning on middle-button or right-button + Alt
+        if (e.button === 1 || (e.button === 2 && e.altKey)){
+          panning = true; panStart = { x: e.clientX, y: e.clientY }; originStart = { x: tx, y: ty };
+          document.body.style.cursor = 'grabbing';
+          e.preventDefault();
+        }
+      });
+      window.addEventListener('mousemove', (e)=>{
+        if (!panning) return;
+        tx = originStart.x + (e.clientX - panStart.x);
+        ty = originStart.y + (e.clientY - panStart.y);
+        applyTransform();
+      });
+      window.addEventListener('mouseup', (e)=>{
+        if (panning){ panning = false; document.body.style.cursor = ''; }
+      });
+
+      // Custom context menu
+      window.addEventListener('contextmenu', (e)=>{
+        const rect = document.querySelector('.workspace').getBoundingClientRect();
+        const over = rect && e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom;
+        if (!over) return; // allow normal context menu elsewhere
+        e.preventDefault();
+        const existing = document.getElementById('wsCtxMenu'); if (existing) existing.remove();
+        const m = document.createElement('div'); m.id = 'wsCtxMenu'; m.className = 'ctxmenu';
+        m.style.left = e.clientX + 'px'; m.style.top = e.clientY + 'px';
+        const add = (txt,fn)=>{ const b=document.createElement('button'); b.textContent=txt; b.onclick=()=>{ fn(); m.remove(); }; m.appendChild(b); };
+        add('Zoom to fit', ()=>{
+          // compute bbox of compLayer and scale/center to workspace
+          const compLayer = document.getElementById('compLayer');
+          const ws = document.querySelector('.workspace');
+          if (!compLayer || !ws) return;
+          const items = compLayer.querySelectorAll('.comp');
+          if (!items.length) return;
+          let minx=1e9,miny=1e9,maxx=-1e9,maxy=-1e9;
+          items.forEach(el=>{
+            const r = el.getBoundingClientRect();
+            const wsr = ws.getBoundingClientRect();
+            const x = (r.left - wsr.left) + r.width/2;
+            const y = (r.top  - wsr.top)  + r.height/2;
+            minx = Math.min(minx, x - r.width/2); miny = Math.min(miny, y - r.height/2);
+            maxx = Math.max(maxx, x + r.width/2); maxy = Math.max(maxy, y + r.height/2);
+          });
+          const pad = 40;
+          const contentW = Math.max(10, maxx - minx + pad*2);
+          const contentH = Math.max(10, maxy - miny + pad*2);
+          const sw = ws.clientWidth, sh = ws.clientHeight;
+          const sX = sw / contentW; const sY = sh / contentH;
+          const newScale = Math.max(0.2, Math.min(4.0, Math.min(sX, sY)));
+          scale = newScale;
+          // center content
+          tx = (sw/2) - ((minx + maxx)/2) * scale;
+          ty = (sh/2) - ((miny + maxy)/2) * scale;
+          applyTransform();
+        });
+        add('Pan (hold Alt + Right-Click drag)', ()=>{});
+        add('Rotate component ↻ Clockwise', ()=>{
+          // rotate selected component(s) by +90 degrees if main exposes rotate API
+          const sel = window.selectedComponentsForRotate || []; // main.js may populate this
+          sel.forEach(c => { if (typeof c.rotate === 'function') c.rotate(90); else {
+            // fallback: add a data-rotation attribute and apply CSS transform on its el
+            const el = c.el; const r = (Number(el.dataset.rot||0)+90)%360; el.dataset.rot = r; el.style.transform = `translate(-50%,-50%) rotate(${r}deg)`; }
+          });
+        });
+        add('Rotate component ↺ Counter-Clockwise', ()=>{
+          const sel = window.selectedComponentsForRotate || [];
+          sel.forEach(c => { if (typeof c.rotate === 'function') c.rotate(-90); else {
+            const el = c.el; const r = (Number(el.dataset.rot||0)-90)%360; el.dataset.rot = r; el.style.transform = `translate(-50%,-50%) rotate(${r}deg)`; }
+          });
+        });
+        const cancel = document.createElement('button'); cancel.textContent='Cancel'; cancel.onclick=()=>m.remove(); m.appendChild(cancel);
+        document.body.appendChild(m);
+        setTimeout(()=>{ const closer = (ev)=>{ if (!m.contains(ev.target)) m.remove(); }; document.addEventListener('click', closer, { once:true }); }, 0);
+      });
+
+      // expose helpers
+      window.viewportHelpers = { clientToWorld, applyTransform, getTransform: ()=>({scale,tx,ty}), setTransform: (s, x, y)=>{ scale=s; tx=x; ty=y; applyTransform(); } };
+    })();
+  </script>
+
   <script type="module" src="./js/main.js"></script>
 
   <!-- Help FAB + '?' key -->

@@ -72,15 +72,55 @@ function workspaceBBox(){ return compLayer.getBoundingClientRect(); }
 function canEdit(){ return simMode === Modes.STOP; }
 function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
 
+function rotateComponent(comp, angle){
+  if (!comp || !comp.el) return;
+  const prev = Number(comp.el.dataset.rot || 0);
+  const next = (prev + angle) % 360;
+  comp.el.dataset.rot = next;
+  // preserve existing translate(-50%,-50%) used for centering
+  comp.el.style.transform = `translate(-50%,-50%) rotate(${next}deg)`;
+  // if component has ports with absolute coords inside svg, we may need to recompute;
+  if (typeof comp.recompute === 'function') comp.recompute();
+}
+
+// Map screen (client) coordinates into workspace world coordinates (taking viewport pan/zoom into account)
+function screenToWorld(clientX, clientY){
+  try {
+    if (window.viewportHelpers && typeof window.viewportHelpers.clientToWorld === 'function'){
+      return window.viewportHelpers.clientToWorld(clientX, clientY);
+    }
+  } catch(e){}
+  const rect = workspaceBBox();
+  return { x: clientX - rect.left, y: clientY - rect.top };
+}
+
+function workspaceWorldSize(){
+  const rect = workspaceBBox();
+  let scale = 1;
+  try { if (window.viewportHelpers && typeof window.viewportHelpers.getTransform === 'function') scale = window.viewportHelpers.getTransform().scale; } catch(e){}
+  return { width: rect.width / scale, height: rect.height / scale, rect };
+}
+
+function worldToScreen(wx, wy){
+  // map world coords back to client coords (approx)
+  try {
+    const t = window.viewportHelpers?.getTransform?.();
+    if (t){ return { x: t.tx + wx * t.scale, y: t.ty + wy * t.scale }; }
+  } catch(e){}
+  const rect = workspaceBBox();
+  return { x: rect.left + wx, y: rect.top + wy };
+}
+
 /* Fine nudge with arrow keys (Shift = x10) */
 function nudgeSelectedComponents(dx, dy){
   if (!canEdit()) return;
   if (selectedComponents.size === 0) return;
 
   const rect = workspaceBBox();
+  const ws = workspaceWorldSize();
   selectedComponents.forEach(c=>{
-    const nx = snap(clamp(c.x + dx, 40, rect.width  - 40));
-    const ny = snap(clamp(c.y + dy, 40, rect.height - 40));
+    const nx = snap(clamp(c.x + dx, 40, ws.width  - 40));
+    const ny = snap(clamp(c.y + dy, 40, ws.height - 40));
     c.x = nx; c.y = ny;
     c.el.style.left = nx + 'px';
     c.el.style.top  = ny + 'px';
@@ -108,12 +148,23 @@ function getNextCylinderLetter() {
 function portGlobalPosition(comp, portKey){
   const p = comp.ports?.[portKey];
   if (!p) return { x: comp.x, y: comp.y };
+  // If the port DOM element exists, compute its center in world coordinates (respects rotation/transform)
+  try {
+    if (p.el instanceof Element){
+      const r = p.el.getBoundingClientRect();
+      const cx = r.left + r.width/2;
+      const cy = r.top  + r.height/2;
+      const world = screenToWorld(cx, cy);
+      return { x: world.x, y: world.y };
+    }
+  } catch(e){}
+  // Fallback to component-local coordinates (SVG-origin aware)
   if (comp.svgW && comp.svgH && (comp.gx !== undefined) && (comp.gy !== undefined)){
     const svg0x = comp.x - comp.svgW/2;
     const svg0y = comp.y - comp.svgH/2;
-    return { x: svg0x + comp.gx + p.cx, y: svg0y + comp.gy + p.cy };
+    return { x: svg0x + comp.gx + (p.cx ?? 0), y: svg0y + comp.gy + (p.cy ?? 0) };
   }
-  return { x: comp.x + p.cx, y: comp.y + p.cy };
+  return { x: comp.x + (p.cx ?? 0), y: comp.y + (p.cy ?? 0) };
 }
 
 /* ---------- Wires (orthogonal) ---------- */
@@ -480,6 +531,21 @@ function showCtxMenu(x, y, { type, payload }){
     }
   }
 
+  if (type==='component' && payload?.comp){
+    // expose current selection for external context menu handlers
+    try { window.selectedComponentsForRotate = [...selectedComponents]; } catch {}
+    addBtn('\u21bb Rotate clockwise', ()=>{
+      const sel = [...selectedComponents];
+      sel.forEach(c => rotateComponent(c, 90));
+      pushHistory('Rotate components');
+    });
+    addBtn('\u21ba Rotate counter-clockwise', ()=>{
+      const sel = [...selectedComponents];
+      sel.forEach(c => rotateComponent(c, -90));
+      pushHistory('Rotate components');
+    });
+  }
+
   const delBtn = document.createElement('button');
   delBtn.textContent = canEdit() ? '🗑️ Delete' : '🔒 Editing requires STOP';
   delBtn.disabled = !canEdit();
@@ -604,9 +670,8 @@ function makeDraggable(comp){
     }
 
     dragging = true;
-    const rect = workspaceBBox();
-    startMouseX = e.clientX - rect.left;
-    startMouseY = e.clientY - rect.top;
+  const p0 = screenToWorld(e.clientX, e.clientY);
+  startMouseX = p0.x; startMouseY = p0.y;
 
     const group = (selectedComponents.size > 1);
     if (group){
@@ -627,13 +692,13 @@ function makeDraggable(comp){
   }
   function onMove(e){
     if(!dragging) return;
-    const rect = workspaceBBox();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
+  const p1 = screenToWorld(e.clientX, e.clientY);
+  const mx = p1.x; const my = p1.y;
 
+    const ws = workspaceWorldSize();
     offsets.forEach(o=>{
-      const nx = snap(clamp(mx - o.dx, 40, rect.width-40));
-      const ny = snap(clamp(my - o.dy, 40, rect.height-40));
+      const nx = snap(clamp(mx - o.dx, 40, ws.width-40));
+      const ny = snap(clamp(my - o.dy, 40, ws.height-40));
       o.comp.x = nx; o.comp.y = ny;
       o.comp.el.style.left = nx + 'px';
       o.comp.el.style.top  = ny + 'px';
@@ -783,9 +848,8 @@ function hitTestWire(px, py, threshold=8){
 window.addEventListener('click', (e)=>{
   if (!canEdit()) return;
 
-  const rect = workspaceBBox();
-  const px = e.clientX - rect.left;
-  const py = e.clientY - rect.top;
+  const p = screenToWorld(e.clientX, e.clientY);
+  const px = p.x; const py = p.y;
 
   // If we are linking and are over a port → finish to that port
   if (pendingPort && hoverPort){
@@ -848,9 +912,8 @@ window.addEventListener('click', (e)=>{
 window.addEventListener('dblclick', (e)=>{
   if (!canEdit()) return;
 
-  const rect = workspaceBBox();
-  const px = e.clientX - rect.left;
-  const py = e.clientY - rect.top;
+  const p = screenToWorld(e.clientX, e.clientY);
+  const px = p.x; const py = p.y;
 
   const hit = hitTestWire(px, py, 6);
   if (!hit) return;
@@ -872,9 +935,8 @@ window.addEventListener('dblclick', (e)=>{
 window.addEventListener('contextmenu', (e)=>{
   if (!canEdit()) return;
 
-  const rect = workspaceBBox();
-  const px = e.clientX - rect.left;
-  const py = e.clientY - rect.top;
+  const p = screenToWorld(e.clientX, e.clientY);
+  const px = p.x; const py = p.y;
 
   const hit = hitTestWire(px, py, 6);
   if (hit){
@@ -888,9 +950,8 @@ window.addEventListener('contextmenu', (e)=>{
 window.addEventListener('mousemove', (e)=>{
   if (!pendingPort) return;
 
-  const rect = workspaceBBox();
-  const px = e.clientX - rect.left;
-  const py = e.clientY - rect.top;
+  const p = screenToWorld(e.clientX, e.clientY);
+  const px = p.x; const py = p.y;
 
   const near = findNearestPort(px, py, pendingPort);
   setHoverPort(near);
@@ -949,10 +1010,9 @@ function endMarquee(x, y){
   const right  = Math.max(marqueeStart.x, x);
   const bottom = Math.max(marqueeStart.y, y);
 
-  const rect = workspaceBBox();
   const sel = components.filter(c=>{
-    const sx = rect.left + c.x;
-    const sy = rect.top  + c.y;
+    const screen = worldToScreen(c.x, c.y);
+    const sx = screen.x; const sy = screen.y;
     return sx>=left && sx<=right && sy>=top && sy<=bottom;
   });
 
@@ -1889,12 +1949,12 @@ function refreshHandlesForConnection(conn, repositionOnly=false){
       const onDown = (e)=>{
         if (!canEdit()) return;
         dragging = true;
-        const rect = workspaceBBox();
+        const p0 = screenToWorld(e.clientX, e.clientY);
         if (g.type==='H'){
-          startOff = (e.clientY - rect.top) - g.pos;
+          startOff = p0.y - g.pos;
           el.style.cursor = 'ns-resize';
         } else {
-          startOff = (e.clientX - rect.left) - g.pos;
+          startOff = p0.x - g.pos;
           el.style.cursor = 'ew-resize';
         }
         window.addEventListener('mousemove', onMove);
@@ -1903,14 +1963,15 @@ function refreshHandlesForConnection(conn, repositionOnly=false){
       };
       const onMove = (e)=>{
         if (!dragging) return;
-        const rect = workspaceBBox();
+        const p = screenToWorld(e.clientX, e.clientY);
+        const ws = workspaceWorldSize();
         if (g.type==='H'){
-          let y = e.clientY - rect.top - startOff;
-          y = clamp(y, 20, rect.height-20);
+          let y = p.y - startOff;
+          y = clamp(y, 20, ws.height-20);
           g.pos = y;
         } else {
-          let x = e.clientX - rect.left - startOff;
-          x = clamp(x, 20, rect.width-20);
+          let x = p.x - startOff;
+          x = clamp(x, 20, ws.width-20);
           g.pos = x;
         }
         redrawConnections();
@@ -1956,8 +2017,8 @@ function refreshHandlesForConnection(conn, repositionOnly=false){
         const dir0 = pilotDir(conn,'start');
         const move = (ev)=>{
           if (!dragging) return;
-          const rect = workspaceBBox();
-          const mx = ev.clientX - rect.left;
+          const p = screenToWorld(ev.clientX, ev.clientY);
+          const mx = p.x;
           const dir = dir0;
           let L = Math.max(6, Math.abs(mx - baseX));
           // enforce outward direction
@@ -1997,8 +2058,8 @@ function refreshHandlesForConnection(conn, repositionOnly=false){
         const dir0 = pilotDir(conn,'end');
         const move = (ev)=>{
           if (!dragging) return;
-          const rect = workspaceBBox();
-          const mx = ev.clientX - rect.left;
+          const p = screenToWorld(ev.clientX, ev.clientY);
+          const mx = p.x;
           const dir = dir0;
           let L = Math.max(6, Math.abs(mx - baseX));
           if (dir>0 && mx < baseX) L = Math.max(6, baseLen);
