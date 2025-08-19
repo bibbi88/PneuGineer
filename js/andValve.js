@@ -95,17 +95,10 @@ export function addAndValve(
     c.addEventListener('click', (e)=>{ e.stopPropagation(); handlePortClick(comp, key, c); });
 
     const t = document.createElementNS(NS,'text');
-    if (side==='L'){
-      t.setAttribute('x', s(p.cx - 14)); t.setAttribute('y', s(p.cy + 4));
-      t.setAttribute('text-anchor','end');
-    } else if (side==='R'){
-      t.setAttribute('x', s(p.cx + 14)); t.setAttribute('y', s(p.cy + 4));
-      t.setAttribute('text-anchor','start');
-    } else { // T (top) – flytta OUT-texten lite åt höger
-      t.setAttribute('x', s(p.cx + 12));
-      t.setAttribute('y', s(p.cy - 10));
-      t.setAttribute('text-anchor','start');
-    }
+  // Place all port labels to the left of the port
+  t.setAttribute('x', s(p.cx - 14));
+  t.setAttribute('y', s(p.cy + 4));
+  t.setAttribute('text-anchor','end');
     t.setAttribute('font-size', Math.max(9, 11*SCALE));
     t.textContent = key;
 

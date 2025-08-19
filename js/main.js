@@ -364,6 +364,7 @@ function applySelectedClasses(){
   components.forEach(c=>{
     c.el.classList.toggle('selected', selectedComponents.has(c));
   });
+  updateInspector();
 }
 function clearSelectedConnection(){
   if (selectedConnection){
@@ -544,6 +545,18 @@ function showCtxMenu(x, y, { type, payload }){
       sel.forEach(c => rotateComponent(c, -90));
       pushHistory('Rotate components');
     });
+    // Resolve a single component target robustly: prefer payload, else single selection, else element under cursor
+    let compTarget = payload?.comp || (selectedComponents.size===1 ? [...selectedComponents][0] : null);
+    if (!compTarget){
+      try {
+        const el = document.elementFromPoint(x, y);
+        const compEl = el ? el.closest('.comp') : null;
+        if (compEl){
+          compTarget = components.find(c=> c.el === compEl) || null;
+        }
+      } catch(e){ compTarget = null; }
+    }
+  // Restrictor editing temporarily hidden from context menu
   }
 
   const delBtn = document.createElement('button');
@@ -1100,6 +1113,12 @@ function computePressureSet(){
     addUndirected(key(conn.from.id, conn.from.port), key(conn.to.id, conn.to.port));
   });
 
+  // Restrictors connect IN<->OUT for steady-state pressure propagation (dynamics handled elsewhere)
+  components.forEach(rs=>{
+    if (rs.type !== 'restrictor') return;
+    addUndirected(key(rs.id,'IN'), key(rs.id,'OUT'));
+  });
+
   // 2) start from sources
   const start = [];
   components.forEach(c=>{
@@ -1199,7 +1218,8 @@ function computePressureSet(){
       if (pressurized.size !== before) changed = true;
     });
 
-    // Restrictors: pass pressure both ways (no special logic here); component may implement dynamics
+  // Restrictors: their pass-state (_open) is handled separately in simulate() and
+  // exposed here via conditional adjacency added earlier.
     // (restrictor state is not altering connectivity for steady-state pressure graph)
 
     if (changed){
@@ -1220,6 +1240,18 @@ function computePressureSet(){
 
 let lastPressure = new Set();
 let stepOnceFlag = false;
+// Debug overlay
+let __debugOverlay = null;
+function ensureDebugOverlay(){
+  if (__debugOverlay) return __debugOverlay;
+  const d = document.createElement('div');
+  d.style.position = 'fixed'; d.style.right = '8px'; d.style.top = '8px'; d.style.zIndex = 9999;
+  d.style.background = 'rgba(255,255,255,0.9)'; d.style.border = '1px solid #ccc'; d.style.padding = '6px'; d.style.fontSize='12px';
+  d.style.maxWidth = '320px'; d.style.maxHeight = '40vh'; d.style.overflow='auto'; d.id = '__debugOverlay';
+  document.body.appendChild(d);
+  __debugOverlay = d;
+  return d;
+}
 
 /* ---------- Simulation ---------- */
 function simulate(dt){
@@ -1328,13 +1360,121 @@ function simulate(dt){
           if (isPress(other.id, other.port)) rodPress = true;
         });
 
-        if (capPress && !rodPress) target = 1;
-        else if (!capPress && rodPress) target = 0;
-      }
+          if (capPress && !rodPress) target = 1;
+          else if (!capPress && rodPress) target = 0;
+        }
 
-      const speed = 0.8;
-      const dir = Math.sign(target - cyl.pos);
-      if (dir!==0) cyl.setPos(cyl.pos + dir*speed*dt);
+        // Base speed (units/sec). We'll modulate speed by any restrictors encountered on the
+        // pressure path to the cylinder ports (multiplicative factors based on flowPct).
+        const baseSpeed = 0.8;
+
+        const computePortMultiplier = (startId, startPort)=>{
+          const startKey = `${startId}:${startPort}`;
+          // Find the shortest path from startKey to any pressurized source port
+          const sourceKeys = [];
+          components.forEach(c=>{
+            if (c.type === 'source'){
+              if (c.ports?.OUT) sourceKeys.push(`${c.id}:OUT`);
+              if (c.ports?.P)   sourceKeys.push(`${c.id}:P`);
+            }
+          });
+          // only consider sources that are actually pressurized in lastPressure
+          const targets = sourceKeys.filter(sk => lastPressure.has(sk));
+          if (targets.length === 0) return 1;
+
+          const parent = new Map();
+          const q = [startKey];
+          parent.set(startKey, null);
+          let foundTarget = null;
+          while(q.length && !foundTarget){
+            const cur = q.shift();
+            // early exit if cur is a pressurized source
+            if (targets.includes(cur)) { foundTarget = cur; break; }
+            for (const conn of connections){
+              const a = `${conn.from.id}:${conn.from.port}`;
+              const b = `${conn.to.id}:${conn.to.port}`;
+              let other = null;
+              if (a === cur) other = b;
+              else if (b === cur) other = a;
+              if (!other) continue;
+              if (!parent.has(other)){
+                parent.set(other, cur);
+                q.push(other);
+              }
+            }
+          }
+          if (!foundTarget) return 1;
+
+          // reconstruct path from startKey -> foundTarget
+          const path = [];
+          let cur = foundTarget;
+          while(cur !== null){ path.push(cur); cur = parent.get(cur); }
+          // path currently from target -> startKey, reverse it
+          path.reverse();
+
+          // collect unique restrictor components on the path
+          const restrictorIds = new Set();
+          for (const node of path){
+            const m = node.match(/^(\d+):(.+)$/);
+            if (!m) continue;
+            const cid = Number(m[1]);
+            const comp = components.find(cc=> cc.id === cid);
+            if (comp && comp.type === 'restrictor') restrictorIds.add(cid);
+          }
+          // Debug: show path and restrictors
+          try {
+            const dbg = ensureDebugOverlay();
+            const pathReadable = path.map(n=>{
+              const mm = n.match(/^(\d+):(.+)$/);
+              if (!mm) return n;
+              const cid = Number(mm[1]); const p = mm[2];
+              const comp = components.find(cc=> cc.id === cid);
+              return comp ? `${comp.type}:${cid}.${p}` : `${cid}:${p}`;
+            }).join(' -> ');
+            const rList = [...restrictorIds].map(id=>{
+              const rc = components.find(cc=> cc.id === id);
+              return rc ? `${id}(${rc.flowPct ?? 100}%)` : String(id);
+            }).join(', ');
+            const el = document.createElement('div');
+            el.style.fontSize='12px'; el.style.borderTop='1px dashed #ccc'; el.style.paddingTop='4px';
+            el.textContent = `PATH from ${startKey}: ${pathReadable} | restrictors: ${rList || 'none'}`;
+            dbg.appendChild(el);
+            while(dbg.childNodes.length > 80) dbg.removeChild(dbg.firstChild);
+          } catch(e){}
+
+          if (restrictorIds.size === 0) return 1;
+          let mul = 1;
+          for (const rid of restrictorIds){
+            const rc = components.find(cc=> cc.id === rid);
+            mul *= ((rc.flowPct ?? 100)/100);
+          }
+          return mul;
+        };
+
+    const dir = Math.sign(target - cyl.pos);
+    if (dir !== 0){
+          let multiplier = 1;
+          if (cyl.type === 'cylSingle'){
+            const aConns = connections.filter(c=> (c.from.id===cyl.id && c.from.port==='A') || (c.to.id===cyl.id && c.to.port==='A'));
+            aConns.forEach(conn=>{
+              const other = (conn.from.id===cyl.id) ? conn.to : conn.from;
+              multiplier *= computePortMultiplier(other.id, other.port);
+            });
+          } else {
+            const capConns = connections.filter(c=> (c.from.id===cyl.id && c.from.port==='Cap') || (c.to.id===cyl.id && c.to.port==='Cap'));
+            const rodConns = connections.filter(c=> (c.from.id===cyl.id && c.from.port==='Rod') || (c.to.id===cyl.id && c.to.port==='Rod'));
+            capConns.forEach(conn=>{ const other = (conn.from.id===cyl.id) ? conn.to : conn.from; multiplier *= computePortMultiplier(other.id, other.port); });
+            rodConns.forEach(conn=>{ const other = (conn.from.id===cyl.id) ? conn.to : conn.from; multiplier *= computePortMultiplier(other.id, other.port); });
+          }
+          const speed = baseSpeed * multiplier;
+          cyl.setPos(cyl.pos + dir*speed*dt);
+          try {
+            const dbg = ensureDebugOverlay();
+            const info = `Cyl ${cyl.id} mult=${multiplier.toFixed(3)} speed=${(baseSpeed*multiplier).toFixed(3)}`;
+            const el = document.createElement('div'); el.textContent = info; dbg.appendChild(el);
+            while(dbg.childNodes.length > 20) dbg.removeChild(dbg.firstChild);
+          } catch(e){}
+        }
     });
   }
 
@@ -1382,7 +1522,7 @@ function snapshotProject(){
     const base = { id:c.id, type:c.type, x:c.x, y:c.y };
   if (c.type==='valve52') return { ...base, state:c.state };
   if (c.type==='airValve32') return { ...base, active: !!(c.state?.active) };
-  if (c.type==='restrictor') return { ...base };
+  if (c.type==='restrictor') return { ...base, flowPct: Number(c.flowPct ?? 100) };
   if (c.type==='checkValve') return { ...base };
     if (c.type==='cylDouble' || c.type==='cylinder' || c.type==='cylSingle'){
       const letter = readCylinderLetterFromComp(c);
@@ -1473,7 +1613,8 @@ async function loadProject(data){
     } else if (sc.type === 'orValve'){
       comp = addOrValve(sc.x, sc.y, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
     } else if (sc.type === 'restrictor'){
-      comp = addRestrictor(sc.x, sc.y, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
+  comp = addRestrictor(sc.x, sc.y, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
+  if (typeof sc.flowPct === 'number') { comp.flowPct = sc.flowPct; comp.updateLabel?.(); }
     } else if (sc.type === 'checkValve'){
       comp = addCheckValve(sc.x, sc.y, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
     } else if (sc.type === 'limit32'){
@@ -1557,6 +1698,34 @@ function ensureButton(id, label, onClick){
   const fresh = btn.cloneNode(true);
   btn.replaceWith(fresh);
   fresh.addEventListener('click', onClick);
+}
+
+// Simple inspector: shows controls for a single selected component
+function ensureInspector(){
+  let insp = document.getElementById('inspector');
+  if (!insp){
+    insp = document.createElement('div'); insp.id = 'inspector'; insp.style.padding = '8px';
+    const side = document.querySelector('.sidebar') || document.body;
+    side.appendChild(insp);
+  }
+  return insp;
+}
+
+function updateInspector(){
+  const insp = ensureInspector();
+  insp.innerHTML = '';
+  if (selectedComponents.size !== 1) return;
+  const comp = [...selectedComponents][0];
+  if (!comp) return;
+  if (comp.type === 'restrictor'){
+    const title = document.createElement('div'); title.textContent = 'Restrictor'; title.style.fontWeight = '600'; insp.appendChild(title);
+    const label = document.createElement('div'); label.textContent = `Flow: ${Math.round(comp.flowPct ?? 100)}%`; label.style.margin = '6px 0'; insp.appendChild(label);
+    const input = document.createElement('input'); input.type = 'range'; input.min = '1'; input.max = '100'; input.value = String(comp.flowPct ?? 100);
+    input.addEventListener('input', ()=>{ comp.flowPct = Number(input.value); label.textContent = `Flow: ${Math.round(comp.flowPct)}%`; comp.updateLabel?.(); });
+    input.addEventListener('change', ()=>{ pushHistory('Set restrictor flow %'); });
+    insp.appendChild(input);
+  }
+  // cylinder flow-path debug temporarily hidden
 }
 
 function setMode(m){
@@ -1684,6 +1853,9 @@ function wrapValveToggleGuard(valveComp){
   style.id = 'overlayCSS';
   style.textContent = css;
   document.head.appendChild(style);
+  // debug highlight style
+  const dbgCss = document.createElement('style'); dbgCss.id='dbgCss'; dbgCss.textContent = `.dbg-highlight { outline: 3px solid orange !important; outline-offset: 3px; }`;
+  document.head.appendChild(dbgCss);
 })();
 
 /* ---------- Buttons ---------- */
@@ -1735,6 +1907,13 @@ function updateModeButtons(){
   });
 }
 function addButtons(){
+  // Remove any pre-existing restrictor add button that may exist in static HTML or an older bundle
+  try { const old = document.getElementById('addRestrictor'); if (old) old.remove(); } catch(e){}
+  try {
+    document.querySelectorAll('.sidebar .btn').forEach(b=>{
+      try { if ((b.textContent||'').toLowerCase().includes('restrictor')) b.remove(); } catch(e){}
+    });
+  } catch(e){}
   ensureButton('addSource',  '➕ Pressure source', ()=>{
     if (!canEdit()) return;
     const r = workspaceBBox();
@@ -1789,12 +1968,8 @@ function addButtons(){
     addLimitValve32(r.width*0.52, r.height*0.28, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid, getSignal);
     pushHistory('Add limit32');
   });
-  ensureButton('addRestrictor', '➕ Restrictor', ()=>{
-    if (!canEdit()) return;
-    const r = workspaceBBox();
-    addRestrictor(r.width*0.60, r.height*0.60, compLayer, components, handlePortClick, makeDraggable, redrawConnections, uid);
-    pushHistory('Add restrictor');
-  });
+  // Restrictor add button hidden temporarily (restrictor support remains in the app and can be
+  // loaded from project files; UI to add/edit restrictors was removed per user request).
   ensureButton('addCheckValve', '➕ Check valve', ()=>{
     if (!canEdit()) return;
     const r = workspaceBBox();

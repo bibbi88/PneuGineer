@@ -97,6 +97,18 @@ export function addRestrictor(
     _timer: 0
   };
 
+  // Flow percent: 100 means no restriction; lower values reduce cylinder speed proportionally
+  comp.flowPct = 100;
+  comp.labelEl = label;
+  comp.updateLabel = function(){
+    if (comp.flowPct !== undefined && comp.flowPct !== null){
+      label.textContent = `Restrictor (${Math.round(comp.flowPct)}%)`;
+    } else {
+      label.textContent = 'Restrictor';
+    }
+  };
+  comp.updateLabel();
+
   makeDraggable(comp);
   components.push(comp);
   redrawConnections();

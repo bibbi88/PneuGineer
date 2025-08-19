@@ -16,7 +16,8 @@ export function addSource(x, y, compLayer, components, handlePortClick, makeDrag
 
   const label = document.createElement('div');
   label.className = 'label';
-  label.textContent = 'Pressure Source';
+  // label intentionally blank per UI preference
+  label.textContent = '';
 
   const NS = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(NS,'svg');
@@ -61,7 +62,8 @@ export function addSource(x, y, compLayer, components, handlePortClick, makeDrag
   const t = document.createElementNS(NS,'text');
   t.setAttribute('x', s(OUT.cx)); t.setAttribute('y', s(OUT.cy - 10));
   t.setAttribute('text-anchor','middle'); t.setAttribute('font-size', Math.max(9, 11*SCALE));
-  t.textContent = 'OUT';
+  // hide OUT text on pressure source
+  t.textContent = '';
 
   // Lägg till i ordning så innercirkeln hamnar ovanpå huvudcirkeln
   g.append(circle, innerCircle, stem, p, t);

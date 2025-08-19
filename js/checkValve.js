@@ -20,7 +20,8 @@ export function addCheckValve(
 
   const label = document.createElement('div');
   label.className = 'label';
-  label.textContent = 'Check Valve';
+  // label intentionally blank per UI preference
+  label.textContent = '';
 
   const NS = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(NS,'svg');
@@ -89,7 +90,8 @@ export function addCheckValve(
     t.setAttribute('y', s(labelBelow ? p.cy+18 : p.cy-10));
     t.setAttribute('text-anchor','middle');
     t.setAttribute('font-size', Math.max(9, 11*SCALE));
-    t.textContent = key;
+  // hide port text for check valve (IN/OUT labels not shown)
+  t.textContent = '';
     return { c, t };
   }
   const out = makePort('OUT', OUT, false);

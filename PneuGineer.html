@@ -214,7 +214,7 @@ function addAirValve32(
 
   const label = document.createElement('div');
   label.className = 'label';
-  label.textContent = '3/2 air-piloted';
+  label.textContent = '';
   el.appendChild(label);
 
   const svg = document.createElementNS(NS,'svg');
@@ -557,7 +557,7 @@ function addCheckValve(
 
   const label = document.createElement('div');
   label.className = 'label';
-  label.textContent = 'Check Valve';
+  label.textContent = '';
 
   const NS = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(NS,'svg');
@@ -1583,7 +1583,7 @@ function addPushButton32(
 
   const label = document.createElement('div');
   label.className = 'label';
-  label.textContent = 'Push Button 3/2';
+  label.textContent = '';
   el.appendChild(label);
 
   const svg = document.createElementNS(NS,'svg');
@@ -1877,7 +1877,7 @@ function addSource(x, y, compLayer, components, handlePortClick, makeDraggable, 
 
   const label = document.createElement('div');
   label.className = 'label';
-  label.textContent = 'Pressure Source';
+  label.textContent = '';
 
   const NS = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(NS,'svg');
@@ -1922,7 +1922,7 @@ function addSource(x, y, compLayer, components, handlePortClick, makeDraggable, 
   const t = document.createElementNS(NS,'text');
   t.setAttribute('x', s(OUT.cx)); t.setAttribute('y', s(OUT.cy - 10));
   t.setAttribute('text-anchor','middle'); t.setAttribute('font-size', Math.max(9, 11*SCALE_source));
-  t.textContent = 'OUT';
+  t.textContent = '';
 
   // Lägg till i ordning så innercirkeln hamnar ovanpå huvudcirkeln
   g.append(circle, innerCircle, stem, p, t);
@@ -2018,7 +2018,7 @@ function addValve52(
 
   const label = document.createElement('div');
   label.className = 'label';
-  label.textContent = '5/2 valve';
+  label.textContent = '';
 
   const NS  = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(NS, 'svg');

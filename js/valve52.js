@@ -69,7 +69,8 @@ export function addValve52(
 
   const label = document.createElement('div');
   label.className = 'label';
-  label.textContent = '5/2 valve';
+  // label intentionally blank per UI preference
+  label.textContent = '';
 
   const NS  = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(NS, 'svg');
@@ -198,12 +199,12 @@ export function addValve52(
     c.setAttribute('cx', String(cx));
     c.setAttribute('cy', String(cy));
 
-    const t = document.createElementNS(NS,'text');
-    t.setAttribute('x', String(cx));
-    t.setAttribute('y', String(cy - 10*scale));
-    t.setAttribute('text-anchor','middle');
-    t.setAttribute('font-size', String(FONT));
-    t.textContent = key;
+  const t = document.createElementNS(NS,'text');
+  t.setAttribute('x', String(cx - 14));
+  t.setAttribute('y', String(cy + 4));
+  t.setAttribute('text-anchor','end');
+  t.setAttribute('font-size', String(FONT));
+  t.textContent = key;
 
     const clickable = clickableEl || c;
     clickable.addEventListener('click', e=>{
@@ -211,7 +212,7 @@ export function addValve52(
       handlePortClick(comp, key, c);
     });
 
-    parent.append(c, t);
+  parent.append(c, t);
     return c;
   }
 
