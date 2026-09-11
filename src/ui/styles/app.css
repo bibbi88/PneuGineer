@@ -1,0 +1,307 @@
+:root {
+  --bg: #f7f7f9;
+  --panel: #ececf1;
+  --ink: #111;
+  --muted: #666;
+  --accent: #d00;
+  --port: #0a74ff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+}
+
+.app {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  height: 100vh;
+}
+
+.sidebar {
+  background: var(--panel);
+  border-right: 1px solid #ccc;
+  padding: 10px;
+  overflow: auto;
+}
+
+.sidebar h2 {
+  margin: 6px 0 10px;
+  font-size: 16px;
+}
+
+.btn {
+  display: block;
+  width: 100%;
+  margin: 6px 0;
+  padding: 8px 10px;
+  border: 1px solid #bbb;
+  background: #fff;
+  cursor: pointer;
+  border-radius: 6px;
+  text-align: left;
+}
+
+.btn:hover {
+  background: #f8f8ff;
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.btn:disabled:hover {
+  background: #fff;
+}
+
+.workspace {
+  position: relative;
+  overflow: hidden;
+}
+
+#viewport {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  transform-origin: 0 0;
+  width: max(100%, 2400px);
+  height: max(100%, 1600px);
+  background-image:
+    linear-gradient(to right, rgba(0, 0, 0, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.04) 1px, transparent 1px);
+  background-size: 10px 10px;
+}
+
+.layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+#connLayer {
+  z-index: 0;
+}
+
+#compLayer {
+  z-index: 1;
+  pointer-events: none;
+}
+
+#compLayer > * {
+  pointer-events: auto;
+}
+
+.comp {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  user-select: none;
+}
+
+.comp.selected {
+  outline: 2px dashed var(--accent);
+  outline-offset: 4px;
+}
+
+.label {
+  position: absolute;
+  top: -18px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+svg.compSvg {
+  display: block;
+  overflow: visible;
+}
+
+.port {
+  fill: #fff;
+  stroke: var(--port);
+  stroke-width: 1.5;
+  cursor: crosshair;
+}
+
+.port:hover {
+  fill: #e8f1ff;
+}
+
+.draggable {
+  cursor: move;
+}
+
+.wire {
+  stroke: #000;
+  stroke-width: 2;
+  fill: none;
+}
+
+.wire.active {
+  stroke: var(--accent);
+}
+
+.wireGhost {
+  stroke: var(--port);
+  stroke-width: 2;
+  stroke-dasharray: 6 6;
+  fill: none;
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.wire.selected {
+  stroke: var(--accent);
+  stroke-width: 3;
+  stroke-dasharray: 4 4;
+}
+
+.wireHit {
+  stroke: transparent;
+  stroke-width: 10;
+  cursor: pointer;
+  pointer-events: stroke;
+}
+
+.wireLabel {
+  font-size: 10px;
+  fill: var(--muted);
+  text-anchor: middle;
+}
+
+.port.pressurized {
+  fill: var(--accent);
+  stroke: var(--accent);
+}
+
+.port.portHover {
+  fill: #e8f1ff;
+  stroke-width: 3;
+}
+
+.wireHandle {
+  fill: #fff;
+  stroke: var(--port);
+  stroke-width: 1.5;
+  cursor: move;
+}
+
+.marquee {
+  position: fixed;
+  border: 1px dashed var(--port);
+  background: rgba(10, 116, 255, 0.08);
+  pointer-events: none;
+  z-index: 999;
+}
+
+.ctxmenu {
+  position: fixed;
+  z-index: 1000;
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  min-width: 160px;
+}
+
+.ctxmenu button {
+  border: none;
+  background: none;
+  text-align: left;
+  padding: 6px 10px;
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.ctxmenu button:hover {
+  background: #f0f4ff;
+}
+
+#inspector h3 {
+  margin: 6px 0 8px;
+  font-size: 14px;
+}
+
+.inspectorRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 6px 0;
+  font-size: 13px;
+}
+
+.inspectorRow input {
+  width: 90px;
+  padding: 4px 6px;
+  border: 1px solid #bbb;
+  border-radius: 4px;
+}
+
+.projectName {
+  display: block;
+  width: 100%;
+  margin: 6px 0;
+  padding: 6px 8px;
+  border: 1px solid #bbb;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.restoreBanner {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  background: #fff7e0;
+  border: 1px solid #e6d38a;
+  border-radius: 8px;
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+}
+
+.restoreBanner button {
+  border: 1px solid #ccc;
+  background: #fff;
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.hint {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  padding: 6px 8px;
+  font-size: 12px;
+  color: #333;
+  background: #ffffffcc;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  z-index: 3;
+}
