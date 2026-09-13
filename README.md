@@ -8,8 +8,8 @@ This is a from-scratch TypeScript + Vite rewrite of the original [PneuGineer](ht
 aimed at a cleaner architecture (a real `Component` interface instead of type-switching, a
 cached simulation engine, a grid-based A* wire router) plus a few new components.
 
-Like the original, this is an educational project focused on flow *logic*, not flow
-*calculations* — pressure is modeled as a simple pressurized/not-pressurized graph, not real
+Like the original, this is an educational project focused on flow _logic_, not flow
+_calculations_ — pressure is modeled as a simple pressurized/not-pressurized graph, not real
 fluid dynamics.
 
 ## Components

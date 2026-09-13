@@ -9,6 +9,7 @@ import { initKeyboard } from './interaction/keyboard';
 import { initWireSplitting } from './interaction/wireSplitting';
 import { spawnComponent } from './interaction/spawn';
 import { initWires } from './wires/connection';
+import { initWireHandles } from './wires/handles';
 import { startSimLoop } from './sim/loop';
 import { appState } from './app/AppState';
 import { renderProjectBar } from './ui/projectBar';
@@ -50,6 +51,7 @@ const inspectorEl: HTMLElement = inspectorQuery;
 
 const viewport = initViewport(viewportQuery, workspaceEl);
 initWires(connLayer, viewport, workspaceEl);
+initWireHandles(connLayer, viewport, workspaceEl);
 initLinking(connLayer, viewport, workspaceEl);
 initMarquee(connLayer);
 initKeyboard();

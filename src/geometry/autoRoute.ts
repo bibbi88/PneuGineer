@@ -158,6 +158,75 @@ function astar(
 }
 
 /**
+ * The grid path's cells are centered on a coarse 20px grid, which generally doesn't land
+ * exactly on the continuous stubOut/stubIn coordinates. Rather than bridging the gap with an
+ * extra perpendicular corner (which reads as a needless little zigzag right at the port), shift
+ * the path's leading and trailing straight runs sideways so they align exactly with the stub -
+ * the run's own length absorbs the few pixels of grid-rounding instead of adding a new segment.
+ * Left alone (returned unchanged) when the two runs would overlap, since that's only possible
+ * for a very short path where the caller's fallback bridge is the simpler, safer option.
+ */
+function alignRunsToStubs(gridPath: Point[], stubOut: Point, stubIn: Point): Point[] {
+  const points = gridPath.map((p) => ({ ...p }));
+  const n = points.length;
+  if (n < 3) return points;
+
+  const p0 = points[0] as Point;
+  const p1 = points[1] as Point;
+  const leadHorizontal = p0.y === p1.y;
+  const leadCrossVal = leadHorizontal ? p0.y : p0.x;
+  let leadEnd = 0;
+  while (
+    leadEnd < n &&
+    (leadHorizontal
+      ? (points[leadEnd] as Point).y === leadCrossVal
+      : (points[leadEnd] as Point).x === leadCrossVal)
+  ) {
+    leadEnd++;
+  }
+
+  const pLast = points[n - 1] as Point;
+  const pPrev = points[n - 2] as Point;
+  const tailHorizontal = pLast.y === pPrev.y;
+  const tailCrossVal = tailHorizontal ? pLast.y : pLast.x;
+  let tailStart = n;
+  while (
+    tailStart > 0 &&
+    (tailHorizontal
+      ? (points[tailStart - 1] as Point).y === tailCrossVal
+      : (points[tailStart - 1] as Point).x === tailCrossVal)
+  ) {
+    tailStart--;
+  }
+
+  // The two runs constrain different axes (the common case: one bend separates them, e.g. a
+  // horizontal run into a vertical one) whenever leadHorizontal !== tailHorizontal - in that
+  // case their index ranges legitimately touch or overlap at the shared corner point, and
+  // aligning both is safe since each only ever writes its own axis. Only bail to the caller's
+  // fallback bridge when they constrain the SAME axis and still overlap, meaning there's no
+  // real bend between them at all (e.g. a dead-straight path) to anchor an alignment to.
+  if (leadHorizontal === tailHorizontal && leadEnd > tailStart) return points;
+
+  for (let i = 0; i < leadEnd; i++) {
+    const p = points[i] as Point;
+    if (leadHorizontal) p.y = stubOut.y;
+    else p.x = stubOut.x;
+  }
+  for (let i = tailStart; i < n; i++) {
+    const p = points[i] as Point;
+    if (tailHorizontal) p.y = stubIn.y;
+    else p.x = stubIn.x;
+  }
+  // The cross-axis now matches exactly, but the along-axis (how far the run travels before its
+  // next turn) is still wherever the grid's rounding put it - snap the very first/last point to
+  // the stub outright so the run terminates exactly there instead of a couple of leftover pixels
+  // short/long of it (which would otherwise render as its own tiny extra segment).
+  points[0] = { ...stubOut };
+  points[n - 1] = { ...stubIn };
+  return points;
+}
+
+/**
  * Grid-based orthogonal A* route between two port anchors, routing around (not through)
  * other components. Falls back to the simple one-corner route if no path is found (e.g. the
  * grid is fully boxed in) so a connection is never left unrendered.
@@ -187,6 +256,18 @@ export function autoRouteAStar(
     return collapseColinear(points);
   }
 
-  const points: Point[] = [from.pos, stubOut, ...gridPath, stubIn, to.pos];
+  const alignedPath = alignRunsToStubs(gridPath, stubOut, stubIn);
+  const firstGridPoint = alignedPath[0] as Point;
+  const lastGridPoint = alignedPath[alignedPath.length - 1] as Point;
+  const points: Point[] = [from.pos, stubOut];
+  // Only needed as a fallback for the rare short-path case alignRunsToStubs declines to touch.
+  if (stubOut.x !== firstGridPoint.x && stubOut.y !== firstGridPoint.y) {
+    points.push({ x: firstGridPoint.x, y: stubOut.y });
+  }
+  points.push(...alignedPath);
+  if (lastGridPoint.x !== stubIn.x && lastGridPoint.y !== stubIn.y) {
+    points.push({ x: stubIn.x, y: lastGridPoint.y });
+  }
+  points.push(stubIn, to.pos);
   return collapseColinear(points);
 }

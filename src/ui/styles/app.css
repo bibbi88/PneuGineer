@@ -142,6 +142,29 @@ svg.compSvg {
   fill: #e8f1ff;
 }
 
+/* A connected port's dot is hidden so the wire reads as one continuous solid line running
+   into the component, instead of visibly stopping at a filled circle. Still fully interactive
+   (pointer-events unchanged) so it can be clicked to branch another wire from it. */
+.port.portConnected {
+  fill: transparent;
+  stroke: transparent;
+}
+
+.port.portConnected:hover {
+  fill: #e8f1ff;
+  stroke: var(--port);
+}
+
+.wireHandle {
+  fill: #fff;
+  stroke: var(--accent);
+  stroke-width: 1.5;
+}
+
+.wireHandle:hover {
+  fill: #ffe8e8;
+}
+
 .draggable {
   cursor: move;
 }

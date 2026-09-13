@@ -109,6 +109,51 @@ export function polylineMidpoint(points: Point[]): Point {
   return points[points.length - 1] as Point;
 }
 
+/** The stub-out point plus the bend point each guide produces, in order - guideCorners[i + 1]
+ * is exactly the point guides[i] defines, so callers (e.g. drag handles) can map one to the
+ * other with no ambiguity. Does not include stubIn or the final port positions. */
+export function guideCorners(
+  from: PortAnchor,
+  to: PortAnchor,
+  guides: WireGuide[],
+  stubStartLen: number | null = null,
+): Point[] {
+  const stubOut = stubPoint(from, to.pos, stubStartLen ?? WIRE_STUB);
+  const corners: Point[] = [stubOut];
+  let cur = stubOut;
+  for (const g of guides) {
+    const next = g.type === 'H' ? { x: cur.x, y: g.pos } : { x: g.pos, y: cur.y };
+    corners.push(next);
+    cur = next;
+  }
+  return corners;
+}
+
+/** Reverse-engineers a guide list from a rendered path's internal corners, so a connection
+ * that's still on auto-route can be "seeded" with editable guides matching its current visual
+ * shape the first time the user drags a bend.
+ *
+ * `stubOut`/`stubIn` must be the actual computed stub points (see `stubPoint`), not assumed
+ * from position in the array: `collapseColinear` can merge either literal stub point into what
+ * is really the first/last bend (when they happen to fall on the same line), which would shift
+ * a fixed-index assumption and silently drop or misidentify a bend.
+ */
+export function seedGuidesFromPoints(points: Point[], stubOut: Point, stubIn: Point): WireGuide[] {
+  const guides: WireGuide[] = [];
+  for (let i = 1; i < points.length - 1; i++) {
+    const cur = points[i] as Point;
+    if (
+      (cur.x === stubOut.x && cur.y === stubOut.y) ||
+      (cur.x === stubIn.x && cur.y === stubIn.y)
+    ) {
+      continue;
+    }
+    const prev = points[i - 1] as Point;
+    guides.push(prev.x === cur.x ? { type: 'H', pos: cur.y } : { type: 'V', pos: cur.x });
+  }
+  return guides;
+}
+
 /** Routes through user-placed guides: each guide fixes one axis of the next bend point. */
 export function routeWithGuides(
   from: PortAnchor,
@@ -117,15 +162,16 @@ export function routeWithGuides(
   stubStartLen: number | null = null,
   stubEndLen: number | null = null,
 ): Point[] {
-  const stubOut = stubPoint(from, to.pos, stubStartLen ?? WIRE_STUB);
   const stubIn = stubPoint(to, from.pos, stubEndLen ?? WIRE_STUB);
+  const corners = guideCorners(from, to, guides, stubStartLen);
+  const cur = corners[corners.length - 1] as Point;
 
-  const points: Point[] = [from.pos, stubOut];
-  let cur = stubOut;
-  for (const g of guides) {
-    const next = g.type === 'H' ? { x: cur.x, y: g.pos } : { x: g.pos, y: cur.y };
-    points.push(next);
-    cur = next;
+  const points: Point[] = [from.pos, ...corners];
+  // The last guide point isn't guaranteed to share an axis with stubIn (e.g. after dragging a
+  // guide) - bridge with an extra corner so the final approach stays orthogonal instead of
+  // cutting a diagonal line straight to the port.
+  if (cur.x !== stubIn.x && cur.y !== stubIn.y) {
+    points.push({ x: stubIn.x, y: cur.y });
   }
   points.push(stubIn, to.pos);
   return collapseColinear(points);

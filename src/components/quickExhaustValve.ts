@@ -1,11 +1,17 @@
 import type { Component, ConductivityContext, PortConnection } from '../core/types';
 import { uid } from '../core/ids';
-import { buildComponentShell, createPort, createSvgEl } from './shared/svgHelpers';
+import { buildComponentShell, createLabeledPort, createSvgEl } from './shared/svgHelpers';
 
 export const QUICK_EXHAUST_VALVE_TYPE = 'quickExhaustValve';
 
-const SVG_W = 60;
-const SVG_H = 40;
+// Local layout box for the body+port geometry below; OX/OY place it inside the padded outer
+// canvas (SVG_W/SVG_H), which must be larger to fit the port number labels that spill outside it.
+const LOCAL_W = 60;
+const LOCAL_H = 40;
+const OX = 22;
+const OY = 0;
+const SVG_W = 104;
+const SVG_H = 61;
 
 /**
  * Self-piloted by its own supply port: when port 1 is pressurized it passes 1->2 through to the
@@ -23,21 +29,24 @@ export function createQuickExhaustValve(compLayer: HTMLElement, x: number, y: nu
     'Quick Exh.',
   );
 
+  const g = createSvgEl('g', { transform: `translate(${OX},${OY})` });
+
   const body = createSvgEl('rect', {
     x: 8,
     y: 8,
-    width: SVG_W - 16,
-    height: SVG_H - 16,
+    width: LOCAL_W - 16,
+    height: LOCAL_H - 16,
     fill: '#fff',
     stroke: '#111',
     'stroke-width': 2,
   });
-  shell.svg.appendChild(body);
+  g.appendChild(body);
+  shell.svg.appendChild(g);
 
   const ports = {
-    '1': createPort(shell.svg, '1', SVG_W / 2, SVG_H - 8, 'V'),
-    '2': createPort(shell.svg, '2', SVG_W - 8, SVG_H / 2, 'H'),
-    '3': createPort(shell.svg, '3', 8, SVG_H / 2, 'H'),
+    '1': createLabeledPort(g, '1', LOCAL_W / 2, LOCAL_H - 8, 'V', 'below'),
+    '2': createLabeledPort(g, '2', LOCAL_W - 8, LOCAL_H / 2, 'H', 'right'),
+    '3': createLabeledPort(g, '3', 8, LOCAL_H / 2, 'H', 'left'),
   };
 
   const comp: Component = {

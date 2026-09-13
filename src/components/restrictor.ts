@@ -1,40 +1,82 @@
 import type { Component, PortConnection } from '../core/types';
 import { uid } from '../core/ids';
-import { buildComponentShell, createPort, createSvgEl } from './shared/svgHelpers';
+import { buildComponentShell, createSvgEl, createLabeledPort } from './shared/svgHelpers';
 
 export const RESTRICTOR_TYPE = 'restrictor';
 
-const SVG_W = 50;
-const SVG_H = 24;
+const SVG_W = 76;
+const SVG_H = 145;
+const GX = -22;
+const GY = -6;
+const HUS_X = 30;
+const HUS_Y = 50;
+const HUS_W = 60;
+const HUS_H = 60;
 const DEFAULT_FLOW_PCT = 50;
 
 export function createRestrictor(compLayer: HTMLElement, x: number, y: number): Component {
   const shell = buildComponentShell(compLayer, RESTRICTOR_TYPE, x, y, SVG_W, SVG_H, 'Restrictor');
+  const g = createSvgEl('g', { transform: `translate(${GX},${GY})` });
 
-  const line = createSvgEl('line', {
-    x1: 0,
-    y1: SVG_H / 2,
-    x2: SVG_W,
-    y2: SVG_H / 2,
-    stroke: '#111',
-    'stroke-width': 2,
-  });
-  shell.svg.appendChild(line);
+  g.appendChild(
+    createSvgEl('rect', {
+      x: HUS_X,
+      y: HUS_Y,
+      width: HUS_W,
+      height: HUS_H,
+      fill: '#fff',
+      stroke: '#111',
+      'stroke-width': 2,
+    }),
+  );
 
-  const throat = createSvgEl('polygon', {
-    points: `${SVG_W / 2 - 10},${SVG_H / 2 - 9} ${SVG_W / 2 + 10},${SVG_H / 2 - 9} ${SVG_W / 2 + 6},${SVG_H / 2 + 9} ${SVG_W / 2 - 6},${SVG_H / 2 + 9}`,
-    fill: '#fff',
-    stroke: '#111',
-    'stroke-width': 2,
-  });
-  shell.svg.appendChild(throat);
+  const x1 = HUS_X + 6;
+  const x2 = HUS_X + HUS_W - 6;
+  const yC = HUS_Y + HUS_H / 2;
+  g.appendChild(
+    createSvgEl('path', {
+      d: `M ${x1} ${yC + 8} L ${x1 + 16} ${yC} L ${x1} ${yC - 8} M ${x2} ${yC + 8} L ${x2 - 16} ${yC} L ${x2} ${yC - 8}`,
+      stroke: '#111',
+      fill: 'none',
+      'stroke-width': 2,
+    }),
+  );
+
+  const IN = { cx: HUS_X + HUS_W / 2, cy: HUS_Y + HUS_H + 18 };
+  const OUT = { cx: HUS_X + HUS_W / 2, cy: HUS_Y - 18 };
+  g.appendChild(
+    createSvgEl('line', {
+      x1: IN.cx,
+      y1: HUS_Y + HUS_H,
+      x2: IN.cx,
+      y2: IN.cy - 6,
+      stroke: '#111',
+      'stroke-width': 2,
+    }),
+  );
+  g.appendChild(
+    createSvgEl('line', {
+      x1: OUT.cx,
+      y1: OUT.cy + 6,
+      x2: OUT.cx,
+      y2: HUS_Y,
+      stroke: '#111',
+      'stroke-width': 2,
+    }),
+  );
+  shell.svg.appendChild(g);
 
   const ports = {
-    IN: createPort(shell.svg, 'IN', 0, SVG_H / 2, 'H'),
-    OUT: createPort(shell.svg, 'OUT', SVG_W, SVG_H / 2, 'H'),
+    IN: createLabeledPort(g, 'IN', IN.cx, IN.cy, 'V', 'below'),
+    OUT: createLabeledPort(g, 'OUT', OUT.cx, OUT.cy, 'V', 'above'),
   };
 
   let flowPct = DEFAULT_FLOW_PCT;
+
+  function updateLabel(): void {
+    shell.labelEl.textContent = `Restrictor (${Math.round(flowPct)}%)`;
+  }
+  updateLabel();
 
   const comp: Component = {
     id: uid(),
@@ -44,8 +86,8 @@ export function createRestrictor(compLayer: HTMLElement, x: number, y: number): 
     y,
     svgW: SVG_W,
     svgH: SVG_H,
-    gx: 0,
-    gy: 0,
+    gx: GX,
+    gy: GY,
     ports,
 
     conductivityRule(): PortConnection[] {
@@ -61,6 +103,7 @@ export function createRestrictor(compLayer: HTMLElement, x: number, y: number): 
     },
     restore(data: Record<string, unknown>): void {
       flowPct = data.flowPct as number;
+      updateLabel();
     },
     reset(): void {},
 

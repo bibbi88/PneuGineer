@@ -1,19 +1,21 @@
 import type { Component, SimStepContext, PortConnection } from '../core/types';
 import { uid } from '../core/ids';
-import { buildComponentShell, createPort, createSvgEl } from './shared/svgHelpers';
+import { buildComponentShell, createSvgEl, createPort } from './shared/svgHelpers';
 import { nextCylinderLetter } from './shared/letters';
 import { BASE_CYL_SPEED } from '../sim/constants';
 import { redrawAllConnections } from '../wires/connection';
 
 export const CYLINDER_SINGLE_TYPE = 'cylinderSingle';
 
-const SVG_W = 100;
-const SVG_H = 30;
-const BARREL_X = 20;
-const BARREL_W = 50;
-const ROD_MAX_EXTRA = 25;
-const CAP_PORT_X = BARREL_X + 6;
-const ROD_PORT_X = SVG_W - 6;
+const SVG_W = 226;
+const SVG_H = 98;
+const GX = 8;
+const GY = 8;
+const W = 200;
+const H = 70;
+const PORT_MARGIN = 6;
+const CAP_PORT_X = 12;
+const ROD_PORT_X = W - 12;
 
 type CylinderMode = 'push' | 'pull';
 
@@ -21,58 +23,79 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
   let letter = nextCylinderLetter();
   const shell = buildComponentShell(compLayer, CYLINDER_SINGLE_TYPE, x, y, SVG_W, SVG_H, '');
 
-  shell.labelEl.textContent = '';
+  shell.labelEl.style.pointerEvents = 'auto';
   const labelText = document.createElement('span');
-  shell.labelEl.appendChild(labelText);
   const modeBtn = document.createElement('button');
   modeBtn.style.fontSize = '10px';
-  modeBtn.style.marginLeft = '4px';
+  modeBtn.style.marginLeft = '6px';
+  modeBtn.style.padding = '2px 6px';
+  modeBtn.style.borderRadius = '6px';
   modeBtn.style.cursor = 'pointer';
   modeBtn.style.pointerEvents = 'auto';
-  shell.labelEl.appendChild(modeBtn);
+  modeBtn.title = 'Toggle single-acting mode (push/pull)';
+  shell.labelEl.append(labelText, modeBtn);
 
-  const barrel = createSvgEl('rect', {
-    x: BARREL_X,
-    y: 4,
-    width: BARREL_W,
-    height: SVG_H - 8,
+  const g = createSvgEl('g', { transform: `translate(${GX},${GY})` });
+
+  const body = createSvgEl('rect', {
+    x: 0,
+    y: 0,
+    width: W,
+    height: H,
     fill: '#fff',
     stroke: '#111',
     'stroke-width': 2,
   });
-  shell.svg.appendChild(barrel);
+  const piston = createSvgEl('rect', { x: 56, y: 0, width: 6, height: H, fill: '#888' });
+  const rod = createSvgEl('rect', { x: 62, y: H / 2 - 3, width: W - 62, height: 6, fill: '#888' });
+  const rodTip = createSvgEl('rect', { x: W, y: H / 2 - 6, width: 10, height: 12, fill: '#666' });
 
-  const rod = createSvgEl('line', {
-    x1: BARREL_X + BARREL_W,
-    y1: SVG_H / 2,
-    x2: BARREL_X + BARREL_W,
-    y2: SVG_H / 2,
+  // Spring symbol (right side, pushing the piston back when unpressurized).
+  const springY = H / 2;
+  const springX0 = W - 28;
+  const seg = 10;
+  const spring = createSvgEl('path', {
+    d: [
+      `M ${springX0} ${springY}`,
+      `l ${-seg} ${-8}`,
+      `l ${-seg} ${16}`,
+      `l ${-seg} ${-16}`,
+      `l ${-seg} ${16}`,
+    ].join(' '),
+    fill: 'none',
     stroke: '#111',
-    'stroke-width': 4,
+    'stroke-width': 2,
   });
-  shell.svg.appendChild(rod);
 
-  const piston = createSvgEl('rect', {
-    x: BARREL_X + 2,
-    y: 8,
-    width: 4,
-    height: SVG_H - 16,
-    fill: '#111',
+  g.append(body, piston, rod, rodTip, spring);
+  shell.svg.appendChild(g);
+
+  let mode: CylinderMode = 'push';
+  const portACircle = createPort(g, 'A', CAP_PORT_X, H + PORT_MARGIN, 'V');
+  const portALabel = createSvgEl('text', {
+    x: CAP_PORT_X,
+    y: H + PORT_MARGIN - 8,
+    'text-anchor': 'middle',
+    'font-size': 11,
   });
-  shell.svg.appendChild(piston);
+  portALabel.textContent = 'A';
+  g.appendChild(portALabel);
 
-  const ports = {
-    A: createPort(shell.svg, 'A', CAP_PORT_X, SVG_H, 'V'),
-  };
+  const ports = { A: portACircle };
 
   let pos = 0;
-  let mode: CylinderMode = 'push';
   let normallyExtended = false;
 
   function updateVisual(): void {
-    const rodX = BARREL_X + BARREL_W + pos * ROD_MAX_EXTRA;
-    rod.setAttribute('x2', String(rodX));
-    piston.setAttribute('x', String(BARREL_X + 2 + pos * (BARREL_W - 8)));
+    const travelStart = 10;
+    const travelEnd = W - 20;
+    const px = travelStart + pos * (travelEnd - travelStart);
+    piston.setAttribute('x', String(px));
+    const rodX = px + 6;
+    const tipX = px + (W - 10);
+    rod.setAttribute('x', String(rodX));
+    rod.setAttribute('width', String(Math.max(0, tipX - rodX)));
+    rodTip.setAttribute('x', String(tipX));
   }
   updateVisual();
 
@@ -81,6 +104,14 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
     modeBtn.textContent = mode;
   }
   updateLabel();
+
+  function updatePortSide(): void {
+    const cx = mode === 'push' ? CAP_PORT_X : ROD_PORT_X;
+    portACircle.el.setAttribute('cx', String(cx));
+    portALabel.setAttribute('x', String(cx));
+    ports.A.cx = cx;
+  }
+  updatePortSide();
 
   function targetFor(pressurizedA: boolean): number {
     const restTarget = normallyExtended ? 1 : 0;
@@ -95,8 +126,8 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
     y,
     svgW: SVG_W,
     svgH: SVG_H,
-    gx: 0,
-    gy: 0,
+    gx: GX,
+    gy: GY,
     ports,
 
     conductivityRule(): PortConnection[] {
@@ -128,7 +159,7 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
       letter = data.letter as string;
       mode = data.mode as CylinderMode;
       normallyExtended = data.normallyExtended as boolean;
-      ports.A.el.setAttribute('cx', String(mode === 'push' ? CAP_PORT_X : ROD_PORT_X));
+      updatePortSide();
       updateLabel();
       updateVisual();
     },
@@ -150,9 +181,19 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
     e.stopPropagation();
     mode = mode === 'push' ? 'pull' : 'push';
     normallyExtended = mode === 'pull';
-    ports.A.el.setAttribute('cx', String(mode === 'push' ? CAP_PORT_X : ROD_PORT_X));
+    updatePortSide();
     updateLabel();
     redrawAllConnections();
+  });
+
+  shell.labelEl.addEventListener('dblclick', (e) => {
+    e.stopPropagation();
+    const answer = window.prompt('Enter cylinder letter (A-Z):', letter);
+    if (answer === null) return;
+    const trimmed = answer.trim().toUpperCase();
+    if (!/^[A-Z]$/.test(trimmed)) return;
+    letter = trimmed;
+    updateLabel();
   });
 
   return comp;

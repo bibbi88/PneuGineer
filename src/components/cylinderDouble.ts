@@ -1,16 +1,18 @@
 import type { Component, SimStepContext, PortConnection } from '../core/types';
 import { uid } from '../core/ids';
-import { buildComponentShell, createPort, createSvgEl } from './shared/svgHelpers';
+import { buildComponentShell, createSvgEl, createLabeledPort } from './shared/svgHelpers';
 import { nextCylinderLetter } from './shared/letters';
 import { BASE_CYL_SPEED } from '../sim/constants';
 
 export const CYLINDER_DOUBLE_TYPE = 'cylinderDouble';
 
-const SVG_W = 100;
-const SVG_H = 30;
-const BARREL_X = 20;
-const BARREL_W = 50;
-const ROD_MAX_EXTRA = 25;
+const SVG_W = 246;
+const SVG_H = 98;
+const GX = 8;
+const GY = 8;
+const W = 220;
+const H = 70;
+const PORT_MARGIN = 6;
 
 export function createCylinderDouble(compLayer: HTMLElement, x: number, y: number): Component {
   let letter = nextCylinderLetter();
@@ -23,48 +25,38 @@ export function createCylinderDouble(compLayer: HTMLElement, x: number, y: numbe
     SVG_H,
     `Cylinder ${letter}`,
   );
+  const g = createSvgEl('g', { transform: `translate(${GX},${GY})` });
 
-  const barrel = createSvgEl('rect', {
-    x: BARREL_X,
-    y: 4,
-    width: BARREL_W,
-    height: SVG_H - 8,
+  const body = createSvgEl('rect', {
+    x: 0,
+    y: 0,
+    width: W,
+    height: H,
     fill: '#fff',
     stroke: '#111',
     'stroke-width': 2,
   });
-  shell.svg.appendChild(barrel);
-
-  const rod = createSvgEl('line', {
-    x1: BARREL_X + BARREL_W,
-    y1: SVG_H / 2,
-    x2: BARREL_X + BARREL_W,
-    y2: SVG_H / 2,
-    stroke: '#111',
-    'stroke-width': 4,
-  });
-  shell.svg.appendChild(rod);
-
-  const piston = createSvgEl('rect', {
-    x: BARREL_X + 2,
-    y: 8,
-    width: 4,
-    height: SVG_H - 16,
-    fill: '#111',
-  });
-  shell.svg.appendChild(piston);
+  const piston = createSvgEl('rect', { x: 60, y: 0, width: 6, height: H, fill: '#888' });
+  const rod = createSvgEl('rect', { x: 66, y: H / 2 - 3, width: W - 66, height: 6, fill: '#888' });
+  const rodTip = createSvgEl('rect', { x: W, y: H / 2 - 6, width: 10, height: 12, fill: '#666' });
+  g.append(body, piston, rod, rodTip);
+  shell.svg.appendChild(g);
 
   const ports = {
-    A: createPort(shell.svg, 'A', BARREL_X + 6, SVG_H, 'V'),
-    B: createPort(shell.svg, 'B', SVG_W - 6, SVG_H, 'V'),
+    A: createLabeledPort(g, 'A', 10, H + PORT_MARGIN, 'V', 'above'),
+    B: createLabeledPort(g, 'B', W - 10, H + PORT_MARGIN, 'V', 'above'),
   };
 
   let pos = 0;
 
   function updateVisual(): void {
-    const rodX = BARREL_X + BARREL_W + pos * ROD_MAX_EXTRA;
-    rod.setAttribute('x2', String(rodX));
-    piston.setAttribute('x', String(BARREL_X + 2 + pos * (BARREL_W - 8)));
+    const px = 10 + pos * (W - 20);
+    piston.setAttribute('x', String(px));
+    const rodX = px + 6;
+    const tipX = px + (W - 10);
+    rod.setAttribute('x', String(rodX));
+    rod.setAttribute('width', String(Math.max(0, tipX - rodX)));
+    rodTip.setAttribute('x', String(tipX));
   }
   updateVisual();
 
@@ -76,8 +68,8 @@ export function createCylinderDouble(compLayer: HTMLElement, x: number, y: numbe
     y,
     svgW: SVG_W,
     svgH: SVG_H,
-    gx: 0,
-    gy: 0,
+    gx: GX,
+    gy: GY,
     ports,
 
     conductivityRule(): PortConnection[] {
@@ -133,6 +125,17 @@ export function createCylinderDouble(compLayer: HTMLElement, x: number, y: numbe
     getBounds: shell.getBounds,
     setSelected: shell.setSelected,
   };
+
+  shell.labelEl.style.pointerEvents = 'auto';
+  shell.labelEl.addEventListener('dblclick', (e) => {
+    e.stopPropagation();
+    const answer = window.prompt('Enter cylinder letter (A-Z):', letter);
+    if (answer === null) return;
+    const trimmed = answer.trim().toUpperCase();
+    if (!/^[A-Z]$/.test(trimmed)) return;
+    letter = trimmed;
+    shell.labelEl.textContent = `Cylinder ${letter}`;
+  });
 
   return comp;
 }

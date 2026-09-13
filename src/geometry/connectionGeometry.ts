@@ -16,29 +16,41 @@ interface CacheEntry {
 
 const cache = new Map<ComponentId, CacheEntry>();
 
+export function computeConnectionAnchors(
+  viewport: ViewportAdapter,
+  workspaceEl: HTMLElement,
+  conn: Connection,
+): { fromAnchor: PortAnchor; toAnchor: PortAnchor } | null {
+  const fromComp = appState.findComponent(conn.from.id);
+  const toComp = appState.findComponent(conn.to.id);
+  if (!fromComp || !toComp) return null;
+
+  const fromPort = fromComp.ports[conn.from.port];
+  const toPort = toComp.ports[conn.to.port];
+  if (!fromPort || !toPort) return null;
+
+  return {
+    fromAnchor: {
+      pos: portGlobalPosition(viewport, workspaceEl, fromComp, conn.from.port),
+      entryOrientation: fromPort.entryOrientation,
+      pilotDir: fromPort.pilotDir,
+    },
+    toAnchor: {
+      pos: portGlobalPosition(viewport, workspaceEl, toComp, conn.to.port),
+      entryOrientation: toPort.entryOrientation,
+      pilotDir: toPort.pilotDir,
+    },
+  };
+}
+
 export function computeConnectionGeometry(
   viewport: ViewportAdapter,
   workspaceEl: HTMLElement,
   conn: Connection,
 ): Point[] {
-  const fromComp = appState.findComponent(conn.from.id);
-  const toComp = appState.findComponent(conn.to.id);
-  if (!fromComp || !toComp) return [];
-
-  const fromPort = fromComp.ports[conn.from.port];
-  const toPort = toComp.ports[conn.to.port];
-  if (!fromPort || !toPort) return [];
-
-  const fromAnchor: PortAnchor = {
-    pos: portGlobalPosition(viewport, workspaceEl, fromComp, conn.from.port),
-    entryOrientation: fromPort.entryOrientation,
-    pilotDir: fromPort.pilotDir,
-  };
-  const toAnchor: PortAnchor = {
-    pos: portGlobalPosition(viewport, workspaceEl, toComp, conn.to.port),
-    entryOrientation: toPort.entryOrientation,
-    pilotDir: toPort.pilotDir,
-  };
+  const anchors = computeConnectionAnchors(viewport, workspaceEl, conn);
+  if (!anchors) return [];
+  const { fromAnchor, toAnchor } = anchors;
 
   if (conn.guides.length > 0) {
     return routeWithGuides(fromAnchor, toAnchor, conn.guides, conn.stubStartLen, conn.stubEndLen);
@@ -58,7 +70,7 @@ export function computeConnectionGeometry(
     return cached.points;
   }
 
-  const excludeIds = new Set<ComponentId>([fromComp.id, toComp.id]);
+  const excludeIds = new Set<ComponentId>([conn.from.id, conn.to.id]);
   const points = autoRouteAStar(
     fromAnchor,
     toAnchor,

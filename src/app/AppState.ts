@@ -11,7 +11,13 @@ class AppState {
   topologyVersion = 0;
 
   private changeListeners: Array<() => void> = [];
+  private modeListeners: Array<() => void> = [];
   private suppressed = false;
+
+  /** Notified whenever setMode() runs (Play/Pause/Stop). */
+  onModeChange(cb: () => void): void {
+    this.modeListeners.push(cb);
+  }
 
   /** Notified whenever the project's topology changes (add/remove component or wire). */
   onChange(cb: () => void): void {
@@ -74,6 +80,14 @@ class AppState {
 
   setMode(mode: Mode): void {
     this.mode = mode;
+    for (const cb of this.modeListeners) cb();
+  }
+
+  /** For edits that change the project (e.g. dragging a wire bend) without adding/removing a
+   * component or connection - so autosave/history still pick them up, without bumping
+   * topologyVersion (no cached graph needs to rebuild for a cosmetic reroute). */
+  markDirty(): void {
+    this.notifyChange();
   }
 }
 

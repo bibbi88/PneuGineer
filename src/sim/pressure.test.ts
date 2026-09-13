@@ -96,13 +96,24 @@ describe('computeFrameGraph', () => {
   it('valve52 toggles which ports connect after a pilot rising edge', () => {
     const valve = createValve52(compLayer(), 0, 0);
 
+    // Defaults to state 1 (1<->2, 4<->5) when freshly placed.
     const before = valve.conductivityRule({ isPressurized: () => false });
     expect(before).toEqual(expect.arrayContaining([expect.objectContaining({ a: '1', b: '2' })]));
 
-    valve.onPressureChange?.({ isPressurized: (p) => p === '12' });
+    valve.onPressureChange?.({ isPressurized: (p) => p === '14' });
 
     const after = valve.conductivityRule({ isPressurized: () => false });
     expect(after).toEqual(expect.arrayContaining([expect.objectContaining({ a: '1', b: '4' })]));
+  });
+
+  it('valve52 ignores a simultaneous rising edge on both pilots (ambiguous command)', () => {
+    const valve = createValve52(compLayer(), 0, 0);
+    const before = valve.conductivityRule({ isPressurized: () => false });
+
+    valve.onPressureChange?.({ isPressurized: () => true });
+
+    const after = valve.conductivityRule({ isPressurized: () => false });
+    expect(after).toEqual(before);
   });
 
   it('restrictor throttles flow via flowMultiplier without blocking topology', () => {

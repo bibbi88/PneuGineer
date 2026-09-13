@@ -1,30 +1,67 @@
 import type { Component, ConductivityContext, PortConnection } from '../core/types';
 import { uid } from '../core/ids';
-import { buildComponentShell, createPort, createSvgEl } from './shared/svgHelpers';
+import { buildComponentShell, createSvgEl, createLabeledPort } from './shared/svgHelpers';
 
 export const AND_VALVE_TYPE = 'andValve';
 
-const SVG_W = 60;
-const SVG_H = 40;
+const SVG_W = 200;
+const SVG_H = 102;
+const GX = 10;
+const GY = -26;
+const HUS_X = 40;
+const HUS_Y = 60;
+const HUS_W = 100;
+const HUS_H = 60;
 
-export function createAndValve(compLayer: HTMLElement, x: number, y: number): Component {
-  const shell = buildComponentShell(compLayer, AND_VALVE_TYPE, x, y, SVG_W, SVG_H, 'AND');
-
-  const body = createSvgEl('rect', {
-    x: 5,
-    y: 5,
-    width: SVG_W - 10,
-    height: SVG_H - 10,
+function line(x1: number, y1: number, x2: number, y2: number): SVGLineElement {
+  return createSvgEl('line', { x1, y1, x2, y2, stroke: '#111', 'stroke-width': 2 });
+}
+function rect(x: number, y: number, w: number, h: number): SVGRectElement {
+  return createSvgEl('rect', {
+    x,
+    y,
+    width: w,
+    height: h,
     fill: '#fff',
     stroke: '#111',
     'stroke-width': 2,
   });
-  shell.svg.appendChild(body);
+}
+
+export function createAndValve(compLayer: HTMLElement, x: number, y: number): Component {
+  const shell = buildComponentShell(compLayer, AND_VALVE_TYPE, x, y, SVG_W, SVG_H, '');
+  const g = createSvgEl('g', { transform: `translate(${GX},${GY})` });
+
+  const yMid = HUS_Y + HUS_H / 2;
+  const leftX = HUS_X + 35;
+  const rightX = HUS_X + HUS_W - 35;
+
+  g.append(
+    rect(HUS_X, HUS_Y, HUS_W, HUS_H),
+    line(leftX - 20, HUS_Y, leftX - 20, HUS_Y + 23),
+    line(leftX - 27, HUS_Y + 15, leftX - 27, HUS_Y + HUS_H - 15),
+    line(leftX - 20, HUS_Y + HUS_H, leftX - 20, HUS_Y + HUS_H - 23),
+    line(rightX + 20, HUS_Y, rightX + 20, HUS_Y + 23),
+    line(rightX + 27, HUS_Y + 15, rightX + 27, HUS_Y + HUS_H - 15),
+    line(rightX + 20, HUS_Y + HUS_H, rightX + 20, HUS_Y + HUS_H - 23),
+    line(leftX - 27, yMid, rightX + 27, yMid),
+  );
+
+  const A = { cx: HUS_X - 20, cy: yMid };
+  const B = { cx: HUS_X + HUS_W + 20, cy: yMid };
+  const OUT = { cx: HUS_X + HUS_W / 2, cy: HUS_Y - 20 };
+
+  g.append(
+    line(HUS_X, A.cy, A.cx + 6, A.cy),
+    line(HUS_X + HUS_W, B.cy, B.cx - 6, B.cy),
+    line(OUT.cx, OUT.cy + 6, OUT.cx, HUS_Y),
+  );
+  shell.svg.appendChild(g);
 
   const ports = {
-    A: createPort(shell.svg, 'A', 0, 12, 'H'),
-    B: createPort(shell.svg, 'B', 0, SVG_H - 12, 'H'),
-    OUT: createPort(shell.svg, 'OUT', SVG_W, SVG_H / 2, 'H'),
+    A: createLabeledPort(g, 'A', A.cx, A.cy, 'H', 'left'),
+    B: createLabeledPort(g, 'B', B.cx, B.cy, 'H', 'left'),
+    OUT: createLabeledPort(g, 'OUT', OUT.cx, OUT.cy, 'V', 'left'),
   };
 
   const comp: Component = {
@@ -35,8 +72,8 @@ export function createAndValve(compLayer: HTMLElement, x: number, y: number): Co
     y,
     svgW: SVG_W,
     svgH: SVG_H,
-    gx: 0,
-    gy: 0,
+    gx: GX,
+    gy: GY,
     ports,
 
     conductivityRule(ctx: ConductivityContext): PortConnection[] {

@@ -1,15 +1,29 @@
-import type { Connection, ConnectionEndpoint, WireGuide } from '../core/types';
+import type {
+  Connection,
+  ConnectionEndpoint,
+  ComponentId,
+  PortKey,
+  WireGuide,
+} from '../core/types';
 import type { ViewportAdapter } from '../ui/viewport';
 import { appState } from '../app/AppState';
 import { uid } from '../core/ids';
 import { createSvgEl } from '../components/shared/svgHelpers';
-import { computeConnectionGeometry } from '../geometry/connectionGeometry';
+import {
+  computeConnectionAnchors,
+  computeConnectionGeometry,
+} from '../geometry/connectionGeometry';
 import {
   distPointToSegment,
+  guideCorners,
   pathFromPoints,
   polylineMidpoint,
+  seedGuidesFromPoints,
+  stubPoint,
   type Point,
 } from '../geometry/routing';
+import { snap } from '../core/grid';
+import { WIRE_STUB } from '../sim/constants';
 import { selectConnection } from '../interaction/selection';
 import { showContextMenu } from '../interaction/contextMenu';
 
@@ -30,6 +44,17 @@ export function setWireClickInterceptor(
   wireClickInterceptor = fn;
 }
 
+/**
+ * Set by interaction/handles.ts (dependency-injected, same reasoning as the click
+ * interceptor above): called after every redraw so drag handles stay in sync with the wire's
+ * current shape without connection.ts needing to import the handles module.
+ */
+let geometryChangeListener: (() => void) | null = null;
+
+export function setGeometryChangeListener(fn: () => void): void {
+  geometryChangeListener = fn;
+}
+
 export function initWires(
   connLayer: SVGSVGElement,
   viewport: ViewportAdapter,
@@ -38,6 +63,19 @@ export function initWires(
   connLayerEl = connLayer;
   viewportRef = viewport;
   workspaceRef = workspaceEl;
+}
+
+/** Shows/hides a port's dot depending on whether any wire currently ends there, so a connected
+ * port reads as a continuous line running into the component instead of a visible stop. */
+export function updatePortConnectionVisual(compId: ComponentId, port: PortKey): void {
+  const comp = appState.findComponent(compId);
+  const portDef = comp?.ports[port];
+  if (!portDef) return;
+  const connected = appState.connections.some(
+    (c) =>
+      (c.from.id === compId && c.from.port === port) || (c.to.id === compId && c.to.port === port),
+  );
+  portDef.el.classList.toggle('portConnected', connected);
 }
 
 export function createConnection(from: ConnectionEndpoint, to: ConnectionEndpoint): Connection {
@@ -67,13 +105,21 @@ export function createConnection(from: ConnectionEndpoint, to: ConnectionEndpoin
   });
   hitEl.addEventListener('dblclick', (e) => {
     e.stopPropagation();
-    insertBendAtClick(conn, e.clientX, e.clientY);
+    const world = viewportRef?.clientToWorld(e.clientX, e.clientY);
+    if (world) addBendAtWorldPoint(conn, world);
   });
   hitEl.addEventListener('contextmenu', (e) => {
     e.preventDefault();
     e.stopPropagation();
     selectConnection(conn.id);
+    const world = viewportRef?.clientToWorld(e.clientX, e.clientY);
     showContextMenu(e.clientX, e.clientY, [
+      {
+        label: 'Add bend here',
+        onClick: () => {
+          if (world) addBendAtWorldPoint(conn, world);
+        },
+      },
       { label: 'Clear bends (reset to auto-route)', onClick: () => resetToAutoRoute(conn.id) },
       { label: 'Delete wire', onClick: () => removeConnection(conn.id) },
     ]);
@@ -81,6 +127,8 @@ export function createConnection(from: ConnectionEndpoint, to: ConnectionEndpoin
 
   appState.addConnection(conn);
   redrawConnection(conn);
+  updatePortConnectionVisual(from.id, from.port);
+  updatePortConnectionVisual(to.id, to.port);
   return conn;
 }
 
@@ -91,6 +139,8 @@ export function removeConnection(connId: number): void {
   conn.hitEl.remove();
   conn.labelEl.remove();
   appState.removeConnection(connId);
+  updatePortConnectionVisual(conn.from.id, conn.from.port);
+  updatePortConnectionVisual(conn.to.id, conn.to.port);
 }
 
 export function resetToAutoRoute(connId: number): void {
@@ -100,41 +150,61 @@ export function resetToAutoRoute(connId: number): void {
   conn.stubStartLen = null;
   conn.stubEndLen = null;
   redrawConnection(conn);
+  appState.markDirty();
 }
 
 /**
- * Reroutes the wire's middle segment to pass through the clicked point, dragging it
- * perpendicular to its own direction (a horizontal run moves up/down, a vertical run
- * moves left/right) while staying fully orthogonal on both sides.
- *
- * Only handles the single default auto-routed corner (the common case: no guides yet).
- * A wire that already has custom guides from a previous edit is left alone here -
- * further bends on an already-customized wire should go through drag handles instead.
+ * Splits whichever segment of the wire passes nearest `worldPoint` into two, inserting a new
+ * bend through that point (a perpendicular jog, the same shape a hand-drawn schematic would
+ * use), while keeping every other segment untouched. Works on any wire regardless of how many
+ * bends it already has - if it's still on auto-route, guides are seeded from its current shape
+ * first so there's something to splice into.
  */
-function insertBendAtClick(conn: Connection, clientX: number, clientY: number): void {
-  if (!viewportRef || !workspaceRef || conn.guides.length > 0) return;
+function addBendAtWorldPoint(conn: Connection, worldPoint: Point): void {
+  if (!viewportRef || !workspaceRef) return;
+  const anchors = computeConnectionAnchors(viewportRef, workspaceRef, conn);
+  if (!anchors) return;
+  const { fromAnchor, toAnchor } = anchors;
+  const stubOut = stubPoint(fromAnchor, toAnchor.pos, conn.stubStartLen ?? WIRE_STUB);
+  const stubIn = stubPoint(toAnchor, fromAnchor.pos, conn.stubEndLen ?? WIRE_STUB);
 
-  const clickWorld = viewportRef.clientToWorld(clientX, clientY);
-  const points = computeConnectionGeometry(viewportRef, workspaceRef, conn);
-  if (points.length < 4) return;
+  if (conn.guides.length === 0) {
+    const points = computeConnectionGeometry(viewportRef, workspaceRef, conn);
+    conn.guides = seedGuidesFromPoints(points, stubOut, stubIn);
+  }
 
-  const stubOut = points[1] as Point;
-  const stubIn = points[points.length - 2] as Point;
-  if (distPointToSegment(clickWorld, stubOut, stubIn) > 60) return;
+  const corners = guideCorners(fromAnchor, toAnchor, conn.guides, conn.stubStartLen);
+  const allPoints: Point[] = [...corners, stubIn];
 
-  const horizontal = stubOut.y === stubIn.y;
-  const guides: WireGuide[] = horizontal
+  let bestIdx = -1;
+  let bestDist = Infinity;
+  for (let i = 0; i < allPoints.length - 1; i++) {
+    const a = allPoints[i] as Point;
+    const b = allPoints[i + 1] as Point;
+    const d = distPointToSegment(worldPoint, a, b);
+    if (d < bestDist) {
+      bestDist = d;
+      bestIdx = i;
+    }
+  }
+  if (bestIdx === -1 || bestDist > 60) return;
+
+  const a = allPoints[bestIdx] as Point;
+  const b = allPoints[bestIdx + 1] as Point;
+  const horizontal = a.y === b.y;
+  const newGuides: WireGuide[] = horizontal
     ? [
-        { type: 'H', pos: clickWorld.y },
-        { type: 'V', pos: stubIn.x },
+        { type: 'H', pos: snap(worldPoint.y) },
+        { type: 'V', pos: b.x },
       ]
     : [
-        { type: 'V', pos: clickWorld.x },
-        { type: 'H', pos: stubIn.y },
+        { type: 'V', pos: snap(worldPoint.x) },
+        { type: 'H', pos: b.y },
       ];
 
-  conn.guides = guides;
+  conn.guides.splice(bestIdx, 0, ...newGuides);
   redrawConnection(conn);
+  appState.markDirty();
 }
 
 export function redrawConnection(conn: Connection): void {
@@ -147,6 +217,8 @@ export function redrawConnection(conn: Connection): void {
   const mid = polylineMidpoint(points);
   conn.labelEl.setAttribute('x', String(mid.x));
   conn.labelEl.setAttribute('y', String(mid.y - 4));
+
+  geometryChangeListener?.();
 }
 
 export function redrawAllConnections(): void {
