@@ -192,6 +192,38 @@ export function createValve52(compLayer: HTMLElement, x: number, y: number): Com
     '3': { cx: W0 - 10, cy: H0 + 10 },
   } as const;
 
+  // Fixed lead-in lines from the housing's top/bottom edge to each port's exact center (not
+  // just close to it), since a connected port's own circle is hidden - any gap would otherwise
+  // show up as a visible blank break in the wire. Every fixed port's x-position falls within
+  // the sliding cell's horizontal span in both states, so a vertical line at that x always
+  // lands on the housing edge regardless of which cell is currently showing.
+  for (const key of ['4', '2'] as const) {
+    const p = fixedPortsLocal[key];
+    svg.appendChild(
+      createSvgEl('line', {
+        x1: GX0 + p.cx,
+        y1: GY0,
+        x2: GX0 + p.cx,
+        y2: GY0 + p.cy,
+        stroke: '#111',
+        'stroke-width': STROKE,
+      }),
+    );
+  }
+  for (const key of ['5', '1', '3'] as const) {
+    const p = fixedPortsLocal[key];
+    svg.appendChild(
+      createSvgEl('line', {
+        x1: GX0 + p.cx,
+        y1: GY0 + H0,
+        x2: GX0 + p.cx,
+        y2: GY0 + p.cy,
+        stroke: '#111',
+        'stroke-width': STROKE,
+      }),
+    );
+  }
+
   const fixedPorts = {
     '4': createLabeledPort(
       svg,

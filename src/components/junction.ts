@@ -7,7 +7,12 @@ export const JUNCTION_TYPE = 'junction';
 const SVG_W = 14;
 const SVG_H = 14;
 
-export function createJunction(compLayer: HTMLElement, x: number, y: number): Component {
+export function createJunction(
+  compLayer: HTMLElement,
+  x: number,
+  y: number,
+  entryOrientation: 'H' | 'V' = 'H',
+): Component {
   const shell = buildComponentShell(compLayer, JUNCTION_TYPE, x, y, SVG_W, SVG_H, '');
 
   const dot = createSvgEl('circle', {
@@ -19,7 +24,7 @@ export function createJunction(compLayer: HTMLElement, x: number, y: number): Co
   shell.svg.appendChild(dot);
 
   const ports = {
-    P: createPort(shell.svg, 'P', SVG_W / 2, SVG_H / 2, 'H', { radius: 4 }),
+    P: createPort(shell.svg, 'P', SVG_W / 2, SVG_H / 2, entryOrientation, { radius: 4 }),
   };
 
   const comp: Component = {

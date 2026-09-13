@@ -44,12 +44,15 @@ export function createRestrictor(compLayer: HTMLElement, x: number, y: number): 
 
   const IN = { cx: HUS_X + HUS_W / 2, cy: HUS_Y + HUS_H + 18 };
   const OUT = { cx: HUS_X + HUS_W / 2, cy: HUS_Y - 18 };
+  // These lead-in lines must reach the exact port center (not just close to it), since a
+  // connected port's own circle is hidden - any gap between the line and the port position
+  // would otherwise show up as a visible blank break in the wire.
   g.appendChild(
     createSvgEl('line', {
       x1: IN.cx,
       y1: HUS_Y + HUS_H,
       x2: IN.cx,
-      y2: IN.cy - 6,
+      y2: IN.cy,
       stroke: '#111',
       'stroke-width': 2,
     }),
@@ -57,7 +60,7 @@ export function createRestrictor(compLayer: HTMLElement, x: number, y: number): 
   g.appendChild(
     createSvgEl('line', {
       x1: OUT.cx,
-      y1: OUT.cy + 6,
+      y1: OUT.cy,
       x2: OUT.cx,
       y2: HUS_Y,
       stroke: '#111',

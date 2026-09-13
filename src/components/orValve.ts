@@ -61,10 +61,13 @@ export function createOrValve(compLayer: HTMLElement, x: number, y: number): Com
   const B = { cx: HUS_X + HUS_W + 20, cy: yMid };
   const OUT = { cx: xMid, cy: HUS_Y - 20 };
 
+  // These lead-in lines must reach the exact port center (not just close to it), since a
+  // connected port's own circle is hidden - any gap between the line and the port position
+  // would otherwise show up as a visible blank break in the wire.
   g.append(
-    line(HUS_X, A.cy, A.cx + 6, A.cy),
-    line(HUS_X + HUS_W, B.cy, B.cx - 6, B.cy),
-    line(OUT.cx, OUT.cy + 6, OUT.cx, HUS_Y),
+    line(HUS_X, A.cy, A.cx, A.cy),
+    line(HUS_X + HUS_W, B.cy, B.cx, B.cy),
+    line(OUT.cx, OUT.cy, OUT.cx, HUS_Y),
   );
   shell.svg.appendChild(g);
 

@@ -65,10 +65,13 @@ export function createCheckValve(compLayer: HTMLElement, x: number, y: number): 
 
   const OUT = { cx, cy: HUS_Y - 10 };
   const IN = { cx, cy: HUS_Y + HUS_H + 10 };
+  // These lead-in lines must reach the exact port center (not just close to it), since a
+  // connected port's own circle is hidden - any gap between the line and the port position
+  // would otherwise show up as a visible blank break in the wire.
   g.appendChild(
     createSvgEl('line', {
       x1: OUT.cx,
-      y1: OUT.cy + 22,
+      y1: OUT.cy,
       x2: OUT.cx,
       y2: HUS_Y,
       stroke: '#111',
@@ -80,7 +83,7 @@ export function createCheckValve(compLayer: HTMLElement, x: number, y: number): 
       x1: IN.cx,
       y1: HUS_Y + HUS_H,
       x2: IN.cx,
-      y2: IN.cy - 23,
+      y2: IN.cy,
       stroke: '#111',
       'stroke-width': 3,
     }),

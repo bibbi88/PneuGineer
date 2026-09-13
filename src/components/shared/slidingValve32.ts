@@ -116,6 +116,43 @@ export function buildSlidingValve32Body(svg: SVGSVGElement, arrowId: string): Sl
 
   const ox = SLIDING_VALVE_OFFSET_X;
   const oy = SLIDING_VALVE_OFFSET_Y;
+
+  // Fixed lead-in lines from the frame's top/bottom edge to each port's exact center (not just
+  // close to it), since a connected port's own circle is hidden - any gap would otherwise show
+  // up as a visible blank break in the wire. These stay outside the mover (like the ports
+  // themselves): the frame always spans far enough horizontally in either slid position that a
+  // vertical line at each port's fixed x still lands on the frame's top/bottom edge.
+  svg.appendChild(
+    createSvgEl('line', {
+      x1: ox + P2.cx,
+      y1: oy,
+      x2: ox + P2.cx,
+      y2: oy + P2.cy,
+      stroke: '#111',
+      'stroke-width': 2,
+    }),
+  );
+  svg.appendChild(
+    createSvgEl('line', {
+      x1: ox + P1.cx,
+      y1: oy + H,
+      x2: ox + P1.cx,
+      y2: oy + P1.cy,
+      stroke: '#111',
+      'stroke-width': 2,
+    }),
+  );
+  svg.appendChild(
+    createSvgEl('line', {
+      x1: ox + P3.cx,
+      y1: oy + H,
+      x2: ox + P3.cx,
+      y2: oy + P3.cy,
+      stroke: '#111',
+      'stroke-width': 2,
+    }),
+  );
+
   const ports = {
     '2': createLabeledPort(svg, '2', ox + P2.cx, oy + P2.cy, 'V', 'left'),
     '1': createLabeledPort(svg, '1', ox + P1.cx, oy + P1.cy, 'V', 'left'),

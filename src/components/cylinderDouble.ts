@@ -39,7 +39,19 @@ export function createCylinderDouble(compLayer: HTMLElement, x: number, y: numbe
   const piston = createSvgEl('rect', { x: 60, y: 0, width: 6, height: H, fill: '#888' });
   const rod = createSvgEl('rect', { x: 66, y: H / 2 - 3, width: W - 66, height: 6, fill: '#888' });
   const rodTip = createSvgEl('rect', { x: W, y: H / 2 - 6, width: 10, height: 12, fill: '#666' });
-  g.append(body, piston, rod, rodTip);
+  // Lead-in lines reaching the exact port centers (not just close to them), since a connected
+  // port's own circle is hidden - any gap between the body and the port would otherwise show
+  // up as a visible blank break in the wire.
+  const leadA = createSvgEl('line', { x1: 10, y1: H, x2: 10, y2: H + PORT_MARGIN, stroke: '#111', 'stroke-width': 2 });
+  const leadB = createSvgEl('line', {
+    x1: W - 10,
+    y1: H,
+    x2: W - 10,
+    y2: H + PORT_MARGIN,
+    stroke: '#111',
+    'stroke-width': 2,
+  });
+  g.append(body, piston, rod, rodTip, leadA, leadB);
   shell.svg.appendChild(g);
 
   const ports = {

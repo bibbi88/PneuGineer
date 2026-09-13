@@ -55,7 +55,7 @@ initWireHandles(connLayer, viewport, workspaceEl);
 initLinking(connLayer, viewport, workspaceEl);
 initMarquee(connLayer);
 initKeyboard();
-initWireSplitting(compLayer, viewport);
+initWireSplitting(compLayer, viewport, workspaceEl);
 
 const factoryCtx: ComponentFactoryContext = { compLayer };
 initHistory(factoryCtx, viewport);

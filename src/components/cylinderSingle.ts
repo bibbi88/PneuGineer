@@ -67,7 +67,19 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
     'stroke-width': 2,
   });
 
-  g.append(body, piston, rod, rodTip, spring);
+  // Lead-in line reaching the exact port center (not just close to it), since a connected
+  // port's own circle is hidden - any gap between the body and the port would otherwise show
+  // up as a visible blank break in the wire. Repositioned in updatePortSide() when the port
+  // moves between the cap and rod ends.
+  const leadA = createSvgEl('line', {
+    x1: CAP_PORT_X,
+    y1: H,
+    x2: CAP_PORT_X,
+    y2: H + PORT_MARGIN,
+    stroke: '#111',
+    'stroke-width': 2,
+  });
+  g.append(body, piston, rod, rodTip, spring, leadA);
   shell.svg.appendChild(g);
 
   let mode: CylinderMode = 'push';
@@ -109,6 +121,8 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
     const cx = mode === 'push' ? CAP_PORT_X : ROD_PORT_X;
     portACircle.el.setAttribute('cx', String(cx));
     portALabel.setAttribute('x', String(cx));
+    leadA.setAttribute('x1', String(cx));
+    leadA.setAttribute('x2', String(cx));
     ports.A.cx = cx;
   }
   updatePortSide();

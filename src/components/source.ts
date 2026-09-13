@@ -36,8 +36,11 @@ export function createSource(compLayer: HTMLElement, x: number, y: number): Comp
       'stroke-width': 2,
     }),
   );
+  // Reaches the exact port center (not just close to it), since a connected port's own circle
+  // is hidden - any gap between the stem and the port position would otherwise show up as a
+  // visible blank break in the wire.
   g.appendChild(
-    createSvgEl('line', { x1: CX, y1: CY - R, x2: CX, y2: 20, stroke: '#111', 'stroke-width': 2 }),
+    createSvgEl('line', { x1: CX, y1: CY - R, x2: CX, y2: 14, stroke: '#111', 'stroke-width': 2 }),
   );
   shell.svg.appendChild(g);
 
