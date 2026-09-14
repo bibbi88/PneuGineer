@@ -29,14 +29,14 @@ function downloadJson(json: string, filename: string): void {
 
 export async function saveProjectToFile(name: string): Promise<void> {
   const json = JSON.stringify(serializeProject(name), null, 2);
-  const filename = `${name}.pneu.json`;
+  const filename = `${name}.pgcl`;
 
   const showSaveFilePicker = getShowSaveFilePicker();
   if (showSaveFilePicker) {
     try {
       const handle = await showSaveFilePicker({
         suggestedName: filename,
-        types: [{ description: 'PneuGineer project', accept: { 'application/json': ['.json'] } }],
+        types: [{ description: 'PneuGineer project', accept: { 'application/json': ['.pgcl'] } }],
       });
       const writable = await handle.createWritable();
       await writable.write(json);

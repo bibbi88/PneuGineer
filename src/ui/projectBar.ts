@@ -4,6 +4,7 @@ import { exportProjectAsSvg, exportProjectAsPng } from '../persistence/exportIma
 import type { ComponentFactoryContext } from '../components/registry';
 import type { ViewportAdapter } from './viewport';
 import { resetHistory } from '../history/historyStore';
+import { showContextMenu } from '../interaction/contextMenu';
 
 export interface ProjectBarRefs {
   getName(): string;
@@ -24,11 +25,13 @@ export function renderProjectBar(
 
   const saveBtn = document.createElement('button');
   saveBtn.className = 'btn';
+  saveBtn.title = 'Save';
   saveBtn.textContent = '💾 Save';
   saveBtn.addEventListener('click', () => void saveProjectToFile(nameInput.value || 'project'));
 
   const loadBtn = document.createElement('button');
   loadBtn.className = 'btn';
+  loadBtn.title = 'Load';
   loadBtn.textContent = '📂 Load';
   loadBtn.addEventListener('click', () => {
     // Reset history only once a file was actually picked - loadProjectFromPicker itself
@@ -39,22 +42,31 @@ export function renderProjectBar(
     });
   });
 
-  const exportSvgBtn = document.createElement('button');
-  exportSvgBtn.className = 'btn';
-  exportSvgBtn.textContent = '⬇ Export SVG';
-  exportSvgBtn.addEventListener('click', () =>
-    exportProjectAsSvg(nameInput.value || 'project', connLayer),
-  );
+  const saveLoadRow = document.createElement('div');
+  saveLoadRow.className = 'btnRow';
+  saveLoadRow.append(saveBtn, loadBtn);
 
-  const exportPngBtn = document.createElement('button');
-  exportPngBtn.className = 'btn';
-  exportPngBtn.textContent = '⬇ Export PNG';
-  exportPngBtn.addEventListener(
-    'click',
-    () => void exportProjectAsPng(nameInput.value || 'project', connLayer),
-  );
+  // A single Export control instead of one full-width button per format - the format picker
+  // reuses the same small menu component as a component's right-click menu.
+  const exportBtn = document.createElement('button');
+  exportBtn.className = 'btn';
+  exportBtn.textContent = '⬇ Export ▾';
+  exportBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const rect = exportBtn.getBoundingClientRect();
+    showContextMenu(rect.left, rect.bottom + 4, [
+      {
+        label: 'as SVG',
+        onClick: () => exportProjectAsSvg(nameInput.value || 'project', connLayer),
+      },
+      {
+        label: 'as PNG',
+        onClick: () => void exportProjectAsPng(nameInput.value || 'project', connLayer),
+      },
+    ]);
+  });
 
-  container.append(nameInput, saveBtn, loadBtn, exportSvgBtn, exportPngBtn);
+  container.append(nameInput, saveLoadRow, exportBtn);
 
   return {
     getName: () => nameInput.value || 'project',

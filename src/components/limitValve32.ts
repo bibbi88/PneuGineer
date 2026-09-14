@@ -9,16 +9,14 @@ import {
   SLIDING_VALVE_OFFSET_Y,
 } from './shared/slidingValve32';
 import { getSignal } from '../sim/signals';
+import { appState } from '../app/AppState';
+import { isSensorKeyBoundElsewhere } from './shared/sensorPositions';
 
 export const LIMIT_VALVE_32_TYPE = 'limitValve32';
 
 // Extra right-side room for the spring symbol, beyond the offset already reserved on the left.
 const SVG_W = SLIDING_VALVE_OFFSET_X + SLIDING_VALVE_W + 48;
 const SVG_H = SLIDING_VALVE_OFFSET_Y + SLIDING_VALVE_H + 30;
-// Cylinder end-of-stroke signals are always emitted as "<UPPERCASE letter><0|1>" (see
-// components/shared/letters.ts + cylinderDouble/cylinderSingle's emitSignal calls), so the
-// default here must match that case or a freshly-placed limit valve senses nothing at all.
-const DEFAULT_SENSOR_KEY = 'A0';
 
 export function createLimitValve32(compLayer: HTMLElement, x: number, y: number): Component {
   const shell = buildComponentShell(
@@ -59,7 +57,6 @@ export function createLimitValve32(compLayer: HTMLElement, x: number, y: number)
     'text-anchor': 'middle',
     'font-size': 11,
   });
-  sensorLabel.style.cursor = 'pointer';
   rollerGroup.appendChild(sensorLabel);
 
   const spring = createSvgEl('g', {
@@ -79,17 +76,33 @@ export function createLimitValve32(compLayer: HTMLElement, x: number, y: number)
 
   valve.mover.append(rollerGroup, spring);
 
+  const id = uid();
+
   let active = false;
-  let sensorKey = DEFAULT_SENSOR_KEY;
+  // A freshly placed limit switch starts unbound rather than defaulting to some sensor - every
+  // new one used to default to the same fixed key (or, later, "whichever is free"), either of
+  // which still means guessing at a binding you'd probably change anyway. Starting blank also
+  // makes swapping two switches' labels possible without relocating either: clear one, give its
+  // label to the other, then give the first one what's now free.
+  let sensorKey = '';
   let manualActive = false;
 
+  // Two limit switches sharing a sensor is allowed (a real circuit might legitimately fan one
+  // signal out to several valves) rather than blocked, but it's easy to do by accident (e.g.
+  // two switches both left at a stale default) - flagging it in red is a middle ground between
+  // silently allowing it and refusing to let the assignment happen at all. Rechecked on every
+  // appState change (not just this switch's own), since the conflict can appear or disappear
+  // because of what some *other* switch just did.
   function updateLabel(): void {
     sensorLabel.textContent = sensorKey || '';
+    const duplicate = sensorKey !== '' && isSensorKeyBoundElsewhere(sensorKey, id);
+    sensorLabel.classList.toggle('sensorLabelDuplicate', duplicate);
   }
   updateLabel();
+  appState.onChange(updateLabel);
 
   const comp: Component = {
-    id: uid(),
+    id,
     type: LIMIT_VALVE_32_TYPE,
     el: shell.el,
     x,
@@ -132,22 +145,6 @@ export function createLimitValve32(compLayer: HTMLElement, x: number, y: number)
     getBounds: shell.getBounds,
     setSelected: shell.setSelected,
   };
-
-  function promptBind(): void {
-    const k = window.prompt('Enter sensor (e.g. A0, A1, B0, B1):', sensorKey || '');
-    if (k === null) return;
-    sensorKey = k.trim() || DEFAULT_SENSOR_KEY;
-    updateLabel();
-  }
-
-  shell.el.addEventListener('dblclick', (e) => {
-    e.stopPropagation();
-    promptBind();
-  });
-  sensorLabel.addEventListener('click', (e) => {
-    e.stopPropagation();
-    promptBind();
-  });
 
   valve.setActive(false);
 

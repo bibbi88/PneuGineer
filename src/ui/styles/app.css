@@ -29,7 +29,7 @@ body {
 
 .app {
   display: grid;
-  grid-template-columns: 244px 1fr;
+  grid-template-columns: 244px 1fr 260px;
   height: 100vh;
 }
 
@@ -38,6 +38,18 @@ body {
   border-right: 1px solid #ccc;
   padding: 10px;
   overflow: auto;
+}
+
+.inspectorPanel {
+  background: var(--panel);
+  border-left: 1px solid #ccc;
+  padding: 10px;
+  overflow: auto;
+}
+
+.inspectorPanel h2 {
+  margin: 6px 0 10px;
+  font-size: 16px;
 }
 
 .sidebar h2 {
@@ -226,6 +238,20 @@ body {
   background: #fff;
 }
 
+/* Save/Load side by side instead of each taking a full-width row. */
+.btnRow {
+  display: flex;
+  gap: 6px;
+  margin: 6px 0;
+}
+
+.btnRow .btn {
+  flex: 1;
+  width: auto;
+  margin: 0;
+  text-align: center;
+}
+
 .workspace {
   position: relative;
   overflow: hidden;
@@ -390,6 +416,14 @@ rect.wireHandle.wireStubHandle {
   text-anchor: middle;
 }
 
+/* A limit switch's sensor-key label turns red when another limit switch is bound to the same
+   sensor - allowed, since a real circuit might legitimately fan one signal out to several
+   valves, but worth flagging since it's easy to do by accident. */
+.sensorLabelDuplicate {
+  fill: var(--accent);
+  font-weight: 600;
+}
+
 .port.pressurized {
   fill: var(--accent);
   stroke: var(--accent);
@@ -442,9 +476,18 @@ rect.wireHandle.wireStubHandle {
   background: #f0f4ff;
 }
 
-#inspector h3 {
-  margin: 6px 0 8px;
-  font-size: 14px;
+.inspectorHint {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 4px 0;
+}
+
+.inspectorWarning {
+  color: var(--accent);
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 2px 0 8px;
 }
 
 .inspectorRow {
@@ -456,11 +499,162 @@ rect.wireHandle.wireStubHandle {
   font-size: 13px;
 }
 
-.inspectorRow input {
-  width: 90px;
+.inspectorRow input,
+.inspectorRow select {
   padding: 4px 6px;
   border: 1px solid #bbb;
   border-radius: 4px;
+  font: inherit;
+}
+
+.inspectorRow input {
+  width: 90px;
+}
+
+.inspectorRow select {
+  width: 130px;
+  font-size: 12px;
+}
+
+.inspectorSectionHeading {
+  font-size: 13px;
+  font-weight: 600;
+  margin: 10px 0 4px;
+}
+
+/* One sensor per block: its label/bounds/remove on one line, a slider below - separated by a
+   hairline so a growing list of sensors still reads as distinct entries. */
+.inspectorSensorRow {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.inspectorSensorRow:first-of-type {
+  border-top: 1px solid var(--line-soft);
+}
+
+.inspectorSensorNumbers {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.inspectorSensorNumbers input {
+  padding: 4px 6px;
+  border: 1px solid #bbb;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.inspectorSensorLabel {
+  width: 46px;
+}
+
+.inspectorSensorNumbers input[type='number'] {
+  width: 44px;
+  padding: 4px 4px;
+}
+
+.inspectorFieldError {
+  border-color: var(--accent) !important;
+  outline: 1px solid var(--accent);
+}
+
+.inspectorRangeSep {
+  color: var(--muted);
+}
+
+.inspectorRemoveBtn {
+  border: none;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 2px 5px;
+  border-radius: 4px;
+  margin-left: auto;
+}
+
+.inspectorRemoveBtn:hover {
+  background: var(--panel-2);
+  color: var(--accent);
+}
+
+.inspectorAddBtn {
+  margin-top: 6px;
+  font-size: 12px;
+  padding: 6px 8px;
+}
+
+/* Dual-handle range slider: two native range inputs stacked on the same track, each with a
+   transparent body (clicks pass through to whichever is on top / the track beneath) and only
+   its thumb interactive, plus a plain div drawn underneath as the filled span between them. */
+.sensorSlider {
+  position: relative;
+  height: 20px;
+  margin: 8px 2px 2px;
+}
+
+.sensorSliderTrack {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: var(--line);
+  border-radius: 2px;
+  transform: translateY(-50%);
+}
+
+.sensorSliderRange {
+  position: absolute;
+  top: 50%;
+  height: 4px;
+  background: var(--port);
+  border-radius: 2px;
+  transform: translateY(-50%);
+}
+
+.sensorSliderInput {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  margin: 0;
+  background: transparent;
+  appearance: none;
+  -webkit-appearance: none;
+  pointer-events: none;
+}
+
+.sensorSliderInput::-webkit-slider-runnable-track {
+  background: transparent;
+}
+
+.sensorSliderInput::-moz-range-track {
+  background: transparent;
+}
+
+.sensorSliderInput::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  pointer-events: auto;
+  width: 14px;
+  height: 14px;
+  margin-top: 3px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid var(--port);
+  cursor: grab;
+}
+
+.sensorSliderInput::-moz-range-thumb {
+  pointer-events: auto;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid var(--port);
+  cursor: grab;
 }
 
 .projectName {

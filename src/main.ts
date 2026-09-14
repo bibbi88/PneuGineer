@@ -8,6 +8,8 @@ import { initMarquee } from './interaction/marquee';
 import { initKeyboard } from './interaction/keyboard';
 import { initWireSplitting } from './interaction/wireSplitting';
 import { spawnComponent } from './interaction/spawn';
+import { initValveActuatorSwap } from './interaction/valveActuatorSwap';
+import { initClipboard } from './interaction/clipboard';
 import { initWires } from './wires/connection';
 import { initWireHandles } from './wires/handles';
 import { startSimLoop } from './sim/loop';
@@ -18,6 +20,7 @@ import { scheduleAutosave, readAutosave, clearAutosave } from './persistence/aut
 import { loadProject } from './persistence/project';
 import { initHistory, pushHistory, resetHistory } from './history/historyStore';
 import { renderInspector } from './ui/inspector';
+import { resetCylinderLetters } from './components/shared/letters';
 
 const workspaceQuery = document.querySelector<HTMLElement>('.workspace');
 const viewportQuery = document.getElementById('viewport');
@@ -62,6 +65,8 @@ initWireSplitting(compLayer, viewport, workspaceEl);
 
 const factoryCtx: ComponentFactoryContext = { compLayer };
 initHistory(factoryCtx, viewport);
+initValveActuatorSwap(factoryCtx, viewport);
+initClipboard(factoryCtx, viewport, workspaceEl);
 
 function addComponentAtViewCenter(type: string): void {
   const rect = workspaceEl.getBoundingClientRect();
@@ -95,6 +100,10 @@ renderComponentLibrary(
     })),
   })),
 );
+// Building each cylinder's sidebar icon just spawned a real (throwaway) instance of it, which
+// consumed letters from the same counter real placement uses - reset it so the first cylinder
+// the user actually places still starts at "A".
+resetCylinderLetters();
 
 renderToolbar(toolbarButtons);
 const projectBar = renderProjectBar(projectBarEl, factoryCtx, viewport, connLayer);

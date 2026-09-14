@@ -36,6 +36,11 @@ export interface ComponentBounds {
   h: number;
 }
 
+export interface ContextMenuAction {
+  label: string;
+  onClick: () => void;
+}
+
 export interface Component<TSnapshot = Record<string, unknown>> {
   readonly id: ComponentId;
   readonly type: string;
@@ -61,6 +66,18 @@ export interface Component<TSnapshot = Record<string, unknown>> {
   getBounds(): ComponentBounds;
   setSelected(sel: boolean): void;
   destroy?(): void;
+  /** Reassigns a fresh distinguishing label (e.g. a cylinder's letter) - called after pasting a
+   * copy so it doesn't keep the exact identity (and signal names) of the component it was
+   * copied from. Components without a meaningful identity to reassign can omit this. */
+  relabel?(): void;
+  /** Renames this component's user-facing identifying label (e.g. a cylinder's letter) to
+   * `newValue`, cascading to anything derived from the old one (sensor labels, other
+   * components bound to them). Returns whether `newValue` was valid and applied - an invalid
+   * value leaves everything unchanged. Drives the inspector's rename field. */
+  renameLabel?(newValue: string): boolean;
+  /** Extra type-specific entries spliced into this component's right-click menu, alongside the
+   * generic rotate/delete every component gets. */
+  contextMenuItems?(): ContextMenuAction[];
 
   recompute?(): void;
   onPressureChange?(ctx: ConductivityContext): void;

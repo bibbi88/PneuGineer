@@ -1,9 +1,18 @@
 import type { Component, SimStepContext, PortConnection } from '../core/types';
 import { uid } from '../core/ids';
 import { buildComponentShell, createSvgEl, createPort } from './shared/svgHelpers';
-import { nextCylinderLetter } from './shared/letters';
+import { nextCylinderLetter, isCylinderLetterInUse } from './shared/letters';
 import { BASE_CYL_SPEED } from '../sim/constants';
 import { redrawAllConnections } from '../wires/connection';
+import { appState } from '../app/AppState';
+import {
+  isInSensorRange,
+  defaultSensors,
+  isValidSensorArray,
+  relabelSensors,
+  renameSensorKeyBindings,
+  type CylinderSensor,
+} from './shared/sensorPositions';
 
 export const CYLINDER_SINGLE_TYPE = 'cylinderSingle';
 
@@ -102,6 +111,7 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
 
   let pos = 0;
   let normallyExtended = false;
+  let sensors: CylinderSensor[] = defaultSensors(letter);
 
   function updateVisual(): void {
     const travelStart = 10;
@@ -166,18 +176,20 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
         updateVisual();
       }
 
-      ctx.emitSignal(`${letter}0`, pos <= 0.02);
-      ctx.emitSignal(`${letter}1`, pos >= 0.98);
+      for (const sensor of sensors) {
+        ctx.emitSignal(sensor.label, isInSensorRange(pos, sensor));
+      }
     },
 
     snapshot(): Record<string, unknown> {
-      return { pos, letter, mode, normallyExtended };
+      return { pos, letter, mode, normallyExtended, sensors };
     },
     restore(data: Record<string, unknown>): void {
       pos = data.pos as number;
       letter = data.letter as string;
       mode = data.mode as CylinderMode;
       normallyExtended = data.normallyExtended as boolean;
+      sensors = isValidSensorArray(data.sensors) ? data.sensors : defaultSensors(letter);
       updatePortSide();
       updateLabel();
       updateVisual();
@@ -194,6 +206,31 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
     },
     getBounds: shell.getBounds,
     setSelected: shell.setSelected,
+
+    relabel(): void {
+      const oldLetter = letter;
+      letter = nextCylinderLetter();
+      sensors = relabelSensors(sensors, oldLetter, letter).sensors;
+      updateLabel();
+    },
+
+    renameLabel(newValue: string): boolean {
+      const trimmed = newValue.trim().toUpperCase();
+      if (!/^[A-Z]$/.test(trimmed)) return false;
+      if (trimmed !== letter && isCylinderLetterInUse(trimmed, comp.id)) return false;
+      const oldLetter = letter;
+      letter = trimmed;
+      updateLabel();
+
+      // Carry each auto-named sensor's label forward (A0 -> B0, etc.) and, since that's the
+      // exact key a limit switch's "Sensor key" points at, update every switch bound to the old
+      // label so it keeps working instead of silently going dead once nothing emits that name.
+      const { sensors: renamedSensors, renames } = relabelSensors(sensors, oldLetter, trimmed);
+      sensors = renamedSensors;
+      for (const r of renames) renameSensorKeyBindings(r.oldLabel, r.newLabel);
+      appState.markDirty();
+      return true;
+    },
   };
 
   modeBtn.addEventListener('click', (e) => {
@@ -203,16 +240,6 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
     updatePortSide();
     updateLabel();
     redrawAllConnections();
-  });
-
-  shell.labelEl.addEventListener('dblclick', (e) => {
-    e.stopPropagation();
-    const answer = window.prompt('Enter cylinder letter (A-Z):', letter);
-    if (answer === null) return;
-    const trimmed = answer.trim().toUpperCase();
-    if (!/^[A-Z]$/.test(trimmed)) return;
-    letter = trimmed;
-    updateLabel();
   });
 
   return comp;

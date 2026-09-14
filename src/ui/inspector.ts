@@ -1,38 +1,468 @@
 import type { Component } from '../core/types';
+import { appState } from '../app/AppState';
 import { getSelectedComponents, onSelectionChange } from '../interaction/selection';
 import { redrawAllConnections } from '../wires/connection';
 import { RESTRICTOR_TYPE } from '../components/restrictor';
 import { ONE_WAY_FLOW_CONTROL_VALVE_TYPE } from '../components/oneWayFlowControlValve';
 import { TIME_DELAY_VALVE_TYPE } from '../components/timeDelayValve';
 import { LIMIT_VALVE_32_TYPE } from '../components/limitValve32';
+import { PUSH_BUTTON_32_TYPE } from '../components/pushButton32';
+import { AIR_VALVE_32_TYPE } from '../components/airValve32';
+import { CYLINDER_DOUBLE_TYPE } from '../components/cylinderDouble';
+import { CYLINDER_SINGLE_TYPE } from '../components/cylinderSingle';
+import {
+  nextSensorLabel,
+  isSensorLabelInUse,
+  isSensorKeyBoundElsewhere,
+  listAllSensorLabels,
+  type CylinderSensor,
+} from '../components/shared/sensorPositions';
+import { swapComponentType } from '../interaction/valveActuatorSwap';
 
-interface InspectorField {
+type FieldLabel = string | ((comp: Component) => string);
+
+interface NumberField {
+  kind: 'number';
   key: string;
-  label: string;
-  kind: 'number' | 'text';
+  label: FieldLabel;
   min?: number;
   max?: number;
   step?: number;
 }
 
+interface TextField {
+  kind: 'text';
+  key: string;
+  label: FieldLabel;
+}
+
+/** A limit switch's sensor key, shown as a dropdown of every sensor label that actually exists
+ * in the project rather than free text - binding becomes a choice, not something that can
+ * silently typo-mismatch a cylinder's signal. */
+interface SensorKeySelectField {
+  kind: 'sensorKeySelect';
+  key: string;
+  label: FieldLabel;
+}
+
+/** An open-ended, addable/removable list of named ranges - currently only a cylinder's sensors,
+ * each read/written as a whole array under `arrayKey` rather than one scalar key per field. */
+interface SensorListField {
+  kind: 'sensorList';
+  arrayKey: string;
+  min?: number;
+  max?: number;
+  step?: number;
+}
+
+/** Push-button vs limit-switch is a choice between two whole component types (see
+ * interaction/valveActuatorSwap.ts), not a scalar snapshot field - shown as a dropdown that
+ * replaces the component in place when changed. */
+interface ActuatorModeField {
+  kind: 'actuatorMode';
+}
+
+/** A component's own identifying label (currently just a cylinder's letter), renamed through
+ * `comp.renameLabel()` rather than a plain snapshot key/value - that's what cascades the rename
+ * into the cylinder's sensor labels and anything bound to them. */
+interface RelabelField {
+  kind: 'relabel';
+  label: FieldLabel;
+}
+
+type InspectorField =
+  | NumberField
+  | TextField
+  | SensorListField
+  | ActuatorModeField
+  | SensorKeySelectField
+  | RelabelField;
+
+const ACTUATOR_MODES: Array<{ type: string; label: string }> = [
+  { type: PUSH_BUTTON_32_TYPE, label: 'Push button' },
+  { type: LIMIT_VALVE_32_TYPE, label: 'Limit switch' },
+  { type: AIR_VALVE_32_TYPE, label: 'Air-piloted' },
+];
+
 const INSPECTOR_FIELDS: Record<string, InspectorField[]> = {
   [RESTRICTOR_TYPE]: [
-    { key: 'flowPct', label: 'Flow %', kind: 'number', min: 0, max: 100, step: 5 },
+    { kind: 'number', key: 'flowPct', label: 'Flow %', min: 0, max: 100, step: 5 },
   ],
   [ONE_WAY_FLOW_CONTROL_VALVE_TYPE]: [
-    { key: 'flowPct', label: 'Reverse flow %', kind: 'number', min: 0, max: 100, step: 5 },
+    { kind: 'number', key: 'flowPct', label: 'Reverse flow %', min: 0, max: 100, step: 5 },
   ],
   [TIME_DELAY_VALVE_TYPE]: [
-    { key: 'delaySec', label: 'Delay (s)', kind: 'number', min: 0, max: 30, step: 0.1 },
+    { kind: 'number', key: 'delaySec', label: 'Delay (s)', min: 0, max: 30, step: 0.1 },
   ],
-  [LIMIT_VALVE_32_TYPE]: [{ key: 'sensorKey', label: 'Sensor key', kind: 'text' }],
+  [PUSH_BUTTON_32_TYPE]: [{ kind: 'actuatorMode' }],
+  [LIMIT_VALVE_32_TYPE]: [
+    { kind: 'actuatorMode' },
+    { kind: 'sensorKeySelect', key: 'sensorKey', label: 'Sensor key' },
+  ],
+  [AIR_VALVE_32_TYPE]: [{ kind: 'actuatorMode' }],
+  [CYLINDER_DOUBLE_TYPE]: [
+    { kind: 'relabel', label: 'Cylinder letter' },
+    { kind: 'sensorList', arrayKey: 'sensors', min: 0, max: 100, step: 1 },
+  ],
+  [CYLINDER_SINGLE_TYPE]: [
+    { kind: 'relabel', label: 'Cylinder letter' },
+    { kind: 'sensorList', arrayKey: 'sensors', min: 0, max: 100, step: 1 },
+  ],
 };
 
+function resolveLabel(label: FieldLabel, comp: Component): string {
+  return typeof label === 'function' ? label(comp) : label;
+}
+
 /** Uses each component's own snapshot()/restore() as an implicit get/set for one field,
- * so the inspector doesn't need a bespoke setter API per component type. */
+ * so the inspector doesn't need a bespoke setter API per component type. markDirty() is what
+ * makes the edit undo-able and autosaved (same as any other project change) - it also fires
+ * appState's onChange, which is what lets a limit switch notice when some *other* one's sensor
+ * key changed and recheck whether it now shares a label with it. */
 function updateComponentField(comp: Component, key: string, value: unknown): void {
   comp.restore({ ...comp.snapshot(), [key]: value });
   redrawAllConnections();
+  appState.markDirty();
+}
+
+function renderNumberOrTextField(
+  container: HTMLElement,
+  comp: Component,
+  field: NumberField | TextField,
+  snap: Record<string, unknown>,
+): void {
+  const row = document.createElement('label');
+  row.className = 'inspectorRow';
+
+  const span = document.createElement('span');
+  span.textContent = resolveLabel(field.label, comp);
+
+  const input = document.createElement('input');
+  input.type = field.kind === 'number' ? 'number' : 'text';
+  if (field.kind === 'number') {
+    if (field.min !== undefined) input.min = String(field.min);
+    if (field.max !== undefined) input.max = String(field.max);
+    if (field.step !== undefined) input.step = String(field.step);
+  }
+  input.value = String(snap[field.key] ?? '');
+
+  input.addEventListener('change', () => {
+    const value = field.kind === 'number' ? Number(input.value) : input.value;
+    updateComponentField(comp, field.key, value);
+  });
+
+  row.append(span, input);
+  container.appendChild(row);
+}
+
+function renderActuatorModeField(container: HTMLElement, comp: Component): void {
+  const row = document.createElement('label');
+  row.className = 'inspectorRow';
+
+  const span = document.createElement('span');
+  span.textContent = 'Control mode';
+
+  const select = document.createElement('select');
+  for (const mode of ACTUATOR_MODES) {
+    const option = document.createElement('option');
+    option.value = mode.type;
+    option.textContent = mode.label;
+    select.appendChild(option);
+  }
+  select.value = comp.type;
+
+  select.addEventListener('change', () => {
+    if (select.value !== comp.type) swapComponentType(comp, select.value);
+    // swapComponentType replaces the component and re-selects the new one, which triggers
+    // onSelectionChange -> refresh() on its own - nothing more to do here.
+  });
+
+  row.append(span, select);
+  container.appendChild(row);
+}
+
+function renderSensorKeySelectField(
+  container: HTMLElement,
+  comp: Component,
+  field: SensorKeySelectField,
+  snap: Record<string, unknown>,
+  onChange: () => void,
+): void {
+  const row = document.createElement('label');
+  row.className = 'inspectorRow';
+
+  const span = document.createElement('span');
+  span.textContent = resolveLabel(field.label, comp);
+
+  const select = document.createElement('select');
+  const current = String(snap[field.key] ?? '');
+  const options = listAllSensorLabels();
+
+  // Always available, including alongside a real binding - unbinding one switch is how a label
+  // gets freed up to swap with another's without having to move either off to the side first:
+  // clear one switch's label, give its now-free label to the other, then give the first switch
+  // what the other just gave up.
+  const noneOpt = document.createElement('option');
+  noneOpt.value = '';
+  noneOpt.textContent = '(none)';
+  select.appendChild(noneOpt);
+
+  // The current binding stays selectable even if it doesn't match any sensor that exists right
+  // now (its cylinder was deleted, or this was typed in before the field became a dropdown) -
+  // switching it away is a deliberate choice, not something losing the value should force.
+  const currentExists = options.some((o) => o.label.toUpperCase() === current.toUpperCase());
+  if (current && !currentExists) {
+    const opt = document.createElement('option');
+    opt.value = current;
+    opt.textContent = `${current} (not found)`;
+    select.appendChild(opt);
+  }
+  // A label already used by another limit switch stays selectable - two switches can
+  // legitimately react to the same sensor (a real circuit might fan one signal out to several
+  // valves) - just marked, so picking one is an informed choice rather than a surprise.
+  for (const o of options) {
+    const opt = document.createElement('option');
+    opt.value = o.label;
+    const takenElsewhere =
+      o.label.toUpperCase() !== current.toUpperCase() &&
+      isSensorKeyBoundElsewhere(o.label, comp.id);
+    opt.textContent = takenElsewhere
+      ? `${o.label} — ${o.cylinderName} (also used)`
+      : `${o.label} — ${o.cylinderName}`;
+    select.appendChild(opt);
+  }
+  select.value = current;
+
+  select.addEventListener('change', () => {
+    updateComponentField(comp, field.key, select.value);
+    // Whether this switch (now) duplicates another, and whether any *other* option should read
+    // "(also used)", both depend on the value just picked - re-render so the warning and the
+    // rest of the list reflect it immediately instead of only on the next selection change.
+    onChange();
+  });
+
+  row.append(span, select);
+  container.appendChild(row);
+
+  // The symbol's own sensor-key text also turns red for this (see limitValve32.ts) - this is
+  // the same check surfaced in the inspector, in case the symbol isn't currently in view.
+  if (current && isSensorKeyBoundElsewhere(current, comp.id)) {
+    const warning = document.createElement('p');
+    warning.className = 'inspectorWarning';
+    warning.textContent = `Another limit switch is also bound to "${current}".`;
+    container.appendChild(warning);
+  }
+}
+
+/** Briefly flags `input` as rejected (a duplicate label, or some other invalid value) without a
+ * popup - just a red outline that clears itself, plus reverting the value the user tried to
+ * commit. */
+function flashRejected(input: HTMLInputElement, revertTo: string): void {
+  input.value = revertTo;
+  input.classList.add('inspectorFieldError');
+  window.setTimeout(() => input.classList.remove('inspectorFieldError'), 1000);
+}
+
+function renderRelabelField(
+  container: HTMLElement,
+  comp: Component,
+  field: RelabelField,
+  onChange: () => void,
+): void {
+  const row = document.createElement('label');
+  row.className = 'inspectorRow';
+
+  const span = document.createElement('span');
+  span.textContent = resolveLabel(field.label, comp);
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.maxLength = 1;
+  const current = String(comp.snapshot().letter ?? '');
+  input.value = current;
+
+  input.addEventListener('change', () => {
+    if (!comp.renameLabel?.(input.value)) {
+      flashRejected(input, current);
+      return;
+    }
+    // A rename cascades into the sensor list's labels (and possibly other components' sensor
+    // key bindings) - re-render so this panel's own sensor rows pick up their new names right
+    // away instead of only on the next selection change.
+    onChange();
+  });
+
+  row.append(span, input);
+  container.appendChild(row);
+}
+
+/** Renders the sensor list as its own section (explanation, one row per sensor with a live
+ * slider, an Add button) and re-renders `onChange` after every add/remove, since the row count
+ * itself can change. */
+function renderSensorListField(
+  container: HTMLElement,
+  comp: Component,
+  field: SensorListField,
+  snap: Record<string, unknown>,
+  onChange: () => void,
+): void {
+  const sensors = (snap[field.arrayKey] as CylinderSensor[] | undefined) ?? [];
+  const lo = field.min ?? 0;
+  const hi = field.max ?? 100;
+
+  const heading = document.createElement('div');
+  heading.className = 'inspectorSectionHeading';
+  heading.textContent = 'Sensors';
+  container.appendChild(heading);
+
+  const hint = document.createElement('p');
+  hint.className = 'inspectorHint';
+  hint.textContent =
+    'Each sensor turns on while the piston is within its range of the stroke (0% = fully ' +
+    'retracted, 100% = fully extended). Give a 3/2 limit switch the same label as its "Sensor ' +
+    'key" to read it - labels are case-insensitive, so "a0" and "A0" are the same sensor.';
+  container.appendChild(hint);
+
+  function writeSensors(next: CylinderSensor[]): void {
+    updateComponentField(comp, field.arrayKey, next);
+    onChange();
+  }
+
+  sensors.forEach((sensor, index) => {
+    const row = document.createElement('div');
+    row.className = 'inspectorSensorRow';
+
+    const labelInput = document.createElement('input');
+    labelInput.type = 'text';
+    labelInput.className = 'inspectorSensorLabel';
+    labelInput.value = sensor.label;
+    labelInput.addEventListener('change', () => {
+      const next = labelInput.value.trim();
+      if (!next) {
+        labelInput.value = sensor.label;
+        return;
+      }
+      if (isSensorLabelInUse(next, { compId: comp.id, index })) {
+        flashRejected(labelInput, sensor.label);
+        return;
+      }
+      const updated = sensors.slice();
+      updated[index] = { ...sensor, label: next };
+      writeSensors(updated);
+    });
+
+    const fromInput = document.createElement('input');
+    fromInput.type = 'number';
+    const toInput = document.createElement('input');
+    toInput.type = 'number';
+    for (const el of [fromInput, toInput]) {
+      el.min = String(lo);
+      el.max = String(hi);
+      if (field.step !== undefined) el.step = String(field.step);
+    }
+    fromInput.value = String(sensor.minPct);
+    toInput.value = String(sensor.maxPct);
+
+    const sliderWrap = document.createElement('div');
+    sliderWrap.className = 'sensorSlider';
+    const track = document.createElement('div');
+    track.className = 'sensorSliderTrack';
+    const fill = document.createElement('div');
+    fill.className = 'sensorSliderRange';
+    const minSlider = document.createElement('input');
+    minSlider.type = 'range';
+    minSlider.className = 'sensorSliderInput';
+    const maxSlider = document.createElement('input');
+    maxSlider.type = 'range';
+    maxSlider.className = 'sensorSliderInput';
+    for (const el of [minSlider, maxSlider]) {
+      el.min = String(lo);
+      el.max = String(hi);
+      el.step = String(field.step ?? 1);
+    }
+    minSlider.value = String(sensor.minPct);
+    maxSlider.value = String(sensor.maxPct);
+    sliderWrap.append(track, fill, minSlider, maxSlider);
+
+    function positionFill(minPct: number, maxPct: number): void {
+      const span = hi - lo || 1;
+      fill.style.left = `${((minPct - lo) / span) * 100}%`;
+      fill.style.width = `${((maxPct - minPct) / span) * 100}%`;
+    }
+    positionFill(sensor.minPct, sensor.maxPct);
+
+    function commitRange(minPct: number, maxPct: number): void {
+      fromInput.value = String(minPct);
+      toInput.value = String(maxPct);
+      minSlider.value = String(minPct);
+      maxSlider.value = String(maxPct);
+      positionFill(minPct, maxPct);
+      const updated = sensors.slice();
+      updated[index] = { ...sensor, minPct, maxPct };
+      writeSensors(updated);
+    }
+
+    fromInput.addEventListener('change', () => {
+      const clamped = Math.min(Math.max(Number(fromInput.value), lo), hi);
+      commitRange(clamped, Math.max(clamped, Number(toInput.value)));
+    });
+    toInput.addEventListener('change', () => {
+      const clamped = Math.min(Math.max(Number(toInput.value), lo), hi);
+      commitRange(Math.min(clamped, Number(fromInput.value)), clamped);
+    });
+    minSlider.addEventListener('input', () => {
+      const v = Math.min(Number(minSlider.value), Number(maxSlider.value));
+      minSlider.value = String(v);
+      positionFill(v, Number(maxSlider.value));
+    });
+    minSlider.addEventListener('change', () => {
+      commitRange(
+        Number(minSlider.value),
+        Math.max(Number(minSlider.value), Number(maxSlider.value)),
+      );
+    });
+    maxSlider.addEventListener('input', () => {
+      const v = Math.max(Number(maxSlider.value), Number(minSlider.value));
+      maxSlider.value = String(v);
+      positionFill(Number(minSlider.value), v);
+    });
+    maxSlider.addEventListener('change', () => {
+      commitRange(
+        Math.min(Number(minSlider.value), Number(maxSlider.value)),
+        Number(maxSlider.value),
+      );
+    });
+
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'inspectorRemoveBtn';
+    removeBtn.textContent = '✕';
+    removeBtn.title = 'Remove sensor';
+    removeBtn.addEventListener('click', () => {
+      writeSensors(sensors.filter((_, i) => i !== index));
+    });
+
+    const numbersRow = document.createElement('div');
+    numbersRow.className = 'inspectorSensorNumbers';
+    const sep = document.createElement('span');
+    sep.className = 'inspectorRangeSep';
+    sep.textContent = '–';
+    numbersRow.append(labelInput, fromInput, sep, toInput, removeBtn);
+
+    row.append(numbersRow, sliderWrap);
+    container.appendChild(row);
+  });
+
+  const addBtn = document.createElement('button');
+  addBtn.type = 'button';
+  addBtn.className = 'btn inspectorAddBtn';
+  addBtn.textContent = '+ Add sensor';
+  addBtn.addEventListener('click', () => {
+    const letter = String(comp.snapshot().letter ?? '');
+    const label = nextSensorLabel(letter);
+    writeSensors([...sensors, { label, minPct: 45, maxPct: 55 }]);
+  });
+  container.appendChild(addBtn);
 }
 
 export function renderInspector(container: HTMLElement): void {
@@ -40,38 +470,35 @@ export function renderInspector(container: HTMLElement): void {
     container.replaceChildren();
 
     const selected = getSelectedComponents();
-    if (selected.length !== 1) return;
+    if (selected.length !== 1) {
+      const hint = document.createElement('p');
+      hint.className = 'inspectorHint';
+      hint.textContent =
+        selected.length === 0
+          ? 'Select a component to edit its properties.'
+          : 'Select a single component to edit its properties.';
+      container.appendChild(hint);
+      return;
+    }
     const comp = selected[0] as Component;
 
     const fields = INSPECTOR_FIELDS[comp.type];
-    if (!fields || fields.length === 0) return;
+    if (!fields || fields.length === 0) {
+      const hint = document.createElement('p');
+      hint.className = 'inspectorHint';
+      hint.textContent = 'This component has nothing to configure here.';
+      container.appendChild(hint);
+      return;
+    }
 
-    const title = document.createElement('h3');
-    title.textContent = 'Inspector';
-    container.appendChild(title);
-
-    const snap = comp.snapshot();
+    const snap = comp.snapshot() as Record<string, unknown>;
     for (const field of fields) {
-      const row = document.createElement('label');
-      row.className = 'inspectorRow';
-
-      const span = document.createElement('span');
-      span.textContent = field.label;
-
-      const input = document.createElement('input');
-      input.type = field.kind === 'number' ? 'number' : 'text';
-      if (field.min !== undefined) input.min = String(field.min);
-      if (field.max !== undefined) input.max = String(field.max);
-      if (field.step !== undefined) input.step = String(field.step);
-      input.value = String(snap[field.key] ?? '');
-
-      input.addEventListener('change', () => {
-        const value = field.kind === 'number' ? Number(input.value) : input.value;
-        updateComponentField(comp, field.key, value);
-      });
-
-      row.append(span, input);
-      container.appendChild(row);
+      if (field.kind === 'sensorList') renderSensorListField(container, comp, field, snap, refresh);
+      else if (field.kind === 'actuatorMode') renderActuatorModeField(container, comp);
+      else if (field.kind === 'sensorKeySelect')
+        renderSensorKeySelectField(container, comp, field, snap, refresh);
+      else if (field.kind === 'relabel') renderRelabelField(container, comp, field, refresh);
+      else renderNumberOrTextField(container, comp, field, snap);
     }
   }
 

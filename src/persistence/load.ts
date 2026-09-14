@@ -37,7 +37,7 @@ function loadViaFileInput(
   return new Promise((resolve) => {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.json,application/json';
+    input.accept = '.pgcl,.json,application/json';
     input.addEventListener('change', () => {
       const file = input.files?.[0];
       if (!file) {
@@ -64,7 +64,9 @@ export async function loadProjectFromPicker(
   if (showOpenFilePicker) {
     try {
       const [handle] = await showOpenFilePicker({
-        types: [{ description: 'PneuGineer project', accept: { 'application/json': ['.json'] } }],
+        types: [
+          { description: 'PneuGineer project', accept: { 'application/json': ['.pgcl', '.json'] } },
+        ],
       });
       if (!handle) return undefined;
       const file = await handle.getFile();

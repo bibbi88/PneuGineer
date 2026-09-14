@@ -7,6 +7,7 @@ import {
   redrawAllConnections,
 } from '../wires/connection';
 import { cancelLinking } from './linking';
+import { copySelection, pasteClipboard } from './clipboard';
 import { GRID_SIZE } from '../core/grid';
 
 function isTypingTarget(el: Element | null): boolean {
@@ -48,6 +49,18 @@ export function initKeyboard(): void {
     if (e.key === 'Delete' || e.key === 'Backspace') {
       e.preventDefault();
       deleteSelection();
+      return;
+    }
+
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') {
+      e.preventDefault();
+      copySelection();
+      return;
+    }
+
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') {
+      e.preventDefault();
+      pasteClipboard();
       return;
     }
 
