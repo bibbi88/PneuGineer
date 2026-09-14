@@ -52,7 +52,15 @@ export function computeConnectionGeometry(
   if (!anchors) return [];
   const { fromAnchor, toAnchor } = anchors;
 
-  if (conn.guides.length > 0) {
+  // A connection has "explicit" geometry - and should be drawn exactly via its guides/stub
+  // lengths rather than re-auto-routed - once anything has deliberately set one of those
+  // fields, even to a value (like an empty guide list, or a zero stub) that matches what A*
+  // might have produced anyway. guides.length > 0 alone isn't enough: wire-splitting can
+  // deliberately produce a connection with zero guides (a straight run with no bends) that
+  // still must not fall through to A*, which only guarantees a *shortest* path, not the exact
+  // straight line the split was preserving - so a non-null stub length (only ever set by
+  // deliberate editing, never left as A*'s implicit default) is treated as the same signal.
+  if (conn.guides.length > 0 || conn.stubStartLen !== null || conn.stubEndLen !== null) {
     return routeWithGuides(fromAnchor, toAnchor, conn.guides, conn.stubStartLen, conn.stubEndLen);
   }
 

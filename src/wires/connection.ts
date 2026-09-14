@@ -143,6 +143,22 @@ export function removeConnection(connId: number): void {
   updatePortConnectionVisual(conn.to.id, conn.to.port);
 }
 
+/**
+ * Deletes a component along with every wire attached to it. Deleting a component directly via
+ * appState.removeComponent() alone would leave those wires dangling (never unhooked from the
+ * DOM) and, more visibly, leave the *other* end's port stuck showing as "connected" (hidden
+ * dot) even though its wire is now gone - so any component deletion must always go through
+ * this rather than appState.removeComponent() directly.
+ */
+export function removeComponentAndConnections(compId: ComponentId): void {
+  for (const conn of appState.connections.filter(
+    (c) => c.from.id === compId || c.to.id === compId,
+  )) {
+    removeConnection(conn.id);
+  }
+  appState.removeComponent(compId);
+}
+
 export function resetToAutoRoute(connId: number): void {
   const conn = appState.connections.find((c) => c.id === connId);
   if (!conn) return;

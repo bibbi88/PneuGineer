@@ -7,12 +7,12 @@ import { redrawAllConnections } from '../wires/connection';
 
 export const CYLINDER_SINGLE_TYPE = 'cylinderSingle';
 
-const SVG_W = 226;
-const SVG_H = 98;
+const SVG_W = 186;
+const SVG_H = 84;
 const GX = 8;
 const GY = 8;
-const W = 200;
-const H = 70;
+const W = 160;
+const H = 56;
 const PORT_MARGIN = 6;
 const CAP_PORT_X = 12;
 const ROD_PORT_X = W - 12;
@@ -21,7 +21,12 @@ type CylinderMode = 'push' | 'pull';
 
 export function createCylinderSingle(compLayer: HTMLElement, x: number, y: number): Component {
   let letter = nextCylinderLetter();
-  const shell = buildComponentShell(compLayer, CYLINDER_SINGLE_TYPE, x, y, SVG_W, SVG_H, '');
+  const shell = buildComponentShell(compLayer, CYLINDER_SINGLE_TYPE, x, y, SVG_W, SVG_H, '', {
+    x: GX,
+    y: GY,
+    w: W,
+    h: H,
+  });
 
   shell.labelEl.style.pointerEvents = 'auto';
   const labelText = document.createElement('span');

@@ -27,6 +27,7 @@ export function createQuickExhaustValve(compLayer: HTMLElement, x: number, y: nu
     SVG_W,
     SVG_H,
     'Quick Exh.',
+    { x: OX + 8, y: OY + 8, w: LOCAL_W - 16, h: LOCAL_H - 16 },
   );
 
   const g = createSvgEl('g', { transform: `translate(${OX},${OY})` });

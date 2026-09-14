@@ -1,7 +1,11 @@
 import { appState } from '../app/AppState';
 import { canEdit } from '../app/modes';
 import { getSelectedComponents, clearSelection } from './selection';
-import { removeConnection, redrawAllConnections } from '../wires/connection';
+import {
+  removeConnection,
+  removeComponentAndConnections,
+  redrawAllConnections,
+} from '../wires/connection';
 import { cancelLinking } from './linking';
 import { GRID_SIZE } from '../core/grid';
 
@@ -15,7 +19,7 @@ function deleteSelection(): void {
   if (!canEdit(appState.mode)) return;
 
   for (const c of getSelectedComponents()) {
-    appState.removeComponent(c.id);
+    removeComponentAndConnections(c.id);
   }
   if (appState.selectedConnectionId !== null) {
     removeConnection(appState.selectedConnectionId);

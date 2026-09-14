@@ -7,7 +7,10 @@ import {
   removeConnection,
   setWireClickInterceptor,
 } from '../wires/connection';
-import { computeConnectionAnchors, computeConnectionGeometry } from '../geometry/connectionGeometry';
+import {
+  computeConnectionAnchors,
+  computeConnectionGeometry,
+} from '../geometry/connectionGeometry';
 import {
   distPointToSegment,
   guideCorners,
@@ -94,17 +97,41 @@ export function initWireSplitting(
 
     removeConnection(conn.id);
 
+    // The junction sits exactly on the original wire's own line, so the end of each split half
+    // that meets it needs no stub of its own - a non-zero stub would launch off perpendicular
+    // to the original line before the router even starts, adding a bend that wasn't there
+    // before. Zeroing it collapses stubPoint() to the junction's own position, so each half
+    // reproduces its share of the original path with nothing extra, whether that original line
+    // was horizontal or vertical.
     const firstConn = createConnection(originalFrom, { id: junction.id, port: 'P' });
     firstConn.guides = firstGuides;
     firstConn.stubStartLen = stubStartLen;
+    firstConn.stubEndLen = 0;
     redrawConnection(firstConn);
 
     const secondConn = createConnection({ id: junction.id, port: 'P' }, originalTo);
     secondConn.guides = secondGuides;
+    secondConn.stubStartLen = 0;
     secondConn.stubEndLen = stubEndLen;
     redrawConnection(secondConn);
 
     handlePortClick(junction.id, 'P');
+
+    // The third wire (from whichever port was mid-link to this new junction) was just created
+    // by handlePortClick above with a default stub at the junction end - zero that one too, for
+    // the same reason, so it approaches the junction as directly as possible instead of being
+    // forced into a perpendicular launch first.
+    const thirdConn = appState.connections[appState.connections.length - 1];
+    if (thirdConn && thirdConn.id !== firstConn.id && thirdConn.id !== secondConn.id) {
+      if (thirdConn.to.id === junction.id && thirdConn.to.port === 'P') {
+        thirdConn.stubEndLen = 0;
+        redrawConnection(thirdConn);
+      } else if (thirdConn.from.id === junction.id && thirdConn.from.port === 'P') {
+        thirdConn.stubStartLen = 0;
+        redrawConnection(thirdConn);
+      }
+    }
+
     return true;
   });
 }

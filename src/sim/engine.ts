@@ -11,7 +11,11 @@ import { getSignal, setSignal } from './signals';
 export function stepSimulation(dt: number): FrameGraph {
   for (const c of appState.components) c.recompute?.();
 
-  let graph = computeFrameGraph(appState.components, appState.connections, appState.topologyVersion);
+  let graph = computeFrameGraph(
+    appState.components,
+    appState.connections,
+    appState.topologyVersion,
+  );
 
   let anyEdgeTriggered = false;
   for (const c of appState.components) {

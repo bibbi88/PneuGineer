@@ -110,7 +110,12 @@ body {
   user-select: none;
 }
 
-.comp.selected {
+.boundsBox {
+  position: absolute;
+  pointer-events: none;
+}
+
+.boundsBox.selected {
   outline: 2px dashed var(--accent);
   outline-offset: 4px;
 }

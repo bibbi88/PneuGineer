@@ -29,7 +29,12 @@ function rect(x: number, y: number, w: number, h: number): SVGRectElement {
 }
 
 export function createOrValve(compLayer: HTMLElement, x: number, y: number): Component {
-  const shell = buildComponentShell(compLayer, OR_VALVE_TYPE, x, y, SVG_W, SVG_H, '');
+  const shell = buildComponentShell(compLayer, OR_VALVE_TYPE, x, y, SVG_W, SVG_H, '', {
+    x: GX + HUS_X,
+    y: GY + HUS_Y,
+    w: HUS_W,
+    h: HUS_H,
+  });
   const g = createSvgEl('g', { transform: `translate(${GX},${GY})` });
 
   const yMid = HUS_Y + HUS_H / 2;

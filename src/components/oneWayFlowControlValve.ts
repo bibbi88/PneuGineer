@@ -28,6 +28,7 @@ export function createOneWayFlowControlValve(
     SVG_W,
     SVG_H,
     'One-way Flow',
+    { x: OX, y: OY, w: LOCAL_W, h: LOCAL_H },
   );
 
   const g = createSvgEl('g', { transform: `translate(${OX},${OY})` });

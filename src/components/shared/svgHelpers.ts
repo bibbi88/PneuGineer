@@ -28,6 +28,11 @@ export function buildComponentShell(
   svgW: number,
   svgH: number,
   label: string,
+  /** Local box (within the svg's own 0..svgW/0..svgH canvas) that getBounds() should report
+   * instead of the full padded canvas - e.g. just the component's drawn body rectangle, so
+   * obstacle avoidance/selection reflects what's actually visible rather than the extra padding
+   * reserved for port labels, pilot stubs, etc. Defaults to the full canvas when omitted. */
+  innerBounds?: { x: number; y: number; w: number; h: number },
 ): ComponentShell {
   const el = document.createElement('div');
   el.className = 'comp';
@@ -41,6 +46,20 @@ export function buildComponentShell(
   const svg = createSvgEl('svg', { class: 'compSvg', width: svgW, height: svgH });
   svg.style.display = 'block';
   el.appendChild(svg);
+
+  const box = innerBounds ?? { x: 0, y: 0, w: svgW, h: svgH };
+
+  // Selection is highlighted on this box, not the outer .comp div - the div always spans the
+  // full padded canvas (ports, labels, pilot stubs and all), so outlining it directly would
+  // draw the same oversized rectangle around every component regardless of how tight
+  // `innerBounds` is. This one is sized/positioned to the same tight box getBounds() reports.
+  const boundsEl = document.createElement('div');
+  boundsEl.className = 'boundsBox';
+  boundsEl.style.left = `${box.x}px`;
+  boundsEl.style.top = `${box.y}px`;
+  boundsEl.style.width = `${box.w}px`;
+  boundsEl.style.height = `${box.h}px`;
+  el.appendChild(boundsEl);
 
   let cx = x;
   let cy = y;
@@ -60,8 +79,13 @@ export function buildComponentShell(
     svg,
     labelEl,
     setPos,
-    getBounds: () => ({ x: cx - svgW / 2, y: cy - svgH / 2, w: svgW, h: svgH }),
-    setSelected: (sel: boolean) => el.classList.toggle('selected', sel),
+    getBounds: () => ({
+      x: cx - svgW / 2 + box.x,
+      y: cy - svgH / 2 + box.y,
+      w: box.w,
+      h: box.h,
+    }),
+    setSelected: (sel: boolean) => boundsEl.classList.toggle('selected', sel),
   };
 }
 

@@ -14,7 +14,12 @@ const HUS_W = 50;
 const HUS_H = 50;
 
 export function createCheckValve(compLayer: HTMLElement, x: number, y: number): Component {
-  const shell = buildComponentShell(compLayer, CHECK_VALVE_TYPE, x, y, SVG_W, SVG_H, '');
+  const shell = buildComponentShell(compLayer, CHECK_VALVE_TYPE, x, y, SVG_W, SVG_H, '', {
+    x: GX + HUS_X,
+    y: GY + HUS_Y,
+    w: HUS_W,
+    h: HUS_H,
+  });
   const g = createSvgEl('g', { transform: `translate(${GX},${GY})` });
 
   g.appendChild(

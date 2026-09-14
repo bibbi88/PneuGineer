@@ -54,7 +54,12 @@ function addDoubleArrow(
 }
 
 export function createValve52(compLayer: HTMLElement, x: number, y: number): Component {
-  const shell = buildComponentShell(compLayer, VALVE_52_TYPE, x, y, SVG_W, SVG_H, '');
+  const shell = buildComponentShell(compLayer, VALVE_52_TYPE, x, y, SVG_W, SVG_H, '', {
+    x: GX0,
+    y: GY0,
+    w: BODY_W,
+    h: BODY_H,
+  });
   const svg = shell.svg;
   svg.style.overflow = 'visible';
 
@@ -312,11 +317,23 @@ export function createValve52(compLayer: HTMLElement, x: number, y: number): Com
       const pilot14 = ctx.isPressurized('14');
       const rising12 = pilot12 && !pilot12Prev;
       const rising14 = pilot14 && !pilot14Prev;
-      // If both pilots newly pressurize in the same tick, the command is ambiguous (a real
-      // double-pilot valve would be pushed from both ends at once) - hold the current state
-      // rather than letting whichever branch happened to run last silently win.
-      if (rising12 && !rising14) state = 1;
-      else if (rising14 && !rising12) state = 0;
+      const falling12 = !pilot12 && pilot12Prev;
+      const falling14 = !pilot14 && pilot14Prev;
+      // A real double-pilot valve only moves when one side is commanded while the other is
+      // vented - with both pilots holding pressure at once the command is ambiguous (or the
+      // valve is being fought from both ends), so it should hold its current position. That
+      // means checking the *other* pilot's current level, not just whether it also rose this
+      // same tick: it's just as invalid for one pilot to rise while the other is already held
+      // on from an earlier tick as for both to rise together.
+      //
+      // Once one of the two pilots is removed again, though, the ambiguity is gone: whichever
+      // pilot is still held becomes the (now unambiguous) command and should move the valve to
+      // match it, exactly as if it had just risen on its own - otherwise a pilot that was held
+      // the whole time it was blocked would never get to take effect at all.
+      if (rising12 && !pilot14) state = 1;
+      else if (rising14 && !pilot12) state = 0;
+      else if (falling14 && pilot12) state = 1;
+      else if (falling12 && pilot14) state = 0;
       pilot12Prev = pilot12;
       pilot14Prev = pilot14;
       applyState();
@@ -330,7 +347,7 @@ export function createValve52(compLayer: HTMLElement, x: number, y: number): Com
       applyState();
     },
     reset(): void {
-      state = 0;
+      state = 1;
       pilot12Prev = false;
       pilot14Prev = false;
       applyState();

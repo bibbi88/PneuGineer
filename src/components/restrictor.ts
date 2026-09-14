@@ -15,7 +15,12 @@ const HUS_H = 60;
 const DEFAULT_FLOW_PCT = 50;
 
 export function createRestrictor(compLayer: HTMLElement, x: number, y: number): Component {
-  const shell = buildComponentShell(compLayer, RESTRICTOR_TYPE, x, y, SVG_W, SVG_H, 'Restrictor');
+  const shell = buildComponentShell(compLayer, RESTRICTOR_TYPE, x, y, SVG_W, SVG_H, 'Restrictor', {
+    x: GX + HUS_X,
+    y: GY + HUS_Y,
+    w: HUS_W,
+    h: HUS_H,
+  });
   const g = createSvgEl('g', { transform: `translate(${GX},${GY})` });
 
   g.appendChild(

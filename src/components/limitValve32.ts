@@ -29,6 +29,12 @@ export function createLimitValve32(compLayer: HTMLElement, x: number, y: number)
     SVG_W,
     SVG_H,
     '3/2 Limit',
+    {
+      x: SLIDING_VALVE_OFFSET_X,
+      y: SLIDING_VALVE_OFFSET_Y,
+      w: SLIDING_VALVE_W,
+      h: SLIDING_VALVE_H,
+    },
   );
   const valve = buildSlidingValve32Body(shell.svg, `arrow-limit-${uid()}`);
 

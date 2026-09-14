@@ -2,7 +2,7 @@ import type { Component } from '../core/types';
 import { appState } from '../app/AppState';
 import { canEdit } from '../app/modes';
 import { showContextMenu } from './contextMenu';
-import { redrawAllConnections } from '../wires/connection';
+import { redrawAllConnections, removeComponentAndConnections } from '../wires/connection';
 import { selectOnly } from './selection';
 
 function rotateComponent(comp: Component, deltaDeg: number): void {
@@ -25,7 +25,7 @@ export function wireUpComponentContextMenu(comp: Component): void {
       {
         label: 'Delete',
         onClick: () => {
-          appState.removeComponent(comp.id);
+          removeComponentAndConnections(comp.id);
           redrawAllConnections();
         },
       },

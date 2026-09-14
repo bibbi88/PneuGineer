@@ -6,12 +6,12 @@ import { BASE_CYL_SPEED } from '../sim/constants';
 
 export const CYLINDER_DOUBLE_TYPE = 'cylinderDouble';
 
-const SVG_W = 246;
-const SVG_H = 98;
+const SVG_W = 202;
+const SVG_H = 84;
 const GX = 8;
 const GY = 8;
-const W = 220;
-const H = 70;
+const W = 176;
+const H = 56;
 const PORT_MARGIN = 6;
 
 export function createCylinderDouble(compLayer: HTMLElement, x: number, y: number): Component {
@@ -24,6 +24,7 @@ export function createCylinderDouble(compLayer: HTMLElement, x: number, y: numbe
     SVG_W,
     SVG_H,
     `Cylinder ${letter}`,
+    { x: GX, y: GY, w: W, h: H },
   );
   const g = createSvgEl('g', { transform: `translate(${GX},${GY})` });
 
@@ -42,7 +43,14 @@ export function createCylinderDouble(compLayer: HTMLElement, x: number, y: numbe
   // Lead-in lines reaching the exact port centers (not just close to them), since a connected
   // port's own circle is hidden - any gap between the body and the port would otherwise show
   // up as a visible blank break in the wire.
-  const leadA = createSvgEl('line', { x1: 10, y1: H, x2: 10, y2: H + PORT_MARGIN, stroke: '#111', 'stroke-width': 2 });
+  const leadA = createSvgEl('line', {
+    x1: 10,
+    y1: H,
+    x2: 10,
+    y2: H + PORT_MARGIN,
+    stroke: '#111',
+    'stroke-width': 2,
+  });
   const leadB = createSvgEl('line', {
     x1: W - 10,
     y1: H,

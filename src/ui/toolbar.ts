@@ -25,7 +25,11 @@ export function renderToolbar(container: HTMLElement): void {
   updatePlayStopButton();
 
   playStopBtn.addEventListener('click', () => {
-    appState.setMode(appState.mode === Modes.PLAY ? Modes.STOP : Modes.PLAY);
+    const nextMode = appState.mode === Modes.PLAY ? Modes.STOP : Modes.PLAY;
+    if (nextMode === Modes.STOP) {
+      for (const c of appState.components) c.reset();
+    }
+    appState.setMode(nextMode);
     updatePlayStopButton();
   });
   pauseBtn.addEventListener('click', () => {

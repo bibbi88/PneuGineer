@@ -55,17 +55,6 @@ function addDirEdge(
   adjacency.get(a)?.set(b, multiplier);
 }
 
-function addEdge(
-  adjacency: Map<PortKeyStr, Map<PortKeyStr, number>>,
-  a: PortKeyStr,
-  b: PortKeyStr,
-  multiplier: number,
-  directed: boolean,
-): void {
-  addDirEdge(adjacency, a, b, multiplier);
-  if (!directed) addDirEdge(adjacency, b, a, multiplier);
-}
-
 function flood(
   adjacency: Map<PortKeyStr, Map<PortKeyStr, number>>,
   pressurized: Set<PortKeyStr>,
@@ -121,8 +110,12 @@ export function computeFrameGraph(
       for (const edge of edges) {
         const a = portKey(c.id, edge.a);
         const b = portKey(c.id, edge.b);
-        const multiplier = c.flowMultiplier?.(edge.a, edge.b) ?? 1;
-        addEdge(adjacency, a, b, multiplier, edge.directed ?? false);
+        // Each direction gets its own multiplier lookup - a component like the one-way flow
+        // control valve conducts both ways on one undirected edge but throttles only one of
+        // them, so reusing a single (edge.a, edge.b) multiplier for both directions would
+        // silently apply the free-flow rate to the throttled direction too.
+        addDirEdge(adjacency, a, b, c.flowMultiplier?.(edge.a, edge.b) ?? 1);
+        if (!edge.directed) addDirEdge(adjacency, b, a, c.flowMultiplier?.(edge.b, edge.a) ?? 1);
       }
     }
     flood(adjacency, pressurized);
@@ -145,10 +138,17 @@ export function flowMultiplierToNearestSource(graph: FrameGraph, fromKey: PortKe
     if (!cur) break;
     if (graph.sourceKeys.has(cur.key) && graph.pressurized.has(cur.key)) return cur.mult;
 
-    for (const [next, edgeMult] of graph.adjacency.get(cur.key) ?? []) {
+    for (const [next] of graph.adjacency.get(cur.key) ?? []) {
       if (!visited.has(next)) {
         visited.add(next);
-        queue.push({ key: next, mult: cur.mult * edgeMult });
+        // This walk goes from the query port back toward a source, i.e. backwards relative to
+        // the direction air actually flows. The multiplier that matters is the one for the real
+        // flow direction (next -> cur, since next sits closer to the source), not the multiplier
+        // stored on the edge this walk just traversed (cur -> next) - those two can differ for
+        // an asymmetric-but-undirected edge like the one-way flow control valve, which conducts
+        // both ways but only throttles one of them.
+        const realMult = graph.adjacency.get(next)?.get(cur.key) ?? 1;
+        queue.push({ key: next, mult: cur.mult * realMult });
       }
     }
   }

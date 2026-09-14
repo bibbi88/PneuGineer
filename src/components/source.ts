@@ -13,7 +13,12 @@ const CY = 50;
 const R = 15;
 
 export function createSource(compLayer: HTMLElement, x: number, y: number): Component {
-  const shell = buildComponentShell(compLayer, SOURCE_TYPE, x, y, SVG_W, SVG_H, '');
+  const shell = buildComponentShell(compLayer, SOURCE_TYPE, x, y, SVG_W, SVG_H, '', {
+    x: GX + (CX - R),
+    y: GY + (CY - R),
+    w: R * 2,
+    h: R * 2,
+  });
   const g = createSvgEl('g', { transform: `translate(${GX},${GY})` });
 
   g.appendChild(
