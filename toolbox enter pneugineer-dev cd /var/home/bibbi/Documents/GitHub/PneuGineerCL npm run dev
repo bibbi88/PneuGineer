@@ -1,0 +1,3 @@
+toolbox enter pneugineer-dev
+cd /var/home/bibbi/Documents/GitHub/PneuGineerCL
+npm run dev

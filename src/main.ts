@@ -23,6 +23,7 @@ const workspaceQuery = document.querySelector<HTMLElement>('.workspace');
 const viewportQuery = document.getElementById('viewport');
 const compLayerQuery = document.getElementById('compLayer');
 const connLayerQuery = document.getElementById('connLayer') as SVGSVGElement | null;
+const handleLayerQuery = document.getElementById('handleLayer') as SVGSVGElement | null;
 const sidebarButtonsQuery = document.getElementById('sidebarButtons');
 const toolbarButtonsQuery = document.getElementById('toolbarButtons');
 const projectBarQuery = document.getElementById('projectBar');
@@ -33,6 +34,7 @@ if (
   !viewportQuery ||
   !compLayerQuery ||
   !connLayerQuery ||
+  !handleLayerQuery ||
   !sidebarButtonsQuery ||
   !toolbarButtonsQuery ||
   !projectBarQuery ||
@@ -44,6 +46,7 @@ if (
 const workspaceEl: HTMLElement = workspaceQuery;
 const compLayer: HTMLElement = compLayerQuery;
 const connLayer: SVGSVGElement = connLayerQuery;
+const handleLayer: SVGSVGElement = handleLayerQuery;
 const sidebarButtons: HTMLElement = sidebarButtonsQuery;
 const toolbarButtons: HTMLElement = toolbarButtonsQuery;
 const projectBarEl: HTMLElement = projectBarQuery;
@@ -51,7 +54,7 @@ const inspectorEl: HTMLElement = inspectorQuery;
 
 const viewport = initViewport(viewportQuery, workspaceEl);
 initWires(connLayer, viewport, workspaceEl);
-initWireHandles(connLayer, viewport, workspaceEl);
+initWireHandles(handleLayer, viewport, workspaceEl);
 initLinking(connLayer, viewport, workspaceEl);
 initMarquee(connLayer);
 initKeyboard();

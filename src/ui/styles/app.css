@@ -104,6 +104,18 @@ body {
   pointer-events: auto;
 }
 
+/* Above compLayer so drag handles stay reachable even when a wire's stub sits right against a
+   component's own artwork. pointer-events: none on the root (re-enabled per handle below) so
+   the rest of its empty bounding box still lets clicks fall through to layers below. */
+#handleLayer {
+  z-index: 2;
+  pointer-events: none;
+}
+
+#handleLayer > * {
+  pointer-events: auto;
+}
+
 .comp {
   position: absolute;
   transform: translate(-50%, -50%);
@@ -168,6 +180,12 @@ svg.compSvg {
 
 .wireHandle:hover {
   fill: #ffe8e8;
+}
+
+/* Extra class selector so this reliably wins over the plain .wireHandle rule regardless of
+   declaration order. */
+rect.wireHandle.wireStubHandle {
+  fill: #eaf3ff;
 }
 
 .draggable {

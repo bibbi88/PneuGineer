@@ -1,6 +1,8 @@
 import type { Component, PortConnection } from '../core/types';
 import { uid } from '../core/ids';
 import { buildComponentShell, createSvgEl } from './shared/svgHelpers';
+import { appState } from '../app/AppState';
+import { Modes } from '../app/modes';
 import {
   buildSlidingValve32Body,
   SLIDING_VALVE_W,
@@ -132,6 +134,7 @@ export function createPushButton32(compLayer: HTMLElement, x: number, y: number)
   }
 
   shell.svg.addEventListener('mousedown', (e) => {
+    if (appState.mode === Modes.STOP) return;
     if (!isInLeftHalf(e.clientX)) return;
     if (latched) {
       // A second mouse-press on an already-latched button releases it.

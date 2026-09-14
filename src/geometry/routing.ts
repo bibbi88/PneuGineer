@@ -52,14 +52,31 @@ export function collapseColinear(points: Point[]): Point[] {
   return out;
 }
 
-export function stubPoint(anchor: PortAnchor, towardPos: Point, len: number): Point {
+/** The direction (away from the port, along its entry axis) a stub travels in. Fixed by
+ * `pilotDir` for ports that always exit one particular way (e.g. pilots), otherwise whichever
+ * side `towardPos` currently falls on. */
+export function stubDirection(anchor: PortAnchor, towardPos: Point): 1 | -1 {
   const { pos, entryOrientation, pilotDir } = anchor;
-  if (entryOrientation === 'H') {
-    const dir = pilotDir ?? (towardPos.x >= pos.x ? 1 : -1);
-    return { x: pos.x + dir * len, y: pos.y };
-  }
-  const dir = pilotDir ?? (towardPos.y >= pos.y ? 1 : -1);
+  if (entryOrientation === 'H') return pilotDir ?? (towardPos.x >= pos.x ? 1 : -1);
+  return pilotDir ?? (towardPos.y >= pos.y ? 1 : -1);
+}
+
+export function stubPoint(anchor: PortAnchor, towardPos: Point, len: number): Point {
+  const { pos, entryOrientation } = anchor;
+  const dir = stubDirection(anchor, towardPos);
+  if (entryOrientation === 'H') return { x: pos.x + dir * len, y: pos.y };
   return { x: pos.x, y: pos.y + dir * len };
+}
+
+/** Inverse of `stubPoint`: how long a stub would need to be for its point to sit under
+ * `world`, projected onto the port's entry axis and clamped to non-negative (a negative
+ * length would mean the wire doubling back through the port itself). Used to turn a handle
+ * drag's pointer position back into a `stubStartLen`/`stubEndLen` value. */
+export function stubLenFromPoint(anchor: PortAnchor, towardPos: Point, world: Point): number {
+  const { pos, entryOrientation } = anchor;
+  const dir = stubDirection(anchor, towardPos);
+  const raw = entryOrientation === 'H' ? (world.x - pos.x) * dir : (world.y - pos.y) * dir;
+  return Math.max(0, raw);
 }
 
 /** Default orthogonal auto-route: stub out of each port, then one corner between them. */

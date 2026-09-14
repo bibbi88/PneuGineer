@@ -14,6 +14,15 @@ export function makeDraggable(comp: Component, viewport: ViewportAdapter): void 
     if (e.button !== 0) return;
     if ((e.target as Element).closest('.port')) return;
 
+    // The component's div/svg spans a padded canvas well beyond its drawn body (room for pilot
+    // stubs, labels, etc.), so without this a click in that empty margin - meant for a wire or
+    // handle that happens to pass through it - would instead grab/select the component. Limiting
+    // the click-to-drag area to the same tight box the selection outline already uses keeps that
+    // margin free for whatever's actually there.
+    const world = viewport.clientToWorld(e.clientX, e.clientY);
+    const b = comp.getBounds();
+    if (world.x < b.x || world.x > b.x + b.w || world.y < b.y || world.y > b.y + b.h) return;
+
     if (!appState.selectedComponents.has(comp.id)) {
       selectOnly(comp.id);
     }
