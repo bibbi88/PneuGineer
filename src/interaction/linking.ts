@@ -6,7 +6,7 @@ import { createSvgEl } from '../components/shared/svgHelpers';
 import { pathFromPoints } from '../geometry/routing';
 import { PORT_HOVER_RADIUS } from '../sim/constants';
 
-interface PendingPort {
+export interface PendingPort {
   compId: ComponentId;
   port: PortKey;
 }
@@ -29,6 +29,8 @@ export function initLinking(
     updateHover(e.clientX, e.clientY);
     updatePreview(e.clientX, e.clientY);
   });
+
+  window.addEventListener('mouseup', (e) => onDrop(e.clientX, e.clientY));
 }
 
 function portWorldPos(comp: Component, portKey: PortKey): { x: number; y: number } {
@@ -37,6 +39,15 @@ function portWorldPos(comp: Component, portKey: PortKey): { x: number; y: number
   if (!port || !viewport) return { x: 0, y: 0 };
   const rect = port.el.getBoundingClientRect();
   return viewport.clientToWorld(rect.left + rect.width / 2, rect.top + rect.height / 2);
+}
+
+function findPortOwner(el: Element): PendingPort | null {
+  for (const comp of appState.components) {
+    for (const port of Object.values(comp.ports)) {
+      if (port.el === el) return { compId: comp.id, port: port.key };
+    }
+  }
+  return null;
 }
 
 function updateHover(clientX: number, clientY: number): void {
@@ -76,8 +87,49 @@ function updatePreview(clientX: number, clientY: number): void {
   previewPath.setAttribute('d', pathFromPoints([from, to]));
 }
 
+/**
+ * Resolves a press-drag-release: whatever's under the pointer at release decides the outcome -
+ * a different port completes the connection, a wire hands off to the splice-into-a-junction
+ * handler (wireSplitting.ts, registered via setWireClickInterceptor on the wire itself), and
+ * anything else (including releasing back over the starting port) just cancels.
+ */
+function onDrop(clientX: number, clientY: number): void {
+  if (!pendingPort) return;
+  const from = pendingPort;
+
+  const targetEl = document.elementFromPoint(clientX, clientY);
+  const portEl = targetEl?.closest('.port');
+  if (portEl) {
+    const owner = findPortOwner(portEl);
+    if (owner && (owner.compId !== from.compId || owner.port !== from.port)) {
+      createConnection(
+        { id: from.compId, port: from.port },
+        { id: owner.compId, port: owner.port },
+      );
+    }
+    cancelLinking();
+    return;
+  }
+
+  // wireSplitting.ts's interceptor reads the still-in-flight pendingPort via getPendingPort(),
+  // so it must run before cancelLinking() clears it below - dispatching a synthetic click here
+  // (rather than importing and calling that module directly) keeps this module decoupled from
+  // it, matching how the interceptor was already wired into the wire's own click handling.
+  const hitEl = targetEl?.closest('.wireHit');
+  hitEl?.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX, clientY }));
+
+  cancelLinking();
+}
+
 export function isLinking(): boolean {
   return pendingPort !== null;
+}
+
+/** The port a drag-to-link gesture started from, while it's still in flight - null once the
+ * gesture ends (dropped or cancelled). Used by wireSplitting.ts to complete the link when the
+ * gesture is released onto a wire instead of a port. */
+export function getPendingPort(): PendingPort | null {
+  return pendingPort;
 }
 
 export function cancelLinking(): void {
@@ -85,27 +137,15 @@ export function cancelLinking(): void {
   previewPath?.setAttribute('d', '');
 }
 
-export function handlePortClick(compId: ComponentId, port: PortKey): void {
-  if (!pendingPort) {
-    pendingPort = { compId, port };
-    return;
-  }
-
-  if (pendingPort.compId === compId && pendingPort.port === port) {
-    cancelLinking();
-    return;
-  }
-
-  createConnection({ id: pendingPort.compId, port: pendingPort.port }, { id: compId, port });
-  cancelLinking();
-}
-
-/** Wires every port on a component to feed clicks into the linking state machine. */
 export function wireUpPortLinking(comp: Component): void {
   for (const port of Object.values(comp.ports)) {
-    port.el.addEventListener('click', (e) => {
+    port.el.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return;
       e.stopPropagation();
-      handlePortClick(comp.id, port.key);
+      e.preventDefault();
+      pendingPort = { compId: comp.id, port: port.key };
+      updateHover(e.clientX, e.clientY);
+      updatePreview(e.clientX, e.clientY);
     });
   }
 }

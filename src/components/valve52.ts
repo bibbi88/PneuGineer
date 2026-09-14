@@ -54,8 +54,13 @@ function addDoubleArrow(
 }
 
 export function createValve52(compLayer: HTMLElement, x: number, y: number): Component {
+  // The two-cell sliding assembly is always fully drawn (no clipping window), so its footprint
+  // physically shifts sideways by one cell width (W0) between states - state 0 spans
+  // [GX0, GX0+BODY_W], state 1 spans [GX0-W0, GX0+W0]. The component defaults (and resets) to
+  // state 1, so that's the footprint getBounds() should report; using state 0's instead is what
+  // misplaced the selection outline and left half of every sidebar icon blank.
   const shell = buildComponentShell(compLayer, VALVE_52_TYPE, x, y, SVG_W, SVG_H, '', {
-    x: GX0,
+    x: GX0 - W0,
     y: GY0,
     w: BODY_W,
     h: BODY_H,

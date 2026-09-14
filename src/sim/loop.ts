@@ -4,6 +4,7 @@ import { stepSimulation } from './engine';
 import { applyToDom } from './render';
 import { emptyFrameGraph } from './pressure';
 import { MAX_DT } from './constants';
+import { redrawAllConnections } from '../wires/connection';
 
 let lastTime = performance.now();
 let stepOnce = false;
@@ -19,6 +20,12 @@ function tick(now: number): void {
   if (appState.mode === Modes.PLAY || stepOnce) {
     const graph = stepSimulation(dt);
     applyToDom(graph);
+    // A component can move its own ports in response to simulation state (e.g. the 5/2 valve's
+    // sliding pilot ports) without going through any of the normal edit-time triggers that
+    // redraw wires (drag, handle-drag, undo/redo) - so any wire attached to one would otherwise
+    // stay stuck at its pre-slide path. Cheap even every frame: geometry is measured from live
+    // DOM/cached per endpoint position, so nothing recomputes for a wire whose ports didn't move.
+    redrawAllConnections();
     stepOnce = false;
   } else if (appState.mode === Modes.STOP) {
     applyToDom(emptyFrameGraph());

@@ -1,8 +1,8 @@
 import './ui/styles/app.css';
 import { initViewport } from './ui/viewport';
-import { renderSidebarButtons } from './ui/sidebar';
+import { renderComponentLibrary, COMPONENT_DRAG_MIME } from './ui/sidebar';
 import { renderToolbar } from './ui/toolbar';
-import { placeableComponentTypes, type ComponentFactoryContext } from './components/registry';
+import { placeableComponentsByCategory, type ComponentFactoryContext } from './components/registry';
 import { initLinking } from './interaction/linking';
 import { initMarquee } from './interaction/marquee';
 import { initKeyboard } from './interaction/keyboard';
@@ -69,12 +69,30 @@ function addComponentAtViewCenter(type: string): void {
   spawnComponent(type, factoryCtx, viewport, world.x, world.y);
 }
 
-renderSidebarButtons(
+// Dragging a library tile onto the canvas places it exactly where it's dropped, rather than
+// always at the view center like a click does.
+workspaceEl.addEventListener('dragover', (e) => {
+  if (!e.dataTransfer?.types.includes(COMPONENT_DRAG_MIME)) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'copy';
+});
+workspaceEl.addEventListener('drop', (e) => {
+  const type = e.dataTransfer?.getData(COMPONENT_DRAG_MIME);
+  if (!type) return;
+  e.preventDefault();
+  const world = viewport.clientToWorld(e.clientX, e.clientY);
+  spawnComponent(type, factoryCtx, viewport, world.x, world.y);
+});
+
+renderComponentLibrary(
   sidebarButtons,
-  placeableComponentTypes().map(({ type, label }) => ({
-    id: `add-${type}`,
-    label,
-    onClick: () => addComponentAtViewCenter(type),
+  placeableComponentsByCategory().map((group) => ({
+    category: group.category,
+    items: group.items.map(({ type, label }) => ({
+      type,
+      label,
+      onClick: () => addComponentAtViewCenter(type),
+    })),
   })),
 );
 

@@ -20,7 +20,7 @@ import {
 } from '../geometry/routing';
 import { WIRE_STUB } from '../sim/constants';
 import { makeDraggable } from './drag';
-import { wireUpPortLinking, handlePortClick, isLinking } from './linking';
+import { wireUpPortLinking, getPendingPort } from './linking';
 import { wireUpComponentContextMenu } from './componentContextMenu';
 
 function projectOntoSegment(p: Point, a: Point, b: Point): Point {
@@ -47,7 +47,8 @@ export function initWireSplitting(
   workspaceEl: HTMLElement,
 ): void {
   setWireClickInterceptor((conn, clientX, clientY) => {
-    if (!isLinking()) return false;
+    const pending = getPendingPort();
+    if (!pending) return false;
 
     const clickWorld = viewport.clientToWorld(clientX, clientY);
     const anchors = computeConnectionAnchors(viewport, workspaceEl, conn);
@@ -115,22 +116,15 @@ export function initWireSplitting(
     secondConn.stubEndLen = stubEndLen;
     redrawConnection(secondConn);
 
-    handlePortClick(junction.id, 'P');
-
-    // The third wire (from whichever port was mid-link to this new junction) was just created
-    // by handlePortClick above with a default stub at the junction end - zero that one too, for
-    // the same reason, so it approaches the junction as directly as possible instead of being
-    // forced into a perpendicular launch first.
-    const thirdConn = appState.connections[appState.connections.length - 1];
-    if (thirdConn && thirdConn.id !== firstConn.id && thirdConn.id !== secondConn.id) {
-      if (thirdConn.to.id === junction.id && thirdConn.to.port === 'P') {
-        thirdConn.stubEndLen = 0;
-        redrawConnection(thirdConn);
-      } else if (thirdConn.from.id === junction.id && thirdConn.from.port === 'P') {
-        thirdConn.stubStartLen = 0;
-        redrawConnection(thirdConn);
-      }
-    }
+    // The third wire, from whichever port the drag started at to this new junction - zeroed for
+    // the same reason as the two split halves above, so it approaches the junction as directly
+    // as possible instead of being forced into a perpendicular launch first.
+    const thirdConn = createConnection(
+      { id: pending.compId, port: pending.port },
+      { id: junction.id, port: 'P' },
+    );
+    thirdConn.stubEndLen = 0;
+    redrawConnection(thirdConn);
 
     return true;
   });
