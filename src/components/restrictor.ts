@@ -82,7 +82,7 @@ export function createRestrictor(compLayer: HTMLElement, x: number, y: number): 
   let flowPct = DEFAULT_FLOW_PCT;
 
   function updateLabel(): void {
-    shell.labelEl.textContent = `Restrictor (${Math.round(flowPct)}%)`;
+    shell.setDefaultName(`Restrictor (${Math.round(flowPct)}%)`);
   }
   updateLabel();
 
@@ -107,10 +107,12 @@ export function createRestrictor(compLayer: HTMLElement, x: number, y: number): 
     },
 
     snapshot(): Record<string, unknown> {
-      return { flowPct };
+      return { flowPct, showName: shell.getNameVisible(), customName: shell.getCustomName() };
     },
     restore(data: Record<string, unknown>): void {
       flowPct = data.flowPct as number;
+      shell.setNameVisible(Boolean(data.showName));
+      shell.setCustomName((data.customName as string | null) ?? null);
       updateLabel();
     },
     reset(): void {},

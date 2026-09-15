@@ -21,9 +21,12 @@ import { loadProject } from './persistence/project';
 import { initHistory, pushHistory, resetHistory } from './history/historyStore';
 import { renderInspector } from './ui/inspector';
 import { resetCylinderLetters } from './components/shared/letters';
+import { loadGridPreference } from './app/gridPreference';
+import { setGridEnabled } from './core/grid';
 
 const workspaceQuery = document.querySelector<HTMLElement>('.workspace');
 const viewportQuery = document.getElementById('viewport');
+const gridLayerQuery = document.getElementById('gridLayer');
 const compLayerQuery = document.getElementById('compLayer');
 const connLayerQuery = document.getElementById('connLayer') as SVGSVGElement | null;
 const handleLayerQuery = document.getElementById('handleLayer') as SVGSVGElement | null;
@@ -35,6 +38,7 @@ const inspectorQuery = document.getElementById('inspector');
 if (
   !workspaceQuery ||
   !viewportQuery ||
+  !gridLayerQuery ||
   !compLayerQuery ||
   !connLayerQuery ||
   !handleLayerQuery ||
@@ -47,6 +51,7 @@ if (
 }
 
 const workspaceEl: HTMLElement = workspaceQuery;
+const gridLayerEl: HTMLElement = gridLayerQuery;
 const compLayer: HTMLElement = compLayerQuery;
 const connLayer: SVGSVGElement = connLayerQuery;
 const handleLayer: SVGSVGElement = handleLayerQuery;
@@ -55,7 +60,10 @@ const toolbarButtons: HTMLElement = toolbarButtonsQuery;
 const projectBarEl: HTMLElement = projectBarQuery;
 const inspectorEl: HTMLElement = inspectorQuery;
 
-const viewport = initViewport(viewportQuery, workspaceEl);
+const viewport = initViewport(viewportQuery, workspaceEl, gridLayerEl);
+const gridPreference = loadGridPreference();
+viewport.setGridVisible(gridPreference);
+setGridEnabled(gridPreference);
 initWires(connLayer, viewport, workspaceEl);
 initWireHandles(handleLayer, viewport, workspaceEl);
 initLinking(connLayer, viewport, workspaceEl);
@@ -107,7 +115,7 @@ resetCylinderLetters();
 
 renderToolbar(toolbarButtons);
 const projectBar = renderProjectBar(projectBarEl, factoryCtx, viewport, connLayer);
-renderInspector(inspectorEl);
+renderInspector(inspectorEl, viewport);
 startSimLoop();
 
 appState.onChange(() => {

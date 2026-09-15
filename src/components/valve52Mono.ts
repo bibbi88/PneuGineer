@@ -8,19 +8,21 @@ import {
   createPortLabel,
   addDoubleArrowMarker,
 } from './shared/svgHelpers';
-import { appState } from '../app/AppState';
-import { Modes } from '../app/modes';
 import { createSilencerSymbol, setSilencerState, type SilencerOption } from './shared/silencer';
 
-export const VALVE_52_TYPE = 'valve52';
+export const VALVE_52_MONO_TYPE = 'valve52Mono';
 
-// ===== Geometry, ported 1:1 from the original app's two-cell sliding 5/2 symbol =====
-const W0 = 80; // single cell width
-const H0 = 60; // single cell height
+// Same two-cell sliding housing as the bistable 5/2 valve (valve52.ts), used as the base here -
+// only pilot 12 and its side of the artwork differ: a spring (copied from the 3/2 valve
+// family's own spring symbol) takes its place, and there's only the one pilot port left to
+// drive the valve, so it's spring-return rather than holding whichever state it was last
+// pushed to.
+const W0 = 80;
+const H0 = 60;
 const BODY_W = W0 * 2;
 const BODY_H = H0;
-const GX0 = 115; // static offset of the housing within the svg canvas (room for pilot ports)
-const GY0 = 24; // vertical offset so ports 4/2 (above) and 5/1/3 (below) fit inside the canvas
+const GX0 = 115;
+const GY0 = 24;
 const SVG_W = BODY_W + 110;
 const SVG_H = BODY_H + 49;
 const STROKE = 2;
@@ -31,7 +33,6 @@ const TRI_GAP = 7;
 const PILOT_PORT_OFFSET = 24;
 const PILOT_CY = H0 / 2;
 const PORT14_LOCAL_X = -15 - PILOT_PORT_OFFSET;
-const PORT12_LOCAL_X = W0 * 2 + 15 + PILOT_PORT_OFFSET;
 
 function addDoubleArrow(
   parent: SVGElement,
@@ -55,26 +56,23 @@ function addDoubleArrow(
   );
 }
 
-export function createValve52(compLayer: HTMLElement, x: number, y: number): Component {
-  // The two-cell sliding assembly is always fully drawn (no clipping window), so its footprint
-  // physically shifts sideways by one cell width (W0) between states - state 0 spans
-  // [GX0, GX0+BODY_W], state 1 spans [GX0-W0, GX0+W0]. The component defaults (and resets) to
-  // state 1, so that's the footprint getBounds() should report; using state 0's instead is what
-  // misplaced the selection outline and left half of every sidebar icon blank.
-  const shell = buildComponentShell(compLayer, VALVE_52_TYPE, x, y, SVG_W, SVG_H, '5/2 valve', {
-    x: GX0 - W0,
-    y: GY0,
-    w: BODY_W,
-    h: BODY_H,
-  });
+export function createValve52Mono(compLayer: HTMLElement, x: number, y: number): Component {
+  const shell = buildComponentShell(
+    compLayer,
+    VALVE_52_MONO_TYPE,
+    x,
+    y,
+    SVG_W,
+    SVG_H,
+    '5/2 valve, monostable',
+    { x: GX0 - W0, y: GY0, w: BODY_W, h: BODY_H },
+  );
   const svg = shell.svg;
   svg.style.overflow = 'visible';
 
-  const arrowId = `arrow-v52-${uid()}`;
+  const arrowId = `arrow-v52m-${uid()}`;
   addDoubleArrowMarker(svg, arrowId);
 
-  // gInner carries the fixed housing offset (GX0) plus the dynamic slide shift in one
-  // transform, since the original app nested a static gRoot offset around a sliding gInner.
   const gInner = createSvgEl('g');
 
   const gSlide = createSvgEl('g');
@@ -108,15 +106,35 @@ export function createValve52(compLayer: HTMLElement, x: number, y: number): Com
   addDoubleArrow(cell1, W0 / 2, H0, W0 - 10, 0, arrowId);
   addDoubleArrow(cell1, 10, 0, 10, H0, arrowId);
 
-  gSlide.append(cell0, cell1);
+  // The spring (same symbol as the 3/2 push-button/air-piloted valves' own spring) sits where
+  // the second pilot used to be, sliding with the two-cell picture just like theirs slides with
+  // the mover - representing the spring compressing/extending as the valve shifts.
+  const spring = createSvgEl('g', { transform: `translate(${BODY_W},${PILOT_CY})` });
+  spring.appendChild(
+    createSvgEl('path', {
+      d: 'M 0 0 L 20 0',
+      fill: 'none',
+      stroke: '#111',
+      'stroke-width': STROKE,
+    }),
+  );
+  spring.appendChild(
+    createSvgEl('path', {
+      d: 'M 20 0 l 10 -10 l 10 20 l 10 -20',
+      fill: 'none',
+      stroke: '#111',
+      'stroke-width': STROKE,
+    }),
+  );
 
-  function addTriangleAndWallLine(parent: SVGElement, side: 'left' | 'right'): void {
-    const tipX = side === 'left' ? -TRI_GAP : BODY_W + TRI_GAP;
-    const dir = side === 'left' ? -1 : 1;
+  gSlide.append(cell0, cell1, spring);
+
+  function addTriangleAndWallLine(parent: SVGElement): void {
+    const tipX = -TRI_GAP;
     const points = [
       [tipX, PILOT_CY],
-      [tipX + dir * TRI_W, PILOT_CY - TRI_H / 2],
-      [tipX + dir * TRI_W, PILOT_CY + TRI_H / 2],
+      [tipX - TRI_W, PILOT_CY - TRI_H / 2],
+      [tipX - TRI_W, PILOT_CY + TRI_H / 2],
     ];
     parent.appendChild(
       createSvgEl('polygon', {
@@ -130,7 +148,7 @@ export function createValve52(compLayer: HTMLElement, x: number, y: number): Com
       createSvgEl('line', {
         x1: tipX,
         y1: PILOT_CY,
-        x2: side === 'left' ? 0 : BODY_W,
+        x2: 0,
         y2: PILOT_CY,
         stroke: '#111',
         'stroke-width': STROKE,
@@ -139,9 +157,7 @@ export function createValve52(compLayer: HTMLElement, x: number, y: number): Com
   }
 
   const gP14 = createSvgEl('g');
-  const gP12 = createSvgEl('g');
-  addTriangleAndWallLine(gP14, 'left');
-  addTriangleAndWallLine(gP12, 'right');
+  addTriangleAndWallLine(gP14);
 
   // Reaches the pilot port's exact center (not just close to it, which is what a visible port
   // circle would otherwise be relied on to bridge) - since a connected port's own circle is
@@ -151,16 +167,6 @@ export function createValve52(compLayer: HTMLElement, x: number, y: number): Com
       x1: PORT14_LOCAL_X,
       y1: PILOT_CY,
       x2: -TRI_GAP - TRI_W,
-      y2: PILOT_CY,
-      stroke: '#111',
-      'stroke-width': STROKE,
-    }),
-  );
-  gP12.appendChild(
-    createSvgEl('line', {
-      x1: BODY_W + TRI_GAP + TRI_W,
-      y1: PILOT_CY,
-      x2: PORT12_LOCAL_X,
       y2: PILOT_CY,
       stroke: '#111',
       'stroke-width': STROKE,
@@ -181,24 +187,9 @@ export function createValve52(compLayer: HTMLElement, x: number, y: number): Com
   label14.textContent = '14';
   gP14.append(port14.el, label14);
 
-  const port12 = createPort(svg, '12', PORT12_LOCAL_X, PILOT_CY, 'H', {
-    isPilot: true,
-    pilotDir: 1,
-  });
-  port12.el.setAttribute('r', '6');
-  const label12 = createSvgEl('text', {
-    x: PORT12_LOCAL_X,
-    y: PILOT_CY - 10,
-    'text-anchor': 'middle',
-    'font-size': FONT,
-  });
-  label12.textContent = '12';
-  gP12.append(port12.el, label12);
-
-  gInner.append(gSlide, gP12, gP14);
+  gInner.append(gSlide, gP14);
   svg.appendChild(gInner);
 
-  // ===== Fixed ports (do not slide), offset by GX0 into the housing's coordinate space =====
   const fixedPortsLocal = {
     '4': { cx: 10, cy: -10 },
     '2': { cx: W0 - 10, cy: -10 },
@@ -207,11 +198,6 @@ export function createValve52(compLayer: HTMLElement, x: number, y: number): Com
     '3': { cx: W0 - 10, cy: H0 + 10 },
   } as const;
 
-  // Fixed lead-in lines from the housing's top/bottom edge to each port's exact center (not
-  // just close to it), since a connected port's own circle is hidden - any gap would otherwise
-  // show up as a visible blank break in the wire. Every fixed port's x-position falls within
-  // the sliding cell's horizontal span in both states, so a vertical line at that x always
-  // lands on the housing edge regardless of which cell is currently showing.
   for (const key of ['4', '2'] as const) {
     const p = fixedPortsLocal[key];
     svg.appendChild(
@@ -239,10 +225,6 @@ export function createValve52(compLayer: HTMLElement, x: number, y: number): Com
     );
   }
 
-  // Not createLabeledPort's default 'left' offset (dx: -14): the three bottom-row ports (5, 1,
-  // 3) sit only 30 units apart, so that offset reads as ambiguous - closer to the neighboring
-  // port than to its own dot. A tighter, port-specific offset keeps each digit next to the port
-  // it actually labels. Ports 4/2 on the top row aren't crowded this way and keep the default.
   function tightLeftLabeledPort(key: '5' | '1' | '3'): ReturnType<typeof createPort> {
     const p = fixedPortsLocal[key];
     const px = GX0 + p.cx;
@@ -274,10 +256,6 @@ export function createValve52(compLayer: HTMLElement, x: number, y: number): Com
     '3': tightLeftLabeledPort('3'),
   };
 
-  // Ports 3 and 5 are both this valve's exhausts - fixed in place (not part of the sliding
-  // gInner), so each silencer just moves with the whole component like everything else drawn
-  // directly on `svg`. Default on, matching how these valves are conventionally fitted in
-  // practice - most exhaust ports get a silencer unless there's a specific reason not to.
   let silencer3: SilencerOption = 'silencer';
   let silencer5: SilencerOption = 'silencer';
   const silencer3El = createSilencerSymbol(
@@ -295,8 +273,6 @@ export function createValve52(compLayer: HTMLElement, x: number, y: number): Com
   svg.append(silencer3El, silencer5El);
 
   let state: 0 | 1 = 1;
-  let pilot12Prev = false;
-  let pilot14Prev = false;
 
   function setShift(shift: number): void {
     gInner.setAttribute('transform', `translate(${GX0 + shift},${GY0})`);
@@ -308,7 +284,7 @@ export function createValve52(compLayer: HTMLElement, x: number, y: number): Com
 
   const comp: Component = {
     id: uid(),
-    type: VALVE_52_TYPE,
+    type: VALVE_52_MONO_TYPE,
     el: shell.el,
     x,
     y,
@@ -316,12 +292,8 @@ export function createValve52(compLayer: HTMLElement, x: number, y: number): Com
     svgH: SVG_H,
     gx: 0,
     gy: 0,
-    ports: { ...fixedPorts, '12': port12, '14': port14 },
+    ports: { ...fixedPorts, '14': port14 },
 
-    // State 0 shows cell0 under the fixed ports: its diagonal arrow runs port4-column to
-    // port1-column (1<->4) and its vertical arrow runs port2-column to port3-column (2<->3).
-    // State 1 shows cell1: diagonal runs 1<->2, vertical runs 4<->5. This must match the
-    // drawn artwork exactly, or the diagram shows one routing while simulating another.
     conductivityRule(): PortConnection[] {
       return state === 0
         ? [
@@ -334,30 +306,11 @@ export function createValve52(compLayer: HTMLElement, x: number, y: number): Com
           ];
     },
 
+    // Spring-return: with only one pilot, position simply follows its current pressure level -
+    // pressurized pushes it to state 0, vented lets the spring pull it straight back to state 1,
+    // with no edge-detection or ambiguity handling needed (there's nothing to be ambiguous with).
     onPressureChange(ctx: ConductivityContext): void {
-      const pilot12 = ctx.isPressurized('12');
-      const pilot14 = ctx.isPressurized('14');
-      const rising12 = pilot12 && !pilot12Prev;
-      const rising14 = pilot14 && !pilot14Prev;
-      const falling12 = !pilot12 && pilot12Prev;
-      const falling14 = !pilot14 && pilot14Prev;
-      // A real double-pilot valve only moves when one side is commanded while the other is
-      // vented - with both pilots holding pressure at once the command is ambiguous (or the
-      // valve is being fought from both ends), so it should hold its current position. That
-      // means checking the *other* pilot's current level, not just whether it also rose this
-      // same tick: it's just as invalid for one pilot to rise while the other is already held
-      // on from an earlier tick as for both to rise together.
-      //
-      // Once one of the two pilots is removed again, though, the ambiguity is gone: whichever
-      // pilot is still held becomes the (now unambiguous) command and should move the valve to
-      // match it, exactly as if it had just risen on its own - otherwise a pilot that was held
-      // the whole time it was blocked would never get to take effect at all.
-      if (rising12 && !pilot14) state = 1;
-      else if (rising14 && !pilot12) state = 0;
-      else if (falling14 && pilot12) state = 1;
-      else if (falling12 && pilot14) state = 0;
-      pilot12Prev = pilot12;
-      pilot14Prev = pilot14;
+      state = ctx.isPressurized('14') ? 0 : 1;
       applyState();
     },
 
@@ -382,8 +335,6 @@ export function createValve52(compLayer: HTMLElement, x: number, y: number): Com
     },
     reset(): void {
       state = 1;
-      pilot12Prev = false;
-      pilot14Prev = false;
       applyState();
     },
 
@@ -395,16 +346,6 @@ export function createValve52(compLayer: HTMLElement, x: number, y: number): Com
     getBounds: shell.getBounds,
     setSelected: shell.setSelected,
   };
-
-  function toggle(): void {
-    if (appState.mode === Modes.STOP) return;
-    state = state === 0 ? 1 : 0;
-    applyState();
-  }
-  gSlide.addEventListener('click', (e) => {
-    e.stopPropagation();
-    toggle();
-  });
 
   return comp;
 }

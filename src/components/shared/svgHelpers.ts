@@ -18,6 +18,16 @@ export interface ComponentShell {
   setPos(x: number, y: number): void;
   getBounds(): ComponentBounds;
   setSelected(sel: boolean): void;
+  /** Sets the auto-generated name shown when no custom name is set (e.g. "Cylinder A",
+   * "Restrictor (50%)") - components whose default name can change at runtime should call this
+   * instead of writing to `labelEl` directly, so a custom name (and the hidden-by-default
+   * visibility) keeps taking priority over it correctly. */
+  setDefaultName(text: string): void;
+  setNameVisible(visible: boolean): void;
+  getNameVisible(): boolean;
+  /** null means "use the default name" - an empty/whitespace-only string is treated the same. */
+  setCustomName(name: string | null): void;
+  getCustomName(): string | null;
 }
 
 export function buildComponentShell(
@@ -40,8 +50,25 @@ export function buildComponentShell(
 
   const labelEl = document.createElement('div');
   labelEl.className = 'label';
-  labelEl.textContent = label;
   el.appendChild(labelEl);
+
+  // The name text lives in its own span (rather than directly as labelEl's textContent) so a
+  // component that appends other, always-visible controls into labelEl (e.g. the single-acting
+  // cylinder's push/pull toggle) can do so without those controls being hidden along with the
+  // name - only this span's visibility is toggled.
+  const nameTextEl = document.createElement('span');
+  nameTextEl.className = 'compNameText';
+  labelEl.appendChild(nameTextEl);
+
+  let defaultName = label;
+  let customName: string | null = null;
+  let nameVisible = false;
+
+  function renderName(): void {
+    nameTextEl.textContent = customName ?? defaultName;
+    nameTextEl.style.display = nameVisible ? '' : 'none';
+  }
+  renderName();
 
   const svg = createSvgEl('svg', { class: 'compSvg', width: svgW, height: svgH });
   svg.style.display = 'block';
@@ -86,6 +113,20 @@ export function buildComponentShell(
       h: box.h,
     }),
     setSelected: (sel: boolean) => boundsEl.classList.toggle('selected', sel),
+    setDefaultName: (text: string) => {
+      defaultName = text;
+      renderName();
+    },
+    setNameVisible: (visible: boolean) => {
+      nameVisible = visible;
+      renderName();
+    },
+    getNameVisible: () => nameVisible,
+    setCustomName: (name: string | null) => {
+      customName = name && name.trim() !== '' ? name : null;
+      renderName();
+    },
+    getCustomName: () => customName,
   };
 }
 

@@ -26,12 +26,21 @@ const DEFAULT_DELAY_SEC = 1.0;
  * valve switches; it resets immediately (spring return) the instant the pilot depressurizes.
  */
 export function createTimeDelayValve(compLayer: HTMLElement, x: number, y: number): Component {
-  const shell = buildComponentShell(compLayer, TIME_DELAY_VALVE_TYPE, x, y, SVG_W, SVG_H, '', {
-    x: SLIDING_VALVE_OFFSET_X,
-    y: SLIDING_VALVE_OFFSET_Y,
-    w: SLIDING_VALVE_W,
-    h: SLIDING_VALVE_H,
-  });
+  const shell = buildComponentShell(
+    compLayer,
+    TIME_DELAY_VALVE_TYPE,
+    x,
+    y,
+    SVG_W,
+    SVG_H,
+    'Time delay valve',
+    {
+      x: SLIDING_VALVE_OFFSET_X,
+      y: SLIDING_VALVE_OFFSET_Y,
+      w: SLIDING_VALVE_W,
+      h: SLIDING_VALVE_H,
+    },
+  );
   const valve = buildSlidingValve32Body(shell.svg, `arrow-delay-${uid()}`);
 
   const spring = createSvgEl('g', {
@@ -128,10 +137,18 @@ export function createTimeDelayValve(compLayer: HTMLElement, x: number, y: numbe
     },
 
     snapshot(): Record<string, unknown> {
-      return { delaySec };
+      return {
+        delaySec,
+        showName: shell.getNameVisible(),
+        customName: shell.getCustomName(),
+        silencer3: valve.getSilencer(),
+      };
     },
     restore(data: Record<string, unknown>): void {
       delaySec = data.delaySec as number;
+      shell.setNameVisible(Boolean(data.showName));
+      shell.setCustomName((data.customName as string | null) ?? null);
+      valve.setSilencer((data.silencer3 as 'none' | 'silencer') ?? 'silencer');
       updateLabel();
     },
     reset(): void {

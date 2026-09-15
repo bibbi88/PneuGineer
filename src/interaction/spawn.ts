@@ -5,6 +5,7 @@ import { appState } from '../app/AppState';
 import { makeDraggable } from './drag';
 import { wireUpPortLinking } from './linking';
 import { wireUpComponentContextMenu } from './componentContextMenu';
+import { wireUpPortContextMenu } from './portContextMenu';
 
 /** Creates a component of `type` and wires up every interaction hook it needs (drag, port
  * linking, right-click menu), then registers it in AppState. The one place both "add from
@@ -20,6 +21,7 @@ export function spawnComponent(
   makeDraggable(comp, viewport);
   wireUpPortLinking(comp);
   wireUpComponentContextMenu(comp);
+  wireUpPortContextMenu(comp, viewport, (t, sx, sy) => spawnComponent(t, ctx, viewport, sx, sy));
   appState.addComponent(comp);
   return comp;
 }

@@ -37,18 +37,6 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
     h: H,
   });
 
-  shell.labelEl.style.pointerEvents = 'auto';
-  const labelText = document.createElement('span');
-  const modeBtn = document.createElement('button');
-  modeBtn.style.fontSize = '10px';
-  modeBtn.style.marginLeft = '6px';
-  modeBtn.style.padding = '2px 6px';
-  modeBtn.style.borderRadius = '6px';
-  modeBtn.style.cursor = 'pointer';
-  modeBtn.style.pointerEvents = 'auto';
-  modeBtn.title = 'Toggle single-acting mode (push/pull)';
-  shell.labelEl.append(labelText, modeBtn);
-
   const g = createSvgEl('g', { transform: `translate(${GX},${GY})` });
 
   const body = createSvgEl('rect', {
@@ -98,14 +86,6 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
 
   let mode: CylinderMode = 'push';
   const portACircle = createPort(g, 'A', CAP_PORT_X, H + PORT_MARGIN, 'V');
-  const portALabel = createSvgEl('text', {
-    x: CAP_PORT_X,
-    y: H + PORT_MARGIN - 8,
-    'text-anchor': 'middle',
-    'font-size': 11,
-  });
-  portALabel.textContent = 'A';
-  g.appendChild(portALabel);
 
   const ports = { A: portACircle };
 
@@ -127,15 +107,13 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
   updateVisual();
 
   function updateLabel(): void {
-    labelText.textContent = `Cylinder ${letter} `;
-    modeBtn.textContent = mode;
+    shell.setDefaultName(`Cylinder ${letter}`);
   }
   updateLabel();
 
   function updatePortSide(): void {
     const cx = mode === 'push' ? CAP_PORT_X : ROD_PORT_X;
     portACircle.el.setAttribute('cx', String(cx));
-    portALabel.setAttribute('x', String(cx));
     leadA.setAttribute('x1', String(cx));
     leadA.setAttribute('x2', String(cx));
     ports.A.cx = cx;
@@ -182,7 +160,15 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
     },
 
     snapshot(): Record<string, unknown> {
-      return { pos, letter, mode, normallyExtended, sensors };
+      return {
+        pos,
+        letter,
+        mode,
+        normallyExtended,
+        sensors,
+        showName: shell.getNameVisible(),
+        customName: shell.getCustomName(),
+      };
     },
     restore(data: Record<string, unknown>): void {
       pos = data.pos as number;
@@ -190,6 +176,8 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
       mode = data.mode as CylinderMode;
       normallyExtended = data.normallyExtended as boolean;
       sensors = isValidSensorArray(data.sensors) ? data.sensors : defaultSensors(letter);
+      shell.setNameVisible(Boolean(data.showName));
+      shell.setCustomName((data.customName as string | null) ?? null);
       updatePortSide();
       updateLabel();
       updateVisual();
@@ -231,16 +219,21 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
       appState.markDirty();
       return true;
     },
-  };
 
-  modeBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    mode = mode === 'push' ? 'pull' : 'push';
-    normallyExtended = mode === 'pull';
-    updatePortSide();
-    updateLabel();
-    redrawAllConnections();
-  });
+    setCylinderMode(newMode: 'push' | 'pull'): void {
+      if (mode === newMode) return;
+      mode = newMode;
+      // A configuration change, not a live simulation event - the piston snaps straight to the
+      // new mode's own default rest position instead of animating there on the next step.
+      normallyExtended = newMode === 'pull';
+      pos = normallyExtended ? 1 : 0;
+      updatePortSide();
+      updateLabel();
+      updateVisual();
+      redrawAllConnections();
+      appState.markDirty();
+    },
+  };
 
   return comp;
 }

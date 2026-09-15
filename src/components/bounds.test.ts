@@ -20,11 +20,11 @@ describe('getBounds() reports the drawn body, not the padded canvas', () => {
     expect(bounds.h).toBeLessThan(comp.svgH);
   });
 
-  it('checkValve: bounds are exactly the drawn housing rectangle', () => {
+  it('checkValve: bounds are exactly the (scaled-down) housing area', () => {
     const comp = createCheckValve(compLayer(), 100, 100);
     const bounds = comp.getBounds();
-    expect(bounds.w).toBe(50);
-    expect(bounds.h).toBe(50);
+    expect(bounds.w).toBe(30);
+    expect(bounds.h).toBe(30);
   });
 
   it('cylinderDouble: bounds match the (shrunk) body rectangle, not the padded canvas', () => {

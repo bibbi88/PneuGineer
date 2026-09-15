@@ -2,6 +2,7 @@ import { appState } from '../app/AppState';
 import { Modes } from '../app/modes';
 import { requestSingleStep } from '../sim/loop';
 import { undo, redo, canUndo, canRedo, onHistoryChange } from '../history/historyStore';
+import { redrawAllConnections } from '../wires/connection';
 
 export function renderToolbar(container: HTMLElement): void {
   const playStopBtn = document.createElement('button');
@@ -28,6 +29,11 @@ export function renderToolbar(container: HTMLElement): void {
     const nextMode = appState.mode === Modes.PLAY ? Modes.STOP : Modes.PLAY;
     if (nextMode === Modes.STOP) {
       for (const c of appState.components) c.reset();
+      // A component's own visual reset (e.g. the 5/2 valve's pilot ports sliding back to their
+      // default position) doesn't go through any of the normal edit-time triggers that redraw
+      // wires - without this, a wire attached to one of those ports stays stuck at wherever it
+      // was mid-simulation instead of snapping back with it.
+      redrawAllConnections();
     }
     appState.setMode(nextMode);
     updatePlayStopButton();

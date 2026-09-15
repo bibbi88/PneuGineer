@@ -1,3 +1,5 @@
+import { GRID_SIZE } from '../core/grid';
+
 export interface Transform {
   scale: number;
   tx: number;
@@ -9,12 +11,17 @@ export interface ViewportAdapter {
   applyTransform(): void;
   getTransform(): Transform;
   setTransform(scale: number, tx: number, ty: number): void;
+  setGridVisible(visible: boolean): void;
 }
 
 const MIN_SCALE = 0.2;
 const MAX_SCALE = 4.0;
 
-export function initViewport(viewportEl: HTMLElement, workspaceEl: HTMLElement): ViewportAdapter {
+export function initViewport(
+  viewportEl: HTMLElement,
+  workspaceEl: HTMLElement,
+  gridLayerEl: HTMLElement,
+): ViewportAdapter {
   let scale = 1.0;
   let tx = 0;
   let ty = 0;
@@ -24,6 +31,15 @@ export function initViewport(viewportEl: HTMLElement, workspaceEl: HTMLElement):
 
   function applyTransform(): void {
     viewportEl.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+
+    // #gridLayer itself never moves - it stays pinned to the visible workspace box - so its own
+    // background is re-aligned here on every pan/zoom instead: a cell now spans `scale` times
+    // its world size in screen pixels, and the pattern's origin is nudged by the pan offset
+    // modulo one cell so it lines up with the same world-space grid #viewport's content sits on,
+    // however far tx/ty have drifted from zero.
+    const cell = GRID_SIZE * scale;
+    gridLayerEl.style.backgroundSize = `${cell}px ${cell}px`;
+    gridLayerEl.style.backgroundPosition = `${((tx % cell) + cell) % cell}px ${((ty % cell) + cell) % cell}px`;
   }
 
   function clientToWorld(cx: number, cy: number): { x: number; y: number } {
@@ -101,6 +117,9 @@ export function initViewport(viewportEl: HTMLElement, workspaceEl: HTMLElement):
       tx = x;
       ty = y;
       applyTransform();
+    },
+    setGridVisible: (visible) => {
+      gridLayerEl.style.display = visible ? '' : 'none';
     },
   };
 }

@@ -1,7 +1,10 @@
 import type { Component } from '../core/types';
+import type { ViewportAdapter } from './viewport';
 import { appState } from '../app/AppState';
 import { getSelectedComponents, onSelectionChange } from '../interaction/selection';
 import { redrawAllConnections } from '../wires/connection';
+import { setGridEnabled } from '../core/grid';
+import { loadGridPreference, saveGridPreference } from '../app/gridPreference';
 import { RESTRICTOR_TYPE } from '../components/restrictor';
 import { ONE_WAY_FLOW_CONTROL_VALVE_TYPE } from '../components/oneWayFlowControlValve';
 import { TIME_DELAY_VALVE_TYPE } from '../components/timeDelayValve';
@@ -10,6 +13,8 @@ import { PUSH_BUTTON_32_TYPE } from '../components/pushButton32';
 import { AIR_VALVE_32_TYPE } from '../components/airValve32';
 import { CYLINDER_DOUBLE_TYPE } from '../components/cylinderDouble';
 import { CYLINDER_SINGLE_TYPE } from '../components/cylinderSingle';
+import { VALVE_52_TYPE } from '../components/valve52';
+import { VALVE_52_MONO_TYPE } from '../components/valve52Mono';
 import {
   nextSensorLabel,
   isSensorLabelInUse,
@@ -18,6 +23,8 @@ import {
   type CylinderSensor,
 } from '../components/shared/sensorPositions';
 import { swapComponentType } from '../interaction/valveActuatorSwap';
+import { JUNCTION_TYPE } from '../components/junction';
+import { TEXT_ANNOTATION_TYPE } from '../components/textAnnotation';
 
 type FieldLabel = string | ((comp: Component) => string);
 
@@ -70,13 +77,34 @@ interface RelabelField {
   label: FieldLabel;
 }
 
+/** A single-acting cylinder's push/pull mode, switched through `comp.setCylinderMode()` rather
+ * than a plain snapshot key/value - that's what snaps the piston straight to the new mode's own
+ * default rest position instead of just changing which end pressurizing port A extends toward. */
+interface CylinderModeField {
+  kind: 'cylinderMode';
+}
+
+/** Whether a muffler symbol is attached directly to one of this valve's exhaust ports - a plain
+ * snapshot key/value like `number`/`text`, just rendered as a None/Silencer dropdown instead of
+ * a free-form input. `port` is the actual port key this attaches to (e.g. "3"), checked against
+ * live wiring before a silencer is allowed on - a port already carrying a wire can't also take
+ * one, since the two occupy the same physical connection point. */
+interface SilencerField {
+  kind: 'silencer';
+  key: string;
+  port: string;
+  label: FieldLabel;
+}
+
 type InspectorField =
   | NumberField
   | TextField
   | SensorListField
   | ActuatorModeField
   | SensorKeySelectField
-  | RelabelField;
+  | RelabelField
+  | CylinderModeField
+  | SilencerField;
 
 const ACTUATOR_MODES: Array<{ type: string; label: string }> = [
   { type: PUSH_BUTTON_32_TYPE, label: 'Push button' },
@@ -93,21 +121,39 @@ const INSPECTOR_FIELDS: Record<string, InspectorField[]> = {
   ],
   [TIME_DELAY_VALVE_TYPE]: [
     { kind: 'number', key: 'delaySec', label: 'Delay (s)', min: 0, max: 30, step: 0.1 },
+    { kind: 'silencer', key: 'silencer3', port: '3', label: 'Port 3 silencer' },
   ],
-  [PUSH_BUTTON_32_TYPE]: [{ kind: 'actuatorMode' }],
+  [PUSH_BUTTON_32_TYPE]: [
+    { kind: 'actuatorMode' },
+    { kind: 'silencer', key: 'silencer3', port: '3', label: 'Port 3 silencer' },
+  ],
   [LIMIT_VALVE_32_TYPE]: [
     { kind: 'actuatorMode' },
     { kind: 'sensorKeySelect', key: 'sensorKey', label: 'Sensor key' },
+    { kind: 'silencer', key: 'silencer3', port: '3', label: 'Port 3 silencer' },
   ],
-  [AIR_VALVE_32_TYPE]: [{ kind: 'actuatorMode' }],
+  [AIR_VALVE_32_TYPE]: [
+    { kind: 'actuatorMode' },
+    { kind: 'silencer', key: 'silencer3', port: '3', label: 'Port 3 silencer' },
+  ],
+  [VALVE_52_TYPE]: [
+    { kind: 'silencer', key: 'silencer3', port: '3', label: 'Port 3 silencer' },
+    { kind: 'silencer', key: 'silencer5', port: '5', label: 'Port 5 silencer' },
+  ],
+  [VALVE_52_MONO_TYPE]: [
+    { kind: 'silencer', key: 'silencer3', port: '3', label: 'Port 3 silencer' },
+    { kind: 'silencer', key: 'silencer5', port: '5', label: 'Port 5 silencer' },
+  ],
   [CYLINDER_DOUBLE_TYPE]: [
     { kind: 'relabel', label: 'Cylinder letter' },
     { kind: 'sensorList', arrayKey: 'sensors', min: 0, max: 100, step: 1 },
   ],
   [CYLINDER_SINGLE_TYPE]: [
     { kind: 'relabel', label: 'Cylinder letter' },
+    { kind: 'cylinderMode' },
     { kind: 'sensorList', arrayKey: 'sensors', min: 0, max: 100, step: 1 },
   ],
+  [TEXT_ANNOTATION_TYPE]: [{ kind: 'text', key: 'text', label: 'Text' }],
 };
 
 function resolveLabel(label: FieldLabel, comp: Component): string {
@@ -175,6 +221,89 @@ function renderActuatorModeField(container: HTMLElement, comp: Component): void 
     if (select.value !== comp.type) swapComponentType(comp, select.value);
     // swapComponentType replaces the component and re-selects the new one, which triggers
     // onSelectionChange -> refresh() on its own - nothing more to do here.
+  });
+
+  row.append(span, select);
+  container.appendChild(row);
+}
+
+const CYLINDER_MODES: Array<{ value: 'push' | 'pull'; label: string }> = [
+  { value: 'push', label: 'Push' },
+  { value: 'pull', label: 'Pull' },
+];
+
+function renderCylinderModeField(
+  container: HTMLElement,
+  comp: Component,
+  onChange: () => void,
+): void {
+  const row = document.createElement('label');
+  row.className = 'inspectorRow';
+
+  const span = document.createElement('span');
+  span.textContent = 'Mode';
+
+  const select = document.createElement('select');
+  for (const m of CYLINDER_MODES) {
+    const option = document.createElement('option');
+    option.value = m.value;
+    option.textContent = m.label;
+    select.appendChild(option);
+  }
+  select.value = (comp.snapshot() as Record<string, unknown>).mode as string;
+
+  select.addEventListener('change', () => {
+    comp.setCylinderMode?.(select.value as 'push' | 'pull');
+    onChange();
+  });
+
+  row.append(span, select);
+  container.appendChild(row);
+}
+
+const SILENCER_OPTIONS: Array<{ value: 'none' | 'silencer'; label: string }> = [
+  { value: 'none', label: 'None' },
+  { value: 'silencer', label: 'Silencer' },
+];
+
+function isPortWired(compId: number, port: string): boolean {
+  return appState.connections.some(
+    (c) =>
+      (c.from.id === compId && c.from.port === port) || (c.to.id === compId && c.to.port === port),
+  );
+}
+
+function renderSilencerField(
+  container: HTMLElement,
+  comp: Component,
+  field: SilencerField,
+  snap: Record<string, unknown>,
+): void {
+  const row = document.createElement('label');
+  row.className = 'inspectorRow';
+
+  const span = document.createElement('span');
+  span.textContent = resolveLabel(field.label, comp);
+
+  const select = document.createElement('select');
+  for (const opt of SILENCER_OPTIONS) {
+    const option = document.createElement('option');
+    option.value = opt.value;
+    option.textContent = opt.label;
+    select.appendChild(option);
+  }
+  const current = (snap[field.key] as string) ?? 'none';
+  select.value = current;
+
+  select.addEventListener('change', () => {
+    // A wired port is already physically occupied - a silencer can't also go there. Attaching a
+    // wire to an already-silenced port is separately blocked at the port itself (see
+    // shared/silencer.ts's setSilencerState, which disables the port while a silencer is on).
+    if (select.value === 'silencer' && isPortWired(comp.id, field.port)) {
+      flashRejected(select, current);
+      return;
+    }
+    updateComponentField(comp, field.key, select.value);
   });
 
   row.append(span, select);
@@ -257,7 +386,7 @@ function renderSensorKeySelectField(
 /** Briefly flags `input` as rejected (a duplicate label, or some other invalid value) without a
  * popup - just a red outline that clears itself, plus reverting the value the user tried to
  * commit. */
-function flashRejected(input: HTMLInputElement, revertTo: string): void {
+function flashRejected(input: HTMLInputElement | HTMLSelectElement, revertTo: string): void {
   input.value = revertTo;
   input.classList.add('inspectorFieldError');
   window.setTimeout(() => input.classList.remove('inspectorFieldError'), 1000);
@@ -465,12 +594,91 @@ function renderSensorListField(
   container.appendChild(addBtn);
 }
 
-export function renderInspector(container: HTMLElement): void {
+/** Types with no meaningful identifying name to show/hide/override - a wire junction only ever
+ * exists as a side effect of splitting a wire, and a text annotation's own text already serves
+ * that purpose, so neither gets the generic name section below. */
+const NO_NAME_SECTION = new Set([JUNCTION_TYPE, TEXT_ANNOTATION_TYPE]);
+
+/** Every component gets this, regardless of type: names are hidden by default (see
+ * svgHelpers.ts) since a diagram with every symbol labeled gets noisy fast, but showing one
+ * (and optionally overriding it with a custom name, e.g. "Clamp cylinder" instead of
+ * "Cylinder A") is one checkbox + one text field away. */
+function renderNameSection(
+  container: HTMLElement,
+  comp: Component,
+  snap: Record<string, unknown>,
+): void {
+  const heading = document.createElement('div');
+  heading.className = 'inspectorSectionHeading';
+  heading.textContent = 'Name';
+  container.appendChild(heading);
+
+  const showRow = document.createElement('label');
+  showRow.className = 'inspectorRow';
+  const showSpan = document.createElement('span');
+  showSpan.textContent = 'Show name in diagram';
+  const showCheckbox = document.createElement('input');
+  showCheckbox.type = 'checkbox';
+  showCheckbox.checked = Boolean(snap.showName);
+  showCheckbox.addEventListener('change', () => {
+    updateComponentField(comp, 'showName', showCheckbox.checked);
+  });
+  showRow.append(showSpan, showCheckbox);
+  container.appendChild(showRow);
+
+  const nameRow = document.createElement('label');
+  nameRow.className = 'inspectorRow';
+  const nameSpan = document.createElement('span');
+  nameSpan.textContent = 'Custom name';
+  const nameInput = document.createElement('input');
+  nameInput.type = 'text';
+  nameInput.className = 'inspectorCustomNameInput';
+  nameInput.placeholder = '(default)';
+  nameInput.value = (snap.customName as string | null) ?? '';
+  nameInput.addEventListener('change', () => {
+    updateComponentField(comp, 'customName', nameInput.value.trim() || null);
+  });
+  nameRow.append(nameSpan, nameInput);
+  container.appendChild(nameRow);
+}
+
+/** A workspace-wide preference, not tied to any component, so it renders unconditionally -
+ * unlike everything else in this panel, it stays visible with nothing (or several things)
+ * selected. Turns off both the visual grid and snap-to-grid together, since a hidden grid a
+ * component still silently snaps to is a worse experience than either fully on or fully off. */
+function renderGridSection(container: HTMLElement, viewport: ViewportAdapter): void {
+  const heading = document.createElement('div');
+  heading.className = 'inspectorSectionHeading';
+  heading.textContent = 'Grid';
+  container.appendChild(heading);
+
+  const row = document.createElement('label');
+  row.className = 'inspectorRow';
+  const span = document.createElement('span');
+  span.textContent = 'Show grid';
+  const checkbox = document.createElement('input');
+  checkbox.type = 'checkbox';
+  checkbox.checked = loadGridPreference();
+  checkbox.addEventListener('change', () => {
+    setGridEnabled(checkbox.checked);
+    viewport.setGridVisible(checkbox.checked);
+    saveGridPreference(checkbox.checked);
+  });
+  row.append(span, checkbox);
+  container.appendChild(row);
+}
+
+export function renderInspector(container: HTMLElement, viewport: ViewportAdapter): void {
   function refresh(): void {
     container.replaceChildren();
 
     const selected = getSelectedComponents();
     if (selected.length !== 1) {
+      // The grid is a workspace-wide setting, not a component one - but it only gets its own
+      // section here while nothing is selected, so it doesn't compete for space with (or look
+      // like part of) whatever's actually being edited.
+      if (selected.length === 0) renderGridSection(container, viewport);
+
       const hint = document.createElement('p');
       hint.className = 'inspectorHint';
       hint.textContent =
@@ -481,23 +689,30 @@ export function renderInspector(container: HTMLElement): void {
       return;
     }
     const comp = selected[0] as Component;
+    const snap = comp.snapshot() as Record<string, unknown>;
+
+    const showsNameSection = !NO_NAME_SECTION.has(comp.type);
+    if (showsNameSection) renderNameSection(container, comp, snap);
 
     const fields = INSPECTOR_FIELDS[comp.type];
     if (!fields || fields.length === 0) {
-      const hint = document.createElement('p');
-      hint.className = 'inspectorHint';
-      hint.textContent = 'This component has nothing to configure here.';
-      container.appendChild(hint);
+      if (!showsNameSection) {
+        const hint = document.createElement('p');
+        hint.className = 'inspectorHint';
+        hint.textContent = 'This component has nothing to configure here.';
+        container.appendChild(hint);
+      }
       return;
     }
 
-    const snap = comp.snapshot() as Record<string, unknown>;
     for (const field of fields) {
       if (field.kind === 'sensorList') renderSensorListField(container, comp, field, snap, refresh);
       else if (field.kind === 'actuatorMode') renderActuatorModeField(container, comp);
       else if (field.kind === 'sensorKeySelect')
         renderSensorKeySelectField(container, comp, field, snap, refresh);
       else if (field.kind === 'relabel') renderRelabelField(container, comp, field, refresh);
+      else if (field.kind === 'cylinderMode') renderCylinderModeField(container, comp, refresh);
+      else if (field.kind === 'silencer') renderSilencerField(container, comp, field, snap);
       else renderNumberOrTextField(container, comp, field, snap);
     }
   }

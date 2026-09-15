@@ -26,7 +26,7 @@ export function createLimitValve32(compLayer: HTMLElement, x: number, y: number)
     y,
     SVG_W,
     SVG_H,
-    '3/2 Limit',
+    '3/2 limit valve',
     {
       x: SLIDING_VALVE_OFFSET_X,
       y: SLIDING_VALVE_OFFSET_Y,
@@ -123,11 +123,20 @@ export function createLimitValve32(compLayer: HTMLElement, x: number, y: number)
     },
 
     snapshot(): Record<string, unknown> {
-      return { active, sensorKey };
+      return {
+        active,
+        sensorKey,
+        showName: shell.getNameVisible(),
+        customName: shell.getCustomName(),
+        silencer3: valve.getSilencer(),
+      };
     },
     restore(data: Record<string, unknown>): void {
       active = data.active as boolean;
       sensorKey = data.sensorKey as string;
+      shell.setNameVisible(Boolean(data.showName));
+      shell.setCustomName((data.customName as string | null) ?? null);
+      valve.setSilencer((data.silencer3 as 'none' | 'silencer') ?? 'silencer');
       updateLabel();
       valve.setActive(active);
     },

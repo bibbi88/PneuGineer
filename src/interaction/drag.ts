@@ -13,6 +13,9 @@ export function makeDraggable(comp: Component, viewport: ViewportAdapter): void 
     if (!canEdit(appState.mode)) return;
     if (e.button !== 0) return;
     if ((e.target as Element).closest('.port')) return;
+    // A component that hosts its own editable text (e.g. a text annotation) needs plain clicks
+    // inside it to place a text cursor, not start dragging the whole component.
+    if ((e.target as Element).closest('[contenteditable="true"]')) return;
 
     // The component's div/svg spans a padded canvas well beyond its drawn body (room for pilot
     // stubs, labels, etc.), so without this a click in that empty margin - meant for a wire or

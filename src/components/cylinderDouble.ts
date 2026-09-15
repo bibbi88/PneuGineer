@@ -1,6 +1,6 @@
 import type { Component, SimStepContext, PortConnection } from '../core/types';
 import { uid } from '../core/ids';
-import { buildComponentShell, createSvgEl, createLabeledPort } from './shared/svgHelpers';
+import { buildComponentShell, createSvgEl, createPort } from './shared/svgHelpers';
 import { nextCylinderLetter, isCylinderLetterInUse } from './shared/letters';
 import { BASE_CYL_SPEED } from '../sim/constants';
 import { appState } from '../app/AppState';
@@ -72,8 +72,8 @@ export function createCylinderDouble(compLayer: HTMLElement, x: number, y: numbe
   shell.svg.appendChild(g);
 
   const ports = {
-    A: createLabeledPort(g, 'A', 10, H + PORT_MARGIN, 'V', 'above'),
-    B: createLabeledPort(g, 'B', W - 10, H + PORT_MARGIN, 'V', 'above'),
+    A: createPort(g, 'A', 10, H + PORT_MARGIN, 'V'),
+    B: createPort(g, 'B', W - 10, H + PORT_MARGIN, 'V'),
   };
 
   let pos = 0;
@@ -135,13 +135,21 @@ export function createCylinderDouble(compLayer: HTMLElement, x: number, y: numbe
     },
 
     snapshot(): Record<string, unknown> {
-      return { pos, letter, sensors };
+      return {
+        pos,
+        letter,
+        sensors,
+        showName: shell.getNameVisible(),
+        customName: shell.getCustomName(),
+      };
     },
     restore(data: Record<string, unknown>): void {
       pos = data.pos as number;
       letter = data.letter as string;
       sensors = isValidSensorArray(data.sensors) ? data.sensors : defaultSensors(letter);
-      shell.labelEl.textContent = `Cylinder ${letter}`;
+      shell.setDefaultName(`Cylinder ${letter}`);
+      shell.setNameVisible(Boolean(data.showName));
+      shell.setCustomName((data.customName as string | null) ?? null);
       updateVisual();
     },
     reset(): void {
@@ -161,7 +169,7 @@ export function createCylinderDouble(compLayer: HTMLElement, x: number, y: numbe
       const oldLetter = letter;
       letter = nextCylinderLetter();
       sensors = relabelSensors(sensors, oldLetter, letter).sensors;
-      shell.labelEl.textContent = `Cylinder ${letter}`;
+      shell.setDefaultName(`Cylinder ${letter}`);
     },
 
     renameLabel(newValue: string): boolean {
@@ -170,7 +178,7 @@ export function createCylinderDouble(compLayer: HTMLElement, x: number, y: numbe
       if (trimmed !== letter && isCylinderLetterInUse(trimmed, comp.id)) return false;
       const oldLetter = letter;
       letter = trimmed;
-      shell.labelEl.textContent = `Cylinder ${letter}`;
+      shell.setDefaultName(`Cylinder ${letter}`);
 
       // Carry each auto-named sensor's label forward (A0 -> B0, etc.) and, since that's the
       // exact key a limit switch's "Sensor key" points at, update every switch bound to the old

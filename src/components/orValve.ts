@@ -29,7 +29,7 @@ function rect(x: number, y: number, w: number, h: number): SVGRectElement {
 }
 
 export function createOrValve(compLayer: HTMLElement, x: number, y: number): Component {
-  const shell = buildComponentShell(compLayer, OR_VALVE_TYPE, x, y, SVG_W, SVG_H, '', {
+  const shell = buildComponentShell(compLayer, OR_VALVE_TYPE, x, y, SVG_W, SVG_H, 'OR valve', {
     x: GX + HUS_X,
     y: GY + HUS_Y,
     w: HUS_W,
@@ -102,9 +102,12 @@ export function createOrValve(compLayer: HTMLElement, x: number, y: number): Com
     },
 
     snapshot(): Record<string, unknown> {
-      return {};
+      return { showName: shell.getNameVisible(), customName: shell.getCustomName() };
     },
-    restore(): void {},
+    restore(data: Record<string, unknown>): void {
+      shell.setNameVisible(Boolean(data.showName));
+      shell.setCustomName((data.customName as string | null) ?? null);
+    },
     reset(): void {},
 
     setPos(nx: number, ny: number): void {

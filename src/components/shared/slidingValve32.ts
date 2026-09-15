@@ -1,4 +1,5 @@
 import { createSvgEl, addArrowMarker, createLabeledPort } from './svgHelpers';
+import { createSilencerSymbol, setSilencerState, type SilencerOption } from './silencer';
 import type { PortDef } from '../../core/types';
 
 export const SLIDING_VALVE_W = 140;
@@ -16,6 +17,9 @@ export interface SlidingValve32Body {
   ports: { '1': PortDef; '2': PortDef; '3': PortDef };
   /** true = left cell (2->1, 3 blocked) sits under the ports; false = right cell (2->3, 1 blocked). */
   setActive(active: boolean): void;
+  /** Port 3 is this valve family's exhaust - the one a silencer would actually be fitted to. */
+  setSilencer(option: SilencerOption): void;
+  getSilencer(): SilencerOption;
 }
 
 function tBlock(xCenter: number, yBar: number, yStemEnd: number): SVGGElement {
@@ -159,9 +163,23 @@ export function buildSlidingValve32Body(svg: SVGSVGElement, arrowId: string): Sl
     '3': createLabeledPort(svg, '3', ox + P3.cx, oy + P3.cy, 'V', 'left'),
   };
 
+  // Port 3 is this valve's exhaust - fixed in place (not part of the mover), so the silencer
+  // attached to it stays put and simply moves with the whole component like everything else
+  // drawn directly on `svg`. Defaults on, matching how these valves are conventionally fitted
+  // in practice - most exhaust ports get a silencer unless there's a specific reason not to.
+  let silencer3: SilencerOption = 'silencer';
+  const silencer3El = createSilencerSymbol(ox + P3.cx, oy + P3.cy, 1);
+  setSilencerState(ports['3'], silencer3El, silencer3);
+  svg.appendChild(silencer3El);
+
   function setActive(active: boolean): void {
     mover.setAttribute('transform', `translate(${ox + (active ? midX : 0)}, ${oy})`);
   }
 
-  return { mover, ports, setActive };
+  function setSilencer(option: SilencerOption): void {
+    silencer3 = option;
+    setSilencerState(ports['3'], silencer3El, silencer3);
+  }
+
+  return { mover, ports, setActive, setSilencer, getSilencer: () => silencer3 };
 }

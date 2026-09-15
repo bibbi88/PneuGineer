@@ -19,12 +19,21 @@ const SVG_H = SLIDING_VALVE_OFFSET_Y + SLIDING_VALVE_H + 30;
 const PILOT_LOCAL = { cx: -40, cy: SLIDING_VALVE_H / 2 };
 
 export function createAirValve32(compLayer: HTMLElement, x: number, y: number): Component {
-  const shell = buildComponentShell(compLayer, AIR_VALVE_32_TYPE, x, y, SVG_W, SVG_H, '3/2 Air', {
-    x: SLIDING_VALVE_OFFSET_X,
-    y: SLIDING_VALVE_OFFSET_Y,
-    w: SLIDING_VALVE_W,
-    h: SLIDING_VALVE_H,
-  });
+  const shell = buildComponentShell(
+    compLayer,
+    AIR_VALVE_32_TYPE,
+    x,
+    y,
+    SVG_W,
+    SVG_H,
+    '3/2 air-piloted',
+    {
+      x: SLIDING_VALVE_OFFSET_X,
+      y: SLIDING_VALVE_OFFSET_Y,
+      w: SLIDING_VALVE_W,
+      h: SLIDING_VALVE_H,
+    },
+  );
   const valve = buildSlidingValve32Body(shell.svg, `arrow-air-${uid()}`);
 
   const spring = createSvgEl('g', {
@@ -94,10 +103,18 @@ export function createAirValve32(compLayer: HTMLElement, x: number, y: number): 
     },
 
     snapshot(): Record<string, unknown> {
-      return { active };
+      return {
+        active,
+        showName: shell.getNameVisible(),
+        customName: shell.getCustomName(),
+        silencer3: valve.getSilencer(),
+      };
     },
     restore(data: Record<string, unknown>): void {
       active = data.active as boolean;
+      shell.setNameVisible(Boolean(data.showName));
+      shell.setCustomName((data.customName as string | null) ?? null);
+      valve.setSilencer((data.silencer3 as 'none' | 'silencer') ?? 'silencer');
       valve.setActive(active);
     },
     reset(): void {

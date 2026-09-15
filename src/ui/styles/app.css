@@ -257,6 +257,21 @@ body {
   overflow: hidden;
 }
 
+/* A separate, untransformed layer rather than a background on #viewport itself: #viewport gets
+   panned/scaled and is capped to a large-but-finite size, so a background painted on it would
+   run out at that boundary. This one stays pinned to the always-visible workspace box and has
+   its background-size/position recalculated on every pan/zoom (see viewport.ts) to look like
+   the same infinite world-aligned grid no matter how far you pan or zoom. */
+#gridLayer {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    linear-gradient(to right, rgba(0, 0, 0, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.04) 1px, transparent 1px);
+}
+
 #viewport {
   position: absolute;
   inset: 0;
@@ -264,10 +279,6 @@ body {
   transform-origin: 0 0;
   width: max(100%, 2400px);
   height: max(100%, 1600px);
-  background-image:
-    linear-gradient(to right, rgba(0, 0, 0, 0.04) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(0, 0, 0, 0.04) 1px, transparent 1px);
-  background-size: 10px 10px;
 }
 
 .layer {
@@ -334,6 +345,30 @@ svg.compSvg {
   overflow: visible;
 }
 
+.annotationText {
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  font-size: 13px;
+  line-height: 1.35;
+  color: #5c4f1e;
+  overflow: hidden;
+  word-break: break-word;
+  white-space: pre-wrap;
+  cursor: default;
+  user-select: none;
+}
+
+.annotationText.editing {
+  cursor: text;
+  user-select: text;
+  outline: 2px solid var(--port);
+  outline-offset: -2px;
+  background: #fffef5;
+  overflow: auto;
+}
+
 .port {
   fill: #fff;
   stroke: var(--port);
@@ -356,6 +391,14 @@ svg.compSvg {
 .port.portConnected:hover {
   fill: #e8f1ff;
   stroke: var(--port);
+}
+
+/* A silenced port is physically occupied by the muffler attached to it (see
+   shared/silencer.ts) - hidden the same way a wired port's dot is, but with no hover-reveal
+   since pointer-events is also disabled on it (nothing to branch a wire from). */
+.port.portSilenced {
+  fill: transparent;
+  stroke: transparent;
 }
 
 .wireHandle {
@@ -509,6 +552,15 @@ rect.wireHandle.wireStubHandle {
 
 .inspectorRow input {
   width: 90px;
+}
+
+.inspectorRow input[type='checkbox'] {
+  width: auto;
+  padding: 0;
+}
+
+.inspectorRow input.inspectorCustomNameInput {
+  width: 140px;
 }
 
 .inspectorRow select {

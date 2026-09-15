@@ -7,6 +7,7 @@ import { createOrValve } from '../components/orValve';
 import { createCheckValve } from '../components/checkValve';
 import { createRestrictor } from '../components/restrictor';
 import { createValve52 } from '../components/valve52';
+import { createValve52Mono } from '../components/valve52Mono';
 import { createOneWayFlowControlValve } from '../components/oneWayFlowControlValve';
 
 let version = 0;
@@ -169,6 +170,27 @@ describe('computeFrameGraph', () => {
     valve2.onPressureChange?.({ isPressurized: (p) => p === '14' });
     expect(valve2.conductivityRule({ isPressurized: () => false })).toEqual(
       expect.arrayContaining([expect.objectContaining({ a: '1', b: '4' })]),
+    );
+  });
+
+  it("valve52Mono is spring-return: position always follows the single pilot's current level", () => {
+    const valve = createValve52Mono(compLayer(), 0, 0);
+
+    // Default (unpowered) rest position matches the bistable valve's own default: 1<->2, 4<->5.
+    expect(valve.conductivityRule({ isPressurized: () => false })).toEqual(
+      expect.arrayContaining([expect.objectContaining({ a: '1', b: '2' })]),
+    );
+
+    // Pilot 14 pressurized -> shifts immediately, no rising-edge needed.
+    valve.onPressureChange?.({ isPressurized: () => true });
+    expect(valve.conductivityRule({ isPressurized: () => false })).toEqual(
+      expect.arrayContaining([expect.objectContaining({ a: '1', b: '4' })]),
+    );
+
+    // Pilot released -> the spring pulls it straight back, the same tick, no held state.
+    valve.onPressureChange?.({ isPressurized: () => false });
+    expect(valve.conductivityRule({ isPressurized: () => false })).toEqual(
+      expect.arrayContaining([expect.objectContaining({ a: '1', b: '2' })]),
     );
   });
 

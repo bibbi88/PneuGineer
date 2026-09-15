@@ -1,6 +1,7 @@
 import type { Component } from '../core/types';
 import { createSource, SOURCE_TYPE } from './source';
 import { createValve52, VALVE_52_TYPE } from './valve52';
+import { createValve52Mono, VALVE_52_MONO_TYPE } from './valve52Mono';
 import { createAndValve, AND_VALVE_TYPE } from './andValve';
 import { createOrValve, OR_VALVE_TYPE } from './orValve';
 import { createCheckValve, CHECK_VALVE_TYPE } from './checkValve';
@@ -17,6 +18,7 @@ import {
   createOneWayFlowControlValve,
   ONE_WAY_FLOW_CONTROL_VALVE_TYPE,
 } from './oneWayFlowControlValve';
+import { createTextAnnotation, TEXT_ANNOTATION_TYPE } from './textAnnotation';
 
 export interface ComponentFactoryContext {
   compLayer: HTMLElement;
@@ -32,6 +34,7 @@ export const ComponentCategory = {
   LOGIC: 'Logic',
   FLOW: 'Flow control',
   ACTUATORS: 'Actuators',
+  ANNOTATIONS: 'Annotations',
 } as const;
 export type ComponentCategoryName = (typeof ComponentCategory)[keyof typeof ComponentCategory];
 
@@ -60,6 +63,15 @@ export const componentRegistry = new Map<string, RegistryEntry>([
     {
       factory: (ctx, x, y) => createValve52(ctx.compLayer, x, y),
       label: '5/2 valve',
+      placeable: true,
+      category: ComponentCategory.DIRECTIONAL,
+    },
+  ],
+  [
+    VALVE_52_MONO_TYPE,
+    {
+      factory: (ctx, x, y) => createValve52Mono(ctx.compLayer, x, y),
+      label: '5/2 valve, monostable',
       placeable: true,
       category: ComponentCategory.DIRECTIONAL,
     },
@@ -180,6 +192,15 @@ export const componentRegistry = new Map<string, RegistryEntry>([
       placeable: false,
     },
   ],
+  [
+    TEXT_ANNOTATION_TYPE,
+    {
+      factory: (ctx, x, y) => createTextAnnotation(ctx.compLayer, x, y),
+      label: 'Text note',
+      placeable: true,
+      category: ComponentCategory.ANNOTATIONS,
+    },
+  ],
 ]);
 
 export function createComponent(
@@ -199,6 +220,7 @@ const CATEGORY_ORDER: ComponentCategoryName[] = [
   ComponentCategory.LOGIC,
   ComponentCategory.FLOW,
   ComponentCategory.ACTUATORS,
+  ComponentCategory.ANNOTATIONS,
 ];
 
 export interface ComponentGroup {

@@ -13,7 +13,7 @@ const CY = 50;
 const R = 15;
 
 export function createSource(compLayer: HTMLElement, x: number, y: number): Component {
-  const shell = buildComponentShell(compLayer, SOURCE_TYPE, x, y, SVG_W, SVG_H, '', {
+  const shell = buildComponentShell(compLayer, SOURCE_TYPE, x, y, SVG_W, SVG_H, 'Pressure source', {
     x: GX + (CX - R),
     y: GY + (CY - R),
     w: R * 2,
@@ -72,9 +72,12 @@ export function createSource(compLayer: HTMLElement, x: number, y: number): Comp
     },
 
     snapshot(): Record<string, unknown> {
-      return {};
+      return { showName: shell.getNameVisible(), customName: shell.getCustomName() };
     },
-    restore(): void {},
+    restore(data: Record<string, unknown>): void {
+      shell.setNameVisible(Boolean(data.showName));
+      shell.setCustomName((data.customName as string | null) ?? null);
+    },
     reset(): void {},
 
     setPos(nx: number, ny: number): void {

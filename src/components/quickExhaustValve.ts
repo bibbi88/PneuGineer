@@ -26,7 +26,7 @@ export function createQuickExhaustValve(compLayer: HTMLElement, x: number, y: nu
     y,
     SVG_W,
     SVG_H,
-    'Quick Exh.',
+    'Quick-exhaust valve',
     { x: OX + 8, y: OY + 8, w: LOCAL_W - 16, h: LOCAL_H - 16 },
   );
 
@@ -67,9 +67,12 @@ export function createQuickExhaustValve(compLayer: HTMLElement, x: number, y: nu
     },
 
     snapshot(): Record<string, unknown> {
-      return {};
+      return { showName: shell.getNameVisible(), customName: shell.getCustomName() };
     },
-    restore(): void {},
+    restore(data: Record<string, unknown>): void {
+      shell.setNameVisible(Boolean(data.showName));
+      shell.setCustomName((data.customName as string | null) ?? null);
+    },
     reset(): void {},
 
     setPos(nx: number, ny: number): void {

@@ -75,6 +75,13 @@ export interface Component<TSnapshot = Record<string, unknown>> {
    * components bound to them). Returns whether `newValue` was valid and applied - an invalid
    * value leaves everything unchanged. Drives the inspector's rename field. */
   renameLabel?(newValue: string): boolean;
+  /** Switches a single-acting cylinder between push/pull, immediately snapping its piston to
+   * that mode's own default rest position (rather than animating there on the next simulation
+   * step) since this is a configuration change, not a live simulation event. Drives the
+   * inspector's mode field - not part of the generic snapshot()/restore() round trip because a
+   * loaded project's saved position must NOT be overridden by this same "reset to default"
+   * logic. */
+  setCylinderMode?(mode: 'push' | 'pull'): void;
   /** Extra type-specific entries spliced into this component's right-click menu, alongside the
    * generic rotate/delete every component gets. */
   contextMenuItems?(): ContextMenuAction[];
