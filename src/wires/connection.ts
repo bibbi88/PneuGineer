@@ -93,6 +93,7 @@ export function createConnection(from: ConnectionEndpoint, to: ConnectionEndpoin
     guides: [],
     stubStartLen: null,
     stubEndLen: null,
+    dashed: false,
     pathEl,
     hitEl,
     labelEl,
@@ -121,6 +122,10 @@ export function createConnection(from: ConnectionEndpoint, to: ConnectionEndpoin
         },
       },
       { label: 'Clear bends (reset to auto-route)', onClick: () => resetToAutoRoute(conn.id) },
+      {
+        label: conn.dashed ? 'Solid line' : 'Dashed line',
+        onClick: () => setWireDashed(conn.id, !conn.dashed),
+      },
       { label: 'Delete wire', onClick: () => removeConnection(conn.id) },
     ]);
   });
@@ -157,6 +162,14 @@ export function removeComponentAndConnections(compId: ComponentId): void {
     removeConnection(conn.id);
   }
   appState.removeComponent(compId);
+}
+
+export function setWireDashed(connId: number, dashed: boolean): void {
+  const conn = appState.connections.find((c) => c.id === connId);
+  if (!conn) return;
+  conn.dashed = dashed;
+  conn.pathEl.classList.toggle('dashed', dashed);
+  appState.markDirty();
 }
 
 export function resetToAutoRoute(connId: number): void {
@@ -229,6 +242,7 @@ export function redrawConnection(conn: Connection): void {
   const d = pathFromPoints(points);
   conn.pathEl.setAttribute('d', d);
   conn.hitEl.setAttribute('d', d);
+  conn.pathEl.classList.toggle('dashed', !!conn.dashed);
 
   const mid = polylineMidpoint(points);
   conn.labelEl.setAttribute('x', String(mid.x));

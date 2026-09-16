@@ -16,6 +16,7 @@ export interface ConnectionSnapshot {
   guides: WireGuide[];
   stubStartLen: number | null;
   stubEndLen: number | null;
+  dashed?: boolean;
 }
 
 export interface ProjectFileV1 {

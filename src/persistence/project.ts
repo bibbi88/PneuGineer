@@ -24,6 +24,7 @@ export function serializeProject(name: string): ProjectFileV1 {
       guides: c.guides,
       stubStartLen: c.stubStartLen,
       stubEndLen: c.stubEndLen,
+      dashed: c.dashed,
     })),
   };
 }
@@ -69,6 +70,7 @@ export function loadProject(
       conn.guides = snap.guides;
       conn.stubStartLen = snap.stubStartLen;
       conn.stubEndLen = snap.stubEndLen;
+      conn.dashed = snap.dashed;
     }
   });
 

@@ -431,6 +431,10 @@ rect.wireHandle.wireStubHandle {
   stroke: var(--accent);
 }
 
+.wire.dashed {
+  stroke-dasharray: 8 5;
+}
+
 .wireGhost {
   stroke: var(--port);
   stroke-width: 2;

@@ -108,6 +108,7 @@ export interface Connection {
   guides: WireGuide[];
   stubStartLen: number | null;
   stubEndLen: number | null;
+  dashed?: boolean;
   pathEl: SVGPathElement;
   /** Wider, invisible path stacked on top of pathEl so clicking/right-clicking the wire is easier. */
   hitEl: SVGPathElement;
