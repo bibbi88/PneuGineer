@@ -472,6 +472,18 @@ rect.wireHandle.wireStubHandle {
   }
 }
 
+/* Internal air-path lines drawn as part of a valve's own symbol (quick-exhaust valve, one-way
+   flow control valve) - the same "marching dashes" language as .wire.exhausting, just applied
+   to a fixed line inside the component instead of a connection between two of them, so which
+   internal route is currently open reads the same way a live wire does. */
+.qevFlowPath--active,
+.owfvFlowPath--active {
+  stroke: var(--exhaust);
+  stroke-width: 2;
+  stroke-dasharray: 6 6;
+  animation: exhaustFlow 0.5s linear infinite;
+}
+
 .wireGhost {
   stroke: var(--port);
   stroke-width: 2;

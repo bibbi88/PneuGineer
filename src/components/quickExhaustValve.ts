@@ -1,11 +1,6 @@
 import type { Component, ConductivityContext, PortConnection, SimStepContext } from '../core/types';
 import { uid } from '../core/ids';
-import {
-  buildComponentShell,
-  createLabeledPort,
-  createPort,
-  createSvgEl,
-} from './shared/svgHelpers';
+import { buildComponentShell, createPort, createPortLabel, createSvgEl } from './shared/svgHelpers';
 
 export const QUICK_EXHAUST_VALVE_TYPE = 'quickExhaustValve';
 
@@ -14,17 +9,22 @@ export const QUICK_EXHAUST_VALVE_TYPE = 'quickExhaustValve';
  * whichever side isn't currently fed, exactly matching this valve's own conductivity rule
  * below (1->2 open / 2->3 open are mutually exclusive) - `.qevBall.right` slides it over via a
  * CSS transition (see app.css) whenever port 1 is pressurized, and it rests at its drawn
- * (left-seated) position otherwise. localW/localH and every offset below (housingCenterY,
- * port1LeadX, port2LeadTopY, port3TipX) are nudged a few px from what a straight redraw of the
- * reference icon would give, so ports 1/2/3 land exactly on the 10px grid relative to this
- * canvas's own center - see src/core/grid.ts - without changing the housing/ball/seat artwork's
- * own proportions at all.
+ * (left-seated) position otherwise. The whole drawing is done at one fixed internal scale
+ * (`SCALE`, applied as an SVG transform) rather than redrawing at a different size - every
+ * coordinate below stays the same regardless of `SCALE`, and ports/labels/the ball's CSS-driven
+ * travel all render correctly at whatever size because they're all children of the same scaled
+ * group. localW/localH and every offset below (housingCenterY, port1LeadX, port2LeadTopY,
+ * port3TipX) are nudged a few px from what a straight redraw of the reference icon would give,
+ * so ports 1/2/3 land on a clean grid at the *reference* 1:1 size - see src/core/grid.ts;
+ * shrinking via SCALE trades a little of that precision for the requested smaller footprint.
  */
 export interface QuickExhaustValveGeometry {
   localW: number;
   localH: number;
   ox: number;
   oy: number;
+  /** Uniform scale applied to the whole drawing (ports included) - see the file-level comment. */
+  scale: number;
   /** Left edge / width of the main housing rect. */
   housingX: number;
   housingW: number;
@@ -53,6 +53,8 @@ export const QUICK_EXHAUST_VALVE_DEFAULT_GEOMETRY: QuickExhaustValveGeometry = {
   localH: 74,
   ox: 8,
   oy: 8,
+  // 20% smaller than the reference icon's own drawn size, per request.
+  scale: 0.8,
   housingX: 24,
   housingW: 64,
   housingCenterY: 47,
@@ -71,6 +73,15 @@ export function drawQuickExhaustValveBody(
   geo: QuickExhaustValveGeometry,
 ): {
   ball: SVGEllipseElement;
+  /** The two halves of the main horizontal line, split (but drawn touching - no gap) at the
+   * port-2 junction so the currently-conducting side can be highlighted independently: `toPort2`
+   * is the port-1-to-junction half (live when port 1 is pressurized, feeding port 2), `toExhaust`
+   * is the junction-to-muffler half (live otherwise, venting port 2 out through port 3). */
+  toPort2: SVGLineElement;
+  toExhaust: SVGLineElement;
+  port2Line: SVGLineElement;
+  label1: SVGTextElement;
+  label2: SVGTextElement;
   '1': { cx: number; cy: number };
   '2': { cx: number; cy: number };
   '3': { cx: number; cy: number };
@@ -79,6 +90,7 @@ export function drawQuickExhaustValveBody(
   const housingRight = geo.housingX + geo.housingW;
   const seatInnerX = geo.housingX + 16;
   const seatOuterX = housingRight - 16;
+  const junctionX = housingRight - geo.housingW / 2;
 
   function line(x1: number, y1: number, x2: number, y2: number): SVGLineElement {
     return createSvgEl('line', { x1, y1, x2, y2, stroke: '#111', 'stroke-width': 1.5 });
@@ -105,12 +117,16 @@ export function drawQuickExhaustValveBody(
     }),
   );
 
-  // Port 1's lead-in, up to the left seat; port 3's lead-in from just past the right seat,
-  // straight through to the exhaust muffler.
-  g.append(
-    line(geo.port1LeadX, cy, seatInnerX - 8, cy),
-    line(seatInnerX + 3, cy, housingRight + 16, cy),
-  );
+  // One continuous line from port 1 through to the exhaust muffler - split in two only so the
+  // currently-conducting half can be colored (see toPort2/toExhaust above), never leaving an
+  // actual gap between them. The ball (drawn later, below, with an opaque fill) covers whatever
+  // line is directly behind it at its own current position, so there's never a visible stub of
+  // line poking out from behind it either.
+  const toPort2 = line(geo.port1LeadX, cy, junctionX, cy);
+  toPort2.classList.add('qevFlowPath');
+  const toExhaust = line(junctionX, cy, housingRight + 16, cy);
+  toExhaust.classList.add('qevFlowPath');
+  g.append(toPort2, toExhaust);
 
   // The two seats the ball presses against - a small inward-pointing wedge on each side.
   g.append(
@@ -120,16 +136,11 @@ export function drawQuickExhaustValveBody(
 
   // Port 2's own lead-in, straight down the housing's vertical centerline, plus the small dot
   // marking where it meets the main horizontal path (standard ISO junction marker).
+  const port2Line = line(junctionX, geo.port2LeadTopY, junctionX, cy);
+  port2Line.classList.add('qevFlowPath');
   g.append(
-    line(housingRight - geo.housingW / 2, geo.port2LeadTopY, housingRight - geo.housingW / 2, cy),
-    createSvgEl('ellipse', {
-      cx: housingRight - geo.housingW / 2,
-      cy,
-      rx: 2,
-      ry: 2,
-      fill: '#111',
-      stroke: '#111',
-    }),
+    port2Line,
+    createSvgEl('ellipse', { cx: junctionX, cy, rx: 2, ry: 2, fill: '#111', stroke: '#111' }),
   );
 
   // Internal pilot line (dashed, ISO convention): port 2's own pressure is routed back down
@@ -137,8 +148,8 @@ export function drawQuickExhaustValveBody(
   // differential and hold the ball over rather than needing a separate pilot port.
   g.appendChild(
     path(
-      `M ${housingRight - geo.housingW / 2} ${cy - geo.housingHalfH} ` +
-        `L ${housingRight - geo.housingW / 2 + 8} ${cy - geo.housingHalfH - 8} ` +
+      `M ${junctionX} ${cy - geo.housingHalfH} ` +
+        `L ${junctionX + 8} ${cy - geo.housingHalfH - 8} ` +
         `L ${housingRight + 8} ${cy - geo.housingHalfH - 8} ` +
         `L ${housingRight + 8} ${cy - 8} ` +
         `L ${housingRight} ${cy - 8}`,
@@ -182,10 +193,21 @@ export function drawQuickExhaustValveBody(
     line(muffler.x + muffler.w + 5, cy, geo.port3LeadX, cy),
   );
 
+  const label1 = createPortLabel(g, geo.port1LeadX, cy, '1', { anchor: 'middle', dy: 18 });
+  const label2 = createPortLabel(g, junctionX, geo.port2LeadTopY, '2', {
+    anchor: 'middle',
+    dy: -10,
+  });
+
   return {
     ball,
+    toPort2,
+    toExhaust,
+    port2Line,
+    label1,
+    label2,
     '1': { cx: geo.port1LeadX, cy },
-    '2': { cx: housingRight - geo.housingW / 2, cy: geo.port2LeadTopY },
+    '2': { cx: junctionX, cy: geo.port2LeadTopY },
     '3': { cx: geo.port3LeadX, cy },
   };
 }
@@ -197,8 +219,8 @@ export function drawQuickExhaustValveBody(
  */
 export function createQuickExhaustValve(compLayer: HTMLElement, x: number, y: number): Component {
   const geo = QUICK_EXHAUST_VALVE_DEFAULT_GEOMETRY;
-  const svgW = geo.localW + geo.ox * 2;
-  const svgH = geo.localH + geo.oy * 2;
+  const svgW = geo.localW * geo.scale + geo.ox * 2;
+  const svgH = geo.localH * geo.scale + geo.oy * 2;
 
   const shell = buildComponentShell(
     compLayer,
@@ -209,22 +231,30 @@ export function createQuickExhaustValve(compLayer: HTMLElement, x: number, y: nu
     svgH,
     'Quick-exhaust valve',
     {
-      x: geo.ox + geo.housingX,
-      y: geo.oy + geo.housingCenterY - geo.housingHalfH,
-      w: geo.housingW,
-      h: geo.housingHalfH * 2,
+      x: geo.ox + geo.housingX * geo.scale,
+      y: geo.oy + (geo.housingCenterY - geo.housingHalfH) * geo.scale,
+      w: geo.housingW * geo.scale,
+      h: geo.housingHalfH * 2 * geo.scale,
     },
   );
 
-  const g = createSvgEl('g', { transform: `translate(${geo.ox},${geo.oy})` });
+  const g = createSvgEl('g', { transform: `translate(${geo.ox},${geo.oy}) scale(${geo.scale})` });
   const p = drawQuickExhaustValveBody(g, geo);
   shell.svg.appendChild(g);
 
   const ports = {
-    '1': createLabeledPort(g, '1', p['1'].cx, p['1'].cy, 'H', 'above'),
-    '2': createLabeledPort(g, '2', p['2'].cx, p['2'].cy, 'V', 'above'),
+    '1': createPort(g, '1', p['1'].cx, p['1'].cy, 'H'),
+    '2': createPort(g, '2', p['2'].cx, p['2'].cy, 'V'),
     '3': createPort(g, '3', p['3'].cx, p['3'].cy, 'H'),
   };
+
+  let showPortNumbers = false;
+
+  function applyPortNumbersVisible(): void {
+    p.label1.style.display = showPortNumbers ? '' : 'none';
+    p.label2.style.display = showPortNumbers ? '' : 'none';
+  }
+  applyPortNumbersVisible();
 
   const comp: Component = {
     id: uid(),
@@ -243,19 +273,40 @@ export function createQuickExhaustValve(compLayer: HTMLElement, x: number, y: nu
     },
 
     step(_dt: number, ctx: SimStepContext): void {
-      p.ball.classList.toggle('right', ctx.isPressurized('1'));
+      const feeding1 = ctx.isPressurized('1');
+      p.ball.classList.toggle('right', feeding1);
+      // Highlights whichever half of the internal path is actually open right now: 1->2 while
+      // port 1 is fed, or 2->3 (the quick-exhaust route) the instant it isn't - matching
+      // conductivityRule above exactly, since the ball itself is what makes them exclusive.
+      p.toPort2.classList.toggle('qevFlowPath--active', feeding1);
+      p.toExhaust.classList.toggle('qevFlowPath--active', !feeding1);
+      // Port 2's own line is part of whichever side is open (either being fed or being vented),
+      // so it's live for the same reason the ball has made exactly one of the sides above live.
+      p.port2Line.classList.add('qevFlowPath--active');
     },
 
     snapshot(): Record<string, unknown> {
-      return { showName: shell.getNameVisible(), customName: shell.getCustomName() };
+      return {
+        showName: shell.getNameVisible(),
+        customName: shell.getCustomName(),
+        showPortNumbers,
+      };
     },
     restore(data: Record<string, unknown>): void {
       shell.setNameVisible(Boolean(data.showName));
       shell.setCustomName((data.customName as string | null) ?? null);
+      showPortNumbers = Boolean(data.showPortNumbers);
+      applyPortNumbersVisible();
       p.ball.classList.remove('right');
+      p.toPort2.classList.remove('qevFlowPath--active');
+      p.toExhaust.classList.remove('qevFlowPath--active');
+      p.port2Line.classList.remove('qevFlowPath--active');
     },
     reset(): void {
       p.ball.classList.remove('right');
+      p.toPort2.classList.remove('qevFlowPath--active');
+      p.toExhaust.classList.remove('qevFlowPath--active');
+      p.port2Line.classList.remove('qevFlowPath--active');
     },
 
     setPos(nx: number, ny: number): void {

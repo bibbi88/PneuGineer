@@ -313,6 +313,11 @@ const QUICK_EXHAUST_VALVE_ENTRY: SymbolLabEntry = {
     field('localH', 'Canvas height', QUICK_EXHAUST_VALVE_DEFAULT_GEOMETRY.localH),
     field('ox', 'Canvas offset X', QUICK_EXHAUST_VALVE_DEFAULT_GEOMETRY.ox),
     field('oy', 'Canvas offset Y', QUICK_EXHAUST_VALVE_DEFAULT_GEOMETRY.oy),
+    field('scale', 'Overall scale', QUICK_EXHAUST_VALVE_DEFAULT_GEOMETRY.scale, {
+      min: 0.2,
+      max: 2,
+      step: 0.05,
+    }),
     field('housingX', 'Housing x', QUICK_EXHAUST_VALVE_DEFAULT_GEOMETRY.housingX),
     field('housingW', 'Housing width', QUICK_EXHAUST_VALVE_DEFAULT_GEOMETRY.housingW),
     field(
@@ -335,13 +340,18 @@ const QUICK_EXHAUST_VALVE_ENTRY: SymbolLabEntry = {
   createDefaultGeometry: () => ({ ...QUICK_EXHAUST_VALVE_DEFAULT_GEOMETRY }),
   renderPreview(svg, geo) {
     const typed = geo as unknown as typeof QUICK_EXHAUST_VALVE_DEFAULT_GEOMETRY;
-    const g = createSvgEl('g', { transform: `translate(${typed.ox},${typed.oy})` });
+    const g = createSvgEl('g', {
+      transform: `translate(${typed.ox},${typed.oy}) scale(${typed.scale})`,
+    });
     svg.appendChild(g);
     const p = drawQuickExhaustValveBody(g, typed);
-    createLabeledPort(g, '1', p['1'].cx, p['1'].cy, 'H', 'above');
-    createLabeledPort(g, '2', p['2'].cx, p['2'].cy, 'V', 'above');
-    createLabeledPort(g, '3', p['3'].cx, p['3'].cy, 'H', 'above');
-    return { w: typed.localW + typed.ox * 2, h: typed.localH + typed.oy * 2 };
+    createPort(g, '1', p['1'].cx, p['1'].cy, 'H');
+    createPort(g, '2', p['2'].cx, p['2'].cy, 'V');
+    createPort(g, '3', p['3'].cx, p['3'].cy, 'H');
+    return {
+      w: typed.localW * typed.scale + typed.ox * 2,
+      h: typed.localH * typed.scale + typed.oy * 2,
+    };
   },
 };
 

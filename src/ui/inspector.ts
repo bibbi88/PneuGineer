@@ -7,6 +7,7 @@ import { setGridEnabled } from '../core/grid';
 import { loadGridPreference, saveGridPreference } from '../app/gridPreference';
 import { RESTRICTOR_TYPE } from '../components/restrictor';
 import { ONE_WAY_FLOW_CONTROL_VALVE_TYPE } from '../components/oneWayFlowControlValve';
+import { QUICK_EXHAUST_VALVE_TYPE } from '../components/quickExhaustValve';
 import { TIME_DELAY_VALVE_TYPE } from '../components/timeDelayValve';
 import { LIMIT_VALVE_32_TYPE } from '../components/limitValve32';
 import { PUSH_BUTTON_32_TYPE } from '../components/pushButton32';
@@ -126,6 +127,9 @@ const INSPECTOR_FIELDS: Record<string, InspectorField[]> = {
   ],
   [ONE_WAY_FLOW_CONTROL_VALVE_TYPE]: [
     { kind: 'number', key: 'flowPct', label: 'Reverse flow %', min: 0, max: 100, step: 5 },
+  ],
+  [QUICK_EXHAUST_VALVE_TYPE]: [
+    { kind: 'checkbox', key: 'showPortNumbers', label: 'Show port numbers' },
   ],
   [TIME_DELAY_VALVE_TYPE]: [
     { kind: 'number', key: 'delaySec', label: 'Delay (s)', min: 0, max: 30, step: 0.1 },

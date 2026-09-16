@@ -65,31 +65,42 @@ function line(x1: number, y1: number, x2: number, y2: number): SVGLineElement {
 export function drawOneWayFlowControlValveBody(
   g: SVGElement,
   geo: OneWayFlowGeometry,
-): { bottomY: number; topY: number; portX: number; throttleCircle: SVGEllipseElement } {
+): {
+  bottomY: number;
+  topY: number;
+  portX: number;
+  throttleCircle: SVGEllipseElement;
+  /** The check valve's own straight path - live while flow takes the direct IN->OUT route. */
+  mainPath: SVGLineElement;
+  /** The throttle's offset path (the three segments jogging out to branchX and back) - live
+   * while flow instead takes the slower, throttled OUT->IN route. */
+  branchPath: SVGLineElement[];
+} {
   const bottomY = geo.localH - geo.portMargin;
   const topY = geo.portMargin;
-
-  // Where the throttle circle (drawn below, in the decor group's own coordinates) actually
-  // lands once scaled/translated into `g`'s coordinate space - so the branch line drawn next
-  // can leave a gap there instead of running on behind it.
   const circleLocalCx = 44;
   const circleLocalCy = 41;
   const circleLocalR = 4;
-  const circleCy = geo.decorScale * circleLocalCy + geo.decorOffsetY;
-  const circleR = geo.decorScale * circleLocalR;
 
   // The two plain paths, IN->OUT: the check valve's own line straight up, and the throttle's
   // line jogging out to branchX and back up around it - both meeting the ports directly, same
-  // as the reference's port dots being the split/rejoin points themselves. The branch line's
-  // run past the throttle circle is split in two around it (rather than one line the circle
-  // just gets drawn on top of) so nothing shows through/behind the circle.
-  g.appendChild(line(geo.portX, bottomY, geo.portX, topY));
-  g.append(
+  // as the reference's port dots being the split/rejoin points themselves. Drawn as one
+  // continuous line rather than leaving a gap for the throttle circle - the circle (drawn
+  // later, below, with an opaque fill) covers whatever line is directly behind it at its own
+  // current position instead, so the line never shows through/behind it even while it's
+  // animating (a gap sized to the circle's *rest* position would otherwise uncover a sliver of
+  // line the moment the circle nudges away from it).
+  const mainPath = line(geo.portX, bottomY, geo.portX, topY);
+  mainPath.classList.add('owfvFlowPath');
+  g.appendChild(mainPath);
+
+  const branchPath = [
     line(geo.portX, bottomY, geo.branchX, bottomY),
-    line(geo.branchX, bottomY, geo.branchX, circleCy + circleR),
-    line(geo.branchX, circleCy - circleR, geo.branchX, topY),
+    line(geo.branchX, bottomY, geo.branchX, topY),
     line(geo.branchX, topY, geo.portX, topY),
-  );
+  ];
+  for (const seg of branchPath) seg.classList.add('owfvFlowPath');
+  g.append(...branchPath);
 
   // Decorative glyphs lifted verbatim from the reference icon: the check valve's ball-and-seat
   // lens plus its flow-direction arrow, and the throttle's circle with the chevron tip poking
@@ -103,7 +114,9 @@ export function drawOneWayFlowControlValveBody(
     cy: circleLocalCy,
     rx: circleLocalR,
     ry: circleLocalR,
-    fill: 'none',
+    // Opaque (not "none") so it actually covers the continuous line behind it wherever it
+    // currently sits, rather than needing a gap cut into that line to match.
+    fill: '#fff',
     stroke: '#111',
     'stroke-width': 1,
   });
@@ -132,7 +145,7 @@ export function drawOneWayFlowControlValveBody(
   );
   g.appendChild(decor);
 
-  return { bottomY, topY, portX: geo.portX, throttleCircle };
+  return { bottomY, topY, portX: geo.portX, throttleCircle, mainPath, branchPath };
 }
 
 /** Check valve + adjustable throttle in parallel: free flow IN->OUT through the check valve's
@@ -158,7 +171,8 @@ export function createOneWayFlowControlValve(
   );
 
   const g = createSvgEl('g', { transform: `translate(${OX},${OY})` });
-  const { bottomY, topY, portX, throttleCircle } = drawOneWayFlowControlValveBody(g, geo);
+  const { bottomY, topY, portX, throttleCircle, mainPath, branchPath } =
+    drawOneWayFlowControlValveBody(g, geo);
   shell.svg.appendChild(g);
 
   const ports = {
@@ -188,13 +202,20 @@ export function createOneWayFlowControlValve(
       return fromPort === 'IN' ? 1 : flowPct / 100;
     },
 
-    // Purely a visual cue (nudges the throttle's circle glyph up a touch via CSS, see
-    // .flowThrottleCircle.flowing) - the check valve's own path conducts unconditionally
-    // whenever IN is pressurized, so that's the same signal this reads. A step() rather than
-    // onPressureChange() deliberately, since the latter tells the engine "this may have just
-    // changed my own conductivity" and forces an extra frame-graph recompute - this never does.
+    // Purely a visual cue (nudges the throttle's circle glyph up a touch, and highlights
+    // whichever of the two parallel paths air is actually taking - see .flowThrottleCircle and
+    // .owfvFlowPath in app.css) - forward flow is signaled the same way the check valve itself
+    // conducts unconditionally (IN pressurized); reverse (throttled) flow is read the same way
+    // the rest of the sim treats a "this is the driving side" port elsewhere, mirroring
+    // quickExhaustValve's ball logic. A step() rather than onPressureChange() deliberately,
+    // since the latter tells the engine "this may have just changed my own conductivity" and
+    // forces an extra frame-graph recompute - this never does.
     step(_dt: number, ctx: SimStepContext): void {
-      throttleCircle.classList.toggle('flowing', ctx.isPressurized('IN'));
+      const forward = ctx.isPressurized('IN');
+      const reverse = !forward && ctx.isPressurized('OUT');
+      throttleCircle.classList.toggle('flowing', forward);
+      mainPath.classList.toggle('owfvFlowPath--active', forward);
+      for (const seg of branchPath) seg.classList.toggle('owfvFlowPath--active', reverse);
     },
 
     snapshot(): Record<string, unknown> {
@@ -207,6 +228,8 @@ export function createOneWayFlowControlValve(
     },
     reset(): void {
       throttleCircle.classList.remove('flowing');
+      mainPath.classList.remove('owfvFlowPath--active');
+      for (const seg of branchPath) seg.classList.remove('owfvFlowPath--active');
     },
 
     setPos(nx: number, ny: number): void {
