@@ -4,14 +4,54 @@ import { buildComponentShell, createLabeledPort, createSvgEl } from './shared/sv
 
 export const QUICK_EXHAUST_VALVE_TYPE = 'quickExhaustValve';
 
-// Local layout box for the body+port geometry below; OX/OY place it inside the padded outer
-// canvas (SVG_W/SVG_H), which must be larger to fit the port number labels that spill outside it.
-const LOCAL_W = 60;
-const LOCAL_H = 40;
-const OX = 22;
-const OY = 0;
-const SVG_W = 104;
-const SVG_H = 61;
+export interface QuickExhaustValveGeometry {
+  localW: number;
+  localH: number;
+  ox: number;
+  oy: number;
+  svgW: number;
+  svgH: number;
+  /** Margin from the local box edge to the body rect. */
+  bodyMargin: number;
+}
+
+export const QUICK_EXHAUST_VALVE_DEFAULT_GEOMETRY: QuickExhaustValveGeometry = {
+  localW: 60,
+  localH: 40,
+  ox: 22,
+  oy: 0,
+  svgW: 104,
+  svgH: 61,
+  bodyMargin: 8,
+};
+
+export function drawQuickExhaustValveBody(
+  g: SVGElement,
+  geo: QuickExhaustValveGeometry,
+): {
+  '1': { cx: number; cy: number };
+  '2': { cx: number; cy: number };
+  '3': { cx: number; cy: number };
+} {
+  const m = geo.bodyMargin;
+  g.appendChild(
+    createSvgEl('rect', {
+      x: m,
+      y: m,
+      width: geo.localW - m * 2,
+      height: geo.localH - m * 2,
+      fill: '#fff',
+      stroke: '#111',
+      'stroke-width': 2,
+    }),
+  );
+
+  return {
+    '1': { cx: geo.localW / 2, cy: geo.localH - m },
+    '2': { cx: geo.localW - m, cy: geo.localH / 2 },
+    '3': { cx: m, cy: geo.localH / 2 },
+  };
+}
 
 /**
  * Self-piloted by its own supply port: when port 1 is pressurized it passes 1->2 through to the
@@ -19,35 +59,31 @@ const SVG_H = 61;
  * exhaust locally through the valve's own port 3 instead of back through the whole supply line.
  */
 export function createQuickExhaustValve(compLayer: HTMLElement, x: number, y: number): Component {
+  const geo = QUICK_EXHAUST_VALVE_DEFAULT_GEOMETRY;
   const shell = buildComponentShell(
     compLayer,
     QUICK_EXHAUST_VALVE_TYPE,
     x,
     y,
-    SVG_W,
-    SVG_H,
+    geo.svgW,
+    geo.svgH,
     'Quick-exhaust valve',
-    { x: OX + 8, y: OY + 8, w: LOCAL_W - 16, h: LOCAL_H - 16 },
+    {
+      x: geo.ox + geo.bodyMargin,
+      y: geo.oy + geo.bodyMargin,
+      w: geo.localW - geo.bodyMargin * 2,
+      h: geo.localH - geo.bodyMargin * 2,
+    },
   );
 
-  const g = createSvgEl('g', { transform: `translate(${OX},${OY})` });
-
-  const body = createSvgEl('rect', {
-    x: 8,
-    y: 8,
-    width: LOCAL_W - 16,
-    height: LOCAL_H - 16,
-    fill: '#fff',
-    stroke: '#111',
-    'stroke-width': 2,
-  });
-  g.appendChild(body);
+  const g = createSvgEl('g', { transform: `translate(${geo.ox},${geo.oy})` });
+  const p = drawQuickExhaustValveBody(g, geo);
   shell.svg.appendChild(g);
 
   const ports = {
-    '1': createLabeledPort(g, '1', LOCAL_W / 2, LOCAL_H - 8, 'V', 'below'),
-    '2': createLabeledPort(g, '2', LOCAL_W - 8, LOCAL_H / 2, 'H', 'right'),
-    '3': createLabeledPort(g, '3', 8, LOCAL_H / 2, 'H', 'left'),
+    '1': createLabeledPort(g, '1', p['1'].cx, p['1'].cy, 'V', 'below'),
+    '2': createLabeledPort(g, '2', p['2'].cx, p['2'].cy, 'H', 'right'),
+    '3': createLabeledPort(g, '3', p['3'].cx, p['3'].cy, 'H', 'left'),
   };
 
   const comp: Component = {
@@ -56,8 +92,8 @@ export function createQuickExhaustValve(compLayer: HTMLElement, x: number, y: nu
     el: shell.el,
     x,
     y,
-    svgW: SVG_W,
-    svgH: SVG_H,
+    svgW: geo.svgW,
+    svgH: geo.svgH,
     gx: 0,
     gy: 0,
     ports,

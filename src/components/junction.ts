@@ -4,8 +4,24 @@ import { buildComponentShell, createPort, createSvgEl } from './shared/svgHelper
 
 export const JUNCTION_TYPE = 'junction';
 
-const SVG_W = 14;
-const SVG_H = 14;
+export interface JunctionGeometry {
+  svgW: number;
+  svgH: number;
+  dotRadius: number;
+}
+
+export const JUNCTION_DEFAULT_GEOMETRY: JunctionGeometry = {
+  svgW: 14,
+  svgH: 14,
+  dotRadius: 4,
+};
+
+export function drawJunctionBody(g: SVGElement, geo: JunctionGeometry): { cx: number; cy: number } {
+  const cx = geo.svgW / 2;
+  const cy = geo.svgH / 2;
+  g.appendChild(createSvgEl('circle', { cx, cy, r: geo.dotRadius, fill: '#111' }));
+  return { cx, cy };
+}
 
 export function createJunction(
   compLayer: HTMLElement,
@@ -13,18 +29,12 @@ export function createJunction(
   y: number,
   entryOrientation: 'H' | 'V' = 'H',
 ): Component {
-  const shell = buildComponentShell(compLayer, JUNCTION_TYPE, x, y, SVG_W, SVG_H, '');
-
-  const dot = createSvgEl('circle', {
-    cx: SVG_W / 2,
-    cy: SVG_H / 2,
-    r: 4,
-    fill: '#111',
-  });
-  shell.svg.appendChild(dot);
+  const geo = JUNCTION_DEFAULT_GEOMETRY;
+  const shell = buildComponentShell(compLayer, JUNCTION_TYPE, x, y, geo.svgW, geo.svgH, '');
+  const { cx, cy } = drawJunctionBody(shell.svg, geo);
 
   const ports = {
-    P: createPort(shell.svg, 'P', SVG_W / 2, SVG_H / 2, entryOrientation, { radius: 4 }),
+    P: createPort(shell.svg, 'P', cx, cy, entryOrientation, { radius: geo.dotRadius }),
   };
 
   const comp: Component = {
@@ -33,8 +43,8 @@ export function createJunction(
     el: shell.el,
     x,
     y,
-    svgW: SVG_W,
-    svgH: SVG_H,
+    svgW: geo.svgW,
+    svgH: geo.svgH,
     gx: 0,
     gy: 0,
     ports,

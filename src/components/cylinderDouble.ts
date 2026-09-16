@@ -15,78 +15,155 @@ import {
 
 export const CYLINDER_DOUBLE_TYPE = 'cylinderDouble';
 
-const SVG_W = 202;
-const SVG_H = 84;
-const GX = 8;
-const GY = 8;
-const W = 176;
-const H = 56;
-const PORT_MARGIN = 6;
+export interface CylinderDoubleGeometry {
+  svgW: number;
+  svgH: number;
+  gx: number;
+  gy: number;
+  w: number;
+  h: number;
+  portMargin: number;
+  portInsetA: number;
+  portInsetB: number;
+  pistonWidth: number;
+  pistonTravelInset: number;
+  pistonToRodGap: number;
+  rodHeight: number;
+  rodTipInset: number;
+  rodTipWidth: number;
+  rodTipHeight: number;
+}
+
+export const CYLINDER_DOUBLE_DEFAULT_GEOMETRY: CylinderDoubleGeometry = {
+  svgW: 202,
+  svgH: 84,
+  gx: 8,
+  gy: 8,
+  w: 176,
+  h: 56,
+  portMargin: 6,
+  portInsetA: 10,
+  portInsetB: 10,
+  pistonWidth: 6,
+  pistonTravelInset: 10,
+  pistonToRodGap: 6,
+  rodHeight: 6,
+  rodTipInset: 10,
+  rodTipWidth: 10,
+  rodTipHeight: 12,
+};
+
+/** Piston/rod/tip x-layout for a given stroke position (0..1) - kept separate from the static
+ * body draw so the live simulation can recompute it every frame without redrawing anything else. */
+export function computeCylinderDoublePistonLayout(
+  geo: CylinderDoubleGeometry,
+  pos: number,
+): { px: number; rodX: number; rodWidth: number; tipX: number } {
+  const px = geo.pistonTravelInset + pos * (geo.w - geo.pistonTravelInset * 2);
+  const rodX = px + geo.pistonToRodGap;
+  const tipX = px + (geo.w - geo.rodTipInset);
+  return { px, rodX, rodWidth: Math.max(0, tipX - rodX), tipX };
+}
+
+export function drawCylinderDoubleBody(
+  g: SVGElement,
+  geo: CylinderDoubleGeometry,
+): {
+  piston: SVGRectElement;
+  rod: SVGRectElement;
+  rodTip: SVGRectElement;
+  a: { cx: number; cy: number };
+  b: { cx: number; cy: number };
+} {
+  const body = createSvgEl('rect', {
+    x: 0,
+    y: 0,
+    width: geo.w,
+    height: geo.h,
+    fill: '#fff',
+    stroke: '#111',
+    'stroke-width': 2,
+  });
+  const layout = computeCylinderDoublePistonLayout(geo, 0);
+  const piston = createSvgEl('rect', {
+    x: layout.px,
+    y: 0,
+    width: geo.pistonWidth,
+    height: geo.h,
+    fill: '#888',
+  });
+  const rod = createSvgEl('rect', {
+    x: layout.rodX,
+    y: geo.h / 2 - geo.rodHeight / 2,
+    width: layout.rodWidth,
+    height: geo.rodHeight,
+    fill: '#888',
+  });
+  const rodTip = createSvgEl('rect', {
+    x: layout.tipX,
+    y: geo.h / 2 - geo.rodTipHeight / 2,
+    width: geo.rodTipWidth,
+    height: geo.rodTipHeight,
+    fill: '#666',
+  });
+
+  const A = { cx: geo.portInsetA, cy: geo.h + geo.portMargin };
+  const B = { cx: geo.w - geo.portInsetB, cy: geo.h + geo.portMargin };
+  // Lead-in lines reaching the exact port centers (not just close to them), since a connected
+  // port's own circle is hidden - any gap between the body and the port would otherwise show
+  // up as a visible blank break in the wire.
+  const leadA = createSvgEl('line', {
+    x1: A.cx,
+    y1: geo.h,
+    x2: A.cx,
+    y2: A.cy,
+    stroke: '#111',
+    'stroke-width': 2,
+  });
+  const leadB = createSvgEl('line', {
+    x1: B.cx,
+    y1: geo.h,
+    x2: B.cx,
+    y2: B.cy,
+    stroke: '#111',
+    'stroke-width': 2,
+  });
+  g.append(body, piston, rod, rodTip, leadA, leadB);
+
+  return { piston, rod, rodTip, a: A, b: B };
+}
 
 export function createCylinderDouble(compLayer: HTMLElement, x: number, y: number): Component {
+  const geo = CYLINDER_DOUBLE_DEFAULT_GEOMETRY;
   let letter = nextCylinderLetter();
   const shell = buildComponentShell(
     compLayer,
     CYLINDER_DOUBLE_TYPE,
     x,
     y,
-    SVG_W,
-    SVG_H,
+    geo.svgW,
+    geo.svgH,
     `Cylinder ${letter}`,
-    { x: GX, y: GY, w: W, h: H },
+    { x: geo.gx, y: geo.gy, w: geo.w, h: geo.h },
   );
-  const g = createSvgEl('g', { transform: `translate(${GX},${GY})` });
-
-  const body = createSvgEl('rect', {
-    x: 0,
-    y: 0,
-    width: W,
-    height: H,
-    fill: '#fff',
-    stroke: '#111',
-    'stroke-width': 2,
-  });
-  const piston = createSvgEl('rect', { x: 60, y: 0, width: 6, height: H, fill: '#888' });
-  const rod = createSvgEl('rect', { x: 66, y: H / 2 - 3, width: W - 66, height: 6, fill: '#888' });
-  const rodTip = createSvgEl('rect', { x: W, y: H / 2 - 6, width: 10, height: 12, fill: '#666' });
-  // Lead-in lines reaching the exact port centers (not just close to them), since a connected
-  // port's own circle is hidden - any gap between the body and the port would otherwise show
-  // up as a visible blank break in the wire.
-  const leadA = createSvgEl('line', {
-    x1: 10,
-    y1: H,
-    x2: 10,
-    y2: H + PORT_MARGIN,
-    stroke: '#111',
-    'stroke-width': 2,
-  });
-  const leadB = createSvgEl('line', {
-    x1: W - 10,
-    y1: H,
-    x2: W - 10,
-    y2: H + PORT_MARGIN,
-    stroke: '#111',
-    'stroke-width': 2,
-  });
-  g.append(body, piston, rod, rodTip, leadA, leadB);
+  const g = createSvgEl('g', { transform: `translate(${geo.gx},${geo.gy})` });
+  const { piston, rod, rodTip, a: A, b: B } = drawCylinderDoubleBody(g, geo);
   shell.svg.appendChild(g);
 
   const ports = {
-    A: createPort(g, 'A', 10, H + PORT_MARGIN, 'V'),
-    B: createPort(g, 'B', W - 10, H + PORT_MARGIN, 'V'),
+    A: createPort(g, 'A', A.cx, A.cy, 'V'),
+    B: createPort(g, 'B', B.cx, B.cy, 'V'),
   };
 
   let pos = 0;
   let sensors: CylinderSensor[] = defaultSensors(letter);
 
   function updateVisual(): void {
-    const px = 10 + pos * (W - 20);
-    piston.setAttribute('x', String(px));
-    const rodX = px + 6;
-    const tipX = px + (W - 10);
-    rod.setAttribute('x', String(rodX));
-    rod.setAttribute('width', String(Math.max(0, tipX - rodX)));
-    rodTip.setAttribute('x', String(tipX));
+    const layout = computeCylinderDoublePistonLayout(geo, pos);
+    piston.setAttribute('x', String(layout.px));
+    rod.setAttribute('x', String(layout.rodX));
+    rod.setAttribute('width', String(layout.rodWidth));
+    rodTip.setAttribute('x', String(layout.tipX));
   }
   updateVisual();
 
@@ -96,10 +173,10 @@ export function createCylinderDouble(compLayer: HTMLElement, x: number, y: numbe
     el: shell.el,
     x,
     y,
-    svgW: SVG_W,
-    svgH: SVG_H,
-    gx: GX,
-    gy: GY,
+    svgW: geo.svgW,
+    svgH: geo.svgH,
+    gx: geo.gx,
+    gy: geo.gy,
     ports,
 
     conductivityRule(): PortConnection[] {

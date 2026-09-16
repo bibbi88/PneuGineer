@@ -2,13 +2,53 @@ import { createSvgEl, addArrowMarker, createLabeledPort } from './svgHelpers';
 import { createSilencerSymbol, setSilencerState, type SilencerOption } from './silencer';
 import type { PortDef } from '../../core/types';
 
-export const SLIDING_VALVE_W = 140;
-export const SLIDING_VALVE_H = 60;
-/** Static placement of the whole symbol within its component canvas - large enough that every
- * variant's actuator extras (pilot ports, roller, spring) stay inside the canvas instead of
- * relying entirely on overflow:visible. */
-export const SLIDING_VALVE_OFFSET_X = 54;
-export const SLIDING_VALVE_OFFSET_Y = 34;
+export interface SlidingValve32Geometry {
+  bodyW: number;
+  bodyH: number;
+  offsetX: number;
+  offsetY: number;
+  /** Ratio of the right cell's half-width used to inset the P1/P2/L1/L2 column from the frame's
+   * vertical centerline. */
+  insetRightRatio: number;
+  /** Gap from the frame's side edge to port 3's column / the T-block's stem column. */
+  portEdgeGap: number;
+  /** How far the diagonal flow arrow's endpoints sit clear of the frame's top/bottom edges. */
+  arrowEdgeGap: number;
+  /** Half-width of the T-block's crossbar. */
+  tBlockBarHalfWidth: number;
+  /** Gap from the frame's bottom edge up to the T-block's crossbar. */
+  tBlockBottomGap: number;
+  /** Gap from the T-block's crossbar down to its stem's open end. */
+  tBlockStemGap: number;
+  /** Direction (in local +y units) the silencer glyph fitted to port 3 extends away from it. */
+  silencerDir: 1 | -1;
+}
+
+export const SLIDING_VALVE_32_DEFAULT_GEOMETRY: SlidingValve32Geometry = {
+  bodyW: 140,
+  bodyH: 60,
+  // Static placement of the whole symbol within its component canvas - large enough that every
+  // variant's actuator extras (pilot ports, roller, spring) stay inside the canvas instead of
+  // relying entirely on overflow:visible.
+  offsetX: 54,
+  offsetY: 34,
+  insetRightRatio: 0.25,
+  portEdgeGap: 12,
+  arrowEdgeGap: 10,
+  tBlockBarHalfWidth: 10,
+  tBlockBottomGap: 18,
+  tBlockStemGap: 8,
+  silencerDir: 1,
+};
+
+// Every variant (push button, air-piloted, limit valve, time delay) positions its own
+// actuator-specific extras (spring, roller, pilot triangle, clock) relative to these - derived
+// from the shared geometry above (rather than duplicated literals) so tuning the shared body via
+// the symbol lab keeps every variant's actuator artwork lined up with it.
+export const SLIDING_VALVE_W = SLIDING_VALVE_32_DEFAULT_GEOMETRY.bodyW;
+export const SLIDING_VALVE_H = SLIDING_VALVE_32_DEFAULT_GEOMETRY.bodyH;
+export const SLIDING_VALVE_OFFSET_X = SLIDING_VALVE_32_DEFAULT_GEOMETRY.offsetX;
+export const SLIDING_VALVE_OFFSET_Y = SLIDING_VALVE_32_DEFAULT_GEOMETRY.offsetY;
 
 export interface SlidingValve32Body {
   /** Everything that slides sideways when the valve actuates - append actuator-specific
@@ -22,11 +62,16 @@ export interface SlidingValve32Body {
   getSilencer(): SilencerOption;
 }
 
-function tBlock(xCenter: number, yBar: number, yStemEnd: number): SVGGElement {
+function tBlock(
+  xCenter: number,
+  yBar: number,
+  yStemEnd: number,
+  barHalfWidth: number,
+): SVGGElement {
   const g = createSvgEl('g');
   g.appendChild(
     createSvgEl('path', {
-      d: `M ${xCenter - 10} ${yBar} L ${xCenter + 10} ${yBar}`,
+      d: `M ${xCenter - barHalfWidth} ${yBar} L ${xCenter + barHalfWidth} ${yBar}`,
       fill: 'none',
       stroke: '#111',
       'stroke-width': 2,
@@ -47,19 +92,23 @@ function tBlock(xCenter: number, yBar: number, yStemEnd: number): SVGGElement {
  * valve): a two-cell frame with a diagonal flow arrow + T-block (blocked port) symbol in each
  * cell, which slides sideways to swap which cell sits under the fixed 1/2/3 ports - matching the
  * original app's pushButton32/limitValve32/airValve32 artwork. */
-export function buildSlidingValve32Body(svg: SVGSVGElement, arrowId: string): SlidingValve32Body {
-  const W = SLIDING_VALVE_W;
-  const H = SLIDING_VALVE_H;
+export function buildSlidingValve32Body(
+  svg: SVGSVGElement,
+  arrowId: string,
+  geo: SlidingValve32Geometry = SLIDING_VALVE_32_DEFAULT_GEOMETRY,
+): SlidingValve32Body {
+  const W = geo.bodyW;
+  const H = geo.bodyH;
   const midX = W / 2;
   addArrowMarker(svg, arrowId);
 
-  const insetRight = Math.round((W - midX) * 0.25);
-  const P2 = { cx: midX + insetRight, cy: -10 };
-  const P1 = { cx: midX + insetRight, cy: H + 10 };
-  const P3 = { cx: W - 12, cy: H + 10 };
+  const insetRight = Math.round((W - midX) * geo.insetRightRatio);
+  const P2 = { cx: midX + insetRight, cy: -geo.arrowEdgeGap };
+  const P1 = { cx: midX + insetRight, cy: H + geo.arrowEdgeGap };
+  const P3 = { cx: W - geo.portEdgeGap, cy: H + geo.arrowEdgeGap };
   const L2 = { cx: insetRight, cy: P2.cy };
   const L1 = { cx: insetRight, cy: P1.cy };
-  const L3 = { cx: midX - 12, cy: P3.cy };
+  const L3 = { cx: midX - geo.portEdgeGap, cy: P3.cy };
 
   const mover = createSvgEl('g');
 
@@ -94,32 +143,36 @@ export function buildSlidingValve32Body(svg: SVGSVGElement, arrowId: string): Sl
   const gLeft = createSvgEl('g');
   gLeft.appendChild(
     createSvgEl('path', {
-      d: `M ${L1.cx} ${L1.cy - 10} L ${L2.cx} ${L2.cy + 10}`,
+      d: `M ${L1.cx} ${L1.cy - geo.arrowEdgeGap} L ${L2.cx} ${L2.cy + geo.arrowEdgeGap}`,
       fill: 'none',
       stroke: '#111',
       'stroke-width': 2,
       'marker-end': `url(#${arrowId})`,
     }),
   );
-  gLeft.appendChild(tBlock(L3.cx, H - 18, L3.cy - 8));
+  gLeft.appendChild(
+    tBlock(L3.cx, H - geo.tBlockBottomGap, L3.cy - geo.tBlockStemGap, geo.tBlockBarHalfWidth),
+  );
 
   const gRight = createSvgEl('g');
   gRight.appendChild(
     createSvgEl('path', {
-      d: `M ${P2.cx} ${P2.cy + 10} L ${P3.cx} ${P3.cy - 10}`,
+      d: `M ${P2.cx} ${P2.cy + geo.arrowEdgeGap} L ${P3.cx} ${P3.cy - geo.arrowEdgeGap}`,
       fill: 'none',
       stroke: '#111',
       'stroke-width': 2,
       'marker-end': `url(#${arrowId})`,
     }),
   );
-  gRight.appendChild(tBlock(P1.cx, H - 18, P1.cy - 8));
+  gRight.appendChild(
+    tBlock(P1.cx, H - geo.tBlockBottomGap, P1.cy - geo.tBlockStemGap, geo.tBlockBarHalfWidth),
+  );
 
   mover.append(body, boxLeft, boxRight, gLeft, gRight);
   svg.appendChild(mover);
 
-  const ox = SLIDING_VALVE_OFFSET_X;
-  const oy = SLIDING_VALVE_OFFSET_Y;
+  const ox = geo.offsetX;
+  const oy = geo.offsetY;
 
   // Fixed lead-in lines from the frame's top/bottom edge to each port's exact center (not just
   // close to it), since a connected port's own circle is hidden - any gap would otherwise show
@@ -168,7 +221,7 @@ export function buildSlidingValve32Body(svg: SVGSVGElement, arrowId: string): Sl
   // drawn directly on `svg`. Defaults on, matching how these valves are conventionally fitted
   // in practice - most exhaust ports get a silencer unless there's a specific reason not to.
   let silencer3: SilencerOption = 'silencer';
-  const silencer3El = createSilencerSymbol(ox + P3.cx, oy + P3.cy, 1);
+  const silencer3El = createSilencerSymbol(ox + P3.cx, oy + P3.cy, geo.silencerDir);
   setSilencerState(ports['3'], silencer3El, silencer3);
   svg.appendChild(silencer3El);
 

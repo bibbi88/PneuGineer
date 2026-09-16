@@ -14,10 +14,123 @@ export const TIME_DELAY_VALVE_TYPE = 'timeDelayValve';
 // Extra right-side room for the spring symbol, beyond the offset already reserved on the left.
 const SVG_W = SLIDING_VALVE_OFFSET_X + SLIDING_VALVE_W + 48;
 const SVG_H = SLIDING_VALVE_OFFSET_Y + SLIDING_VALVE_H + 30;
-// Local to the mover (not the outer canvas) - reparented into it, so it must use the mover's
-// own coordinate system, matching SLIDING_VALVE_H rather than the padded outer SVG_H.
-const PILOT_LOCAL = { cx: -40, cy: SLIDING_VALVE_H / 2 };
 const DEFAULT_DELAY_SEC = 1.0;
+
+export interface TimeDelayValveGeometry {
+  /** x of the pilot port 12, relative to the mover's own origin. */
+  pilotPortX: number;
+  /** x of the link segment where it bends on its way in from the pilot port to the clock. */
+  pilotLinkInnerX: number;
+  clockX: number;
+  clockR: number;
+  clockHourLen: number;
+  clockMinuteDx: number;
+  clockMinuteDy: number;
+  /** y offset (above the frame) of the delay-seconds label - in canvas coordinates, not the mover's. */
+  delayLabelYOffset: number;
+  springSegLen: number;
+  springZigW: number;
+  springZigH: number;
+}
+
+export const TIME_DELAY_VALVE_DEFAULT_GEOMETRY: TimeDelayValveGeometry = {
+  pilotPortX: -40,
+  pilotLinkInnerX: -14,
+  clockX: -26,
+  clockR: 12,
+  clockHourLen: 7,
+  clockMinuteDx: 5,
+  clockMinuteDy: 2,
+  delayLabelYOffset: -18,
+  springSegLen: 20,
+  springZigW: 10,
+  springZigH: 10,
+};
+
+/**
+ * Draws the clock symbol + pilot link + spring into the mover, matching the original app's
+ * time-delay artwork (a clock stands in for the triangle/roller used by the other pilot
+ * actuators, marking this valve as time-driven rather than mechanically/manually driven).
+ * Coordinates are local to the mover, not the canvas.
+ */
+export function drawTimeDelayValveActuator(
+  mover: SVGGElement,
+  svg: SVGSVGElement,
+  geo: TimeDelayValveGeometry,
+): { port12: ReturnType<typeof createPort> } {
+  const cy = SLIDING_VALVE_H / 2;
+
+  const spring = createSvgEl('g', { transform: `translate(${SLIDING_VALVE_W}, ${cy})` });
+  spring.appendChild(
+    createSvgEl('path', {
+      d: `M 0 0 L ${geo.springSegLen} 0`,
+      fill: 'none',
+      stroke: '#111',
+      'stroke-width': 2,
+    }),
+  );
+  const s = geo.springSegLen;
+  const zw = geo.springZigW;
+  const zh = geo.springZigH;
+  spring.appendChild(
+    createSvgEl('path', {
+      d: `M ${s} 0 l ${zw} ${-zh} l ${zw} ${zh * 2} l ${zw} ${-zh * 2}`,
+      fill: 'none',
+      stroke: '#111',
+      'stroke-width': 2,
+    }),
+  );
+
+  const clock = createSvgEl('g', { transform: `translate(${geo.clockX}, ${cy})` });
+  clock.appendChild(
+    createSvgEl('circle', {
+      cx: 0,
+      cy: 0,
+      r: geo.clockR,
+      fill: '#fff',
+      stroke: '#111',
+      'stroke-width': 2,
+    }),
+  );
+  clock.appendChild(
+    createSvgEl('line', {
+      x1: 0,
+      y1: 0,
+      x2: 0,
+      y2: -geo.clockHourLen,
+      stroke: '#111',
+      'stroke-width': 1.5,
+    }),
+  );
+  clock.appendChild(
+    createSvgEl('line', {
+      x1: 0,
+      y1: 0,
+      x2: geo.clockMinuteDx,
+      y2: geo.clockMinuteDy,
+      stroke: '#111',
+      'stroke-width': 1.5,
+    }),
+  );
+  const pilotLink = createSvgEl('path', {
+    d: `M ${geo.pilotLinkInnerX} ${cy} L ${geo.pilotPortX} ${cy}`,
+    fill: 'none',
+    stroke: '#111',
+    'stroke-width': 2,
+  });
+  const pilotLink2 = createSvgEl('path', {
+    d: `M 0 ${cy} L ${geo.pilotLinkInnerX} ${cy}`,
+    fill: 'none',
+    stroke: '#111',
+    'stroke-width': 2,
+  });
+  const port12 = createPort(svg, '12', geo.pilotPortX, cy, 'H', {
+    isPilot: true,
+    pilotDir: -1,
+  });
+  mover.append(pilotLink, pilotLink2, clock, port12.el, spring);
+  return { port12 };
+}
 
 /**
  * Pneumatic ON-delay timer: built on the same sliding two-cell 3/2 body as the other pilot
@@ -26,6 +139,7 @@ const DEFAULT_DELAY_SEC = 1.0;
  * valve switches; it resets immediately (spring return) the instant the pilot depressurizes.
  */
 export function createTimeDelayValve(compLayer: HTMLElement, x: number, y: number): Component {
+  const geo = TIME_DELAY_VALVE_DEFAULT_GEOMETRY;
   const shell = buildComponentShell(
     compLayer,
     TIME_DELAY_VALVE_TYPE,
@@ -42,56 +156,12 @@ export function createTimeDelayValve(compLayer: HTMLElement, x: number, y: numbe
     },
   );
   const valve = buildSlidingValve32Body(shell.svg, `arrow-delay-${uid()}`);
-
-  const spring = createSvgEl('g', {
-    transform: `translate(${SLIDING_VALVE_W}, ${SLIDING_VALVE_H / 2})`,
-  });
-  spring.appendChild(
-    createSvgEl('path', { d: 'M 0 0 L 20 0', fill: 'none', stroke: '#111', 'stroke-width': 2 }),
-  );
-  spring.appendChild(
-    createSvgEl('path', {
-      d: 'M 20 0 l 10 -10 l 10 20 l 10 -20',
-      fill: 'none',
-      stroke: '#111',
-      'stroke-width': 2,
-    }),
-  );
-
-  // Clock symbol marks the pilot side as time-delayed rather than mechanically/manually driven.
-  // Coordinates below are local to the mover, not the outer canvas.
-  const clock = createSvgEl('g', { transform: `translate(-26, ${SLIDING_VALVE_H / 2})` });
-  clock.appendChild(
-    createSvgEl('circle', { cx: 0, cy: 0, r: 12, fill: '#fff', stroke: '#111', 'stroke-width': 2 }),
-  );
-  clock.appendChild(
-    createSvgEl('line', { x1: 0, y1: 0, x2: 0, y2: -7, stroke: '#111', 'stroke-width': 1.5 }),
-  );
-  clock.appendChild(
-    createSvgEl('line', { x1: 0, y1: 0, x2: 5, y2: 2, stroke: '#111', 'stroke-width': 1.5 }),
-  );
-  const pilotLink = createSvgEl('path', {
-    d: `M -14 ${SLIDING_VALVE_H / 2} L ${PILOT_LOCAL.cx} ${PILOT_LOCAL.cy}`,
-    fill: 'none',
-    stroke: '#111',
-    'stroke-width': 2,
-  });
-  const pilotLink2 = createSvgEl('path', {
-    d: `M 0 ${SLIDING_VALVE_H / 2} L -14 ${SLIDING_VALVE_H / 2}`,
-    fill: 'none',
-    stroke: '#111',
-    'stroke-width': 2,
-  });
-  const port12 = createPort(shell.svg, '12', PILOT_LOCAL.cx, PILOT_LOCAL.cy, 'H', {
-    isPilot: true,
-    pilotDir: -1,
-  });
-  valve.mover.append(pilotLink, pilotLink2, clock, port12.el, spring);
+  const { port12 } = drawTimeDelayValveActuator(valve.mover, shell.svg, geo);
 
   // Not part of the mover (doesn't slide) - positioned in canvas-absolute coordinates instead.
   const delayLabel = createSvgEl('text', {
     x: SLIDING_VALVE_OFFSET_X + SLIDING_VALVE_W / 2,
-    y: SLIDING_VALVE_OFFSET_Y - 18,
+    y: SLIDING_VALVE_OFFSET_Y + geo.delayLabelYOffset,
     'text-anchor': 'middle',
     'font-size': 11,
   });

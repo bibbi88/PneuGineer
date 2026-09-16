@@ -1,4 +1,4 @@
-import type { Component, ConductivityContext, PortConnection } from '../core/types';
+import type { Component, ConductivityContext, PortConnection, PortDef } from '../core/types';
 import { uid } from '../core/ids';
 import {
   buildComponentShell,
@@ -15,23 +15,55 @@ import { createSilencerSymbol, setSilencerState, type SilencerOption } from './s
 export const VALVE_52_TYPE = 'valve52';
 
 // ===== Geometry, ported 1:1 from the original app's two-cell sliding 5/2 symbol =====
-const W0 = 80; // single cell width
-const H0 = 60; // single cell height
-const BODY_W = W0 * 2;
-const BODY_H = H0;
-const GX0 = 115; // static offset of the housing within the svg canvas (room for pilot ports)
-const GY0 = 24; // vertical offset so ports 4/2 (above) and 5/1/3 (below) fit inside the canvas
-const SVG_W = BODY_W + 110;
-const SVG_H = BODY_H + 49;
-const STROKE = 2;
-const FONT = 10;
-const TRI_H = BODY_H / 4;
-const TRI_W = TRI_H * 1.2;
-const TRI_GAP = 7;
-const PILOT_PORT_OFFSET = 24;
-const PILOT_CY = H0 / 2;
-const PORT14_LOCAL_X = -15 - PILOT_PORT_OFFSET;
-const PORT12_LOCAL_X = W0 * 2 + 15 + PILOT_PORT_OFFSET;
+export interface Valve52Geometry {
+  /** Width/height of a single cell - the housing is always two cells wide. */
+  w0: number;
+  h0: number;
+  /** Static offset of the housing within the svg canvas (room for pilot ports). */
+  gx0: number;
+  gy0: number;
+  /** Extra canvas room beyond the two-cell body, split as svgW = w0*2 + extraW / svgH = h0 + extraH. */
+  extraW: number;
+  extraH: number;
+  stroke: number;
+  font: number;
+  /** Pilot triangle height as a fraction of h0, and its width as a multiple of that height. */
+  triHRatio: number;
+  triWRatio: number;
+  triGap: number;
+  pilotPortOffset: number;
+  /** Extra reach (beyond the triangle's own tip) from each pilot port to its triangle. */
+  pilotLinkGap: number;
+  /** Inset of each cell's own diagonal/vertical flow arrows from the cell's edges. */
+  cellArrowInset: number;
+  /** x-inset (from the housing's side edge) of ports 4/2/5/3; y-lead (above/below the housing) of ports 4/2/5/1/3. */
+  fixedPortInset: number;
+  fixedPortLead: number;
+  /** Label offset used for the crowded bottom-row ports (5/1/3). */
+  tightLabelDx: number;
+  tightLabelDy: number;
+}
+
+export const VALVE_52_DEFAULT_GEOMETRY: Valve52Geometry = {
+  w0: 80,
+  h0: 60,
+  gx0: 115,
+  gy0: 24,
+  extraW: 110,
+  extraH: 49,
+  stroke: 2,
+  font: 10,
+  triHRatio: 0.25,
+  triWRatio: 1.2,
+  triGap: 7,
+  pilotPortOffset: 24,
+  pilotLinkGap: 15,
+  cellArrowInset: 10,
+  fixedPortInset: 10,
+  fixedPortLead: 10,
+  tightLabelDx: -8,
+  tightLabelDy: 4,
+};
 
 function addDoubleArrow(
   parent: SVGElement,
@@ -39,6 +71,7 @@ function addDoubleArrow(
   y1: number,
   x2: number,
   y2: number,
+  stroke: number,
   arrowId: string,
 ): void {
   parent.appendChild(
@@ -48,29 +81,41 @@ function addDoubleArrow(
       x2,
       y2,
       stroke: '#111',
-      'stroke-width': STROKE,
+      'stroke-width': stroke,
       'marker-start': `url(#${arrowId})`,
       'marker-end': `url(#${arrowId})`,
     }),
   );
 }
 
-export function createValve52(compLayer: HTMLElement, x: number, y: number): Component {
-  // The two-cell sliding assembly is always fully drawn (no clipping window), so its footprint
-  // physically shifts sideways by one cell width (W0) between states - state 0 spans
-  // [GX0, GX0+BODY_W], state 1 spans [GX0-W0, GX0+W0]. The component defaults (and resets) to
-  // state 1, so that's the footprint getBounds() should report; using state 0's instead is what
-  // misplaced the selection outline and left half of every sidebar icon blank.
-  const shell = buildComponentShell(compLayer, VALVE_52_TYPE, x, y, SVG_W, SVG_H, '5/2 valve', {
-    x: GX0 - W0,
-    y: GY0,
-    w: BODY_W,
-    h: BODY_H,
-  });
-  const svg = shell.svg;
-  svg.style.overflow = 'visible';
+export interface Valve52Body {
+  gInner: SVGGElement;
+  gSlide: SVGGElement;
+  midX: number;
+  fixedPorts: { '4': PortDef; '2': PortDef; '5': PortDef; '1': PortDef; '3': PortDef };
+  port12: PortDef;
+  port14: PortDef;
+  silencer3El: SVGGElement;
+  silencer5El: SVGGElement;
+}
 
-  const arrowId = `arrow-v52-${uid()}`;
+/** Draws the full two-cell sliding 5/2 body: both cells' flow arrows, both pilot triangles, the
+ * fixed 1/2/3/4/5 ports and their silencers. `gInner` (returned) carries the housing's static
+ * offset plus whatever slide shift the caller applies via its own transform. */
+export function drawValve52Body(
+  svg: SVGSVGElement,
+  geo: Valve52Geometry,
+  arrowId: string,
+): Valve52Body {
+  const W0 = geo.w0;
+  const H0 = geo.h0;
+  const BODY_W = W0 * 2;
+  const TRI_H = H0 * geo.triHRatio;
+  const TRI_W = TRI_H * geo.triWRatio;
+  const PILOT_CY = H0 / 2;
+  const PORT14_LOCAL_X = -geo.pilotLinkGap - geo.pilotPortOffset;
+  const PORT12_LOCAL_X = W0 * 2 + geo.pilotLinkGap + geo.pilotPortOffset;
+
   addDoubleArrowMarker(svg, arrowId);
 
   // gInner carries the fixed housing offset (GX0) plus the dynamic slide shift in one
@@ -87,11 +132,19 @@ export function createValve52(compLayer: HTMLElement, x: number, y: number): Com
       height: H0,
       fill: '#fff',
       stroke: '#111',
-      'stroke-width': STROKE,
+      'stroke-width': geo.stroke,
     }),
   );
-  addDoubleArrow(cell0, W0 / 2, H0, 10, 0, arrowId);
-  addDoubleArrow(cell0, W0 - 10, 0, W0 - 10, H0, arrowId);
+  addDoubleArrow(cell0, W0 / 2, H0, geo.cellArrowInset, 0, geo.stroke, arrowId);
+  addDoubleArrow(
+    cell0,
+    W0 - geo.cellArrowInset,
+    0,
+    W0 - geo.cellArrowInset,
+    H0,
+    geo.stroke,
+    arrowId,
+  );
 
   const cell1 = createSvgEl('g', { transform: `translate(${W0},0)` });
   cell1.appendChild(
@@ -102,16 +155,16 @@ export function createValve52(compLayer: HTMLElement, x: number, y: number): Com
       height: H0,
       fill: '#fff',
       stroke: '#111',
-      'stroke-width': STROKE,
+      'stroke-width': geo.stroke,
     }),
   );
-  addDoubleArrow(cell1, W0 / 2, H0, W0 - 10, 0, arrowId);
-  addDoubleArrow(cell1, 10, 0, 10, H0, arrowId);
+  addDoubleArrow(cell1, W0 / 2, H0, W0 - geo.cellArrowInset, 0, geo.stroke, arrowId);
+  addDoubleArrow(cell1, geo.cellArrowInset, 0, geo.cellArrowInset, H0, geo.stroke, arrowId);
 
   gSlide.append(cell0, cell1);
 
   function addTriangleAndWallLine(parent: SVGElement, side: 'left' | 'right'): void {
-    const tipX = side === 'left' ? -TRI_GAP : BODY_W + TRI_GAP;
+    const tipX = side === 'left' ? -geo.triGap : BODY_W + geo.triGap;
     const dir = side === 'left' ? -1 : 1;
     const points = [
       [tipX, PILOT_CY],
@@ -123,7 +176,7 @@ export function createValve52(compLayer: HTMLElement, x: number, y: number): Com
         points: points.map((p) => p.join(',')).join(' '),
         fill: 'none',
         stroke: '#111',
-        'stroke-width': STROKE,
+        'stroke-width': geo.stroke,
       }),
     );
     parent.appendChild(
@@ -133,7 +186,7 @@ export function createValve52(compLayer: HTMLElement, x: number, y: number): Com
         x2: side === 'left' ? 0 : BODY_W,
         y2: PILOT_CY,
         stroke: '#111',
-        'stroke-width': STROKE,
+        'stroke-width': geo.stroke,
       }),
     );
   }
@@ -150,20 +203,20 @@ export function createValve52(compLayer: HTMLElement, x: number, y: number): Com
     createSvgEl('line', {
       x1: PORT14_LOCAL_X,
       y1: PILOT_CY,
-      x2: -TRI_GAP - TRI_W,
+      x2: -geo.triGap - TRI_W,
       y2: PILOT_CY,
       stroke: '#111',
-      'stroke-width': STROKE,
+      'stroke-width': geo.stroke,
     }),
   );
   gP12.appendChild(
     createSvgEl('line', {
-      x1: BODY_W + TRI_GAP + TRI_W,
+      x1: BODY_W + geo.triGap + TRI_W,
       y1: PILOT_CY,
       x2: PORT12_LOCAL_X,
       y2: PILOT_CY,
       stroke: '#111',
-      'stroke-width': STROKE,
+      'stroke-width': geo.stroke,
     }),
   );
 
@@ -176,7 +229,7 @@ export function createValve52(compLayer: HTMLElement, x: number, y: number): Com
     x: PORT14_LOCAL_X,
     y: PILOT_CY - 10,
     'text-anchor': 'middle',
-    'font-size': FONT,
+    'font-size': geo.font,
   });
   label14.textContent = '14';
   gP14.append(port14.el, label14);
@@ -190,7 +243,7 @@ export function createValve52(compLayer: HTMLElement, x: number, y: number): Com
     x: PORT12_LOCAL_X,
     y: PILOT_CY - 10,
     'text-anchor': 'middle',
-    'font-size': FONT,
+    'font-size': geo.font,
   });
   label12.textContent = '12';
   gP12.append(port12.el, label12);
@@ -200,11 +253,11 @@ export function createValve52(compLayer: HTMLElement, x: number, y: number): Com
 
   // ===== Fixed ports (do not slide), offset by GX0 into the housing's coordinate space =====
   const fixedPortsLocal = {
-    '4': { cx: 10, cy: -10 },
-    '2': { cx: W0 - 10, cy: -10 },
-    '5': { cx: 10, cy: H0 + 10 },
-    '1': { cx: W0 / 2, cy: H0 + 10 },
-    '3': { cx: W0 - 10, cy: H0 + 10 },
+    '4': { cx: geo.fixedPortInset, cy: -geo.fixedPortLead },
+    '2': { cx: W0 - geo.fixedPortInset, cy: -geo.fixedPortLead },
+    '5': { cx: geo.fixedPortInset, cy: H0 + geo.fixedPortLead },
+    '1': { cx: W0 / 2, cy: H0 + geo.fixedPortLead },
+    '3': { cx: W0 - geo.fixedPortInset, cy: H0 + geo.fixedPortLead },
   } as const;
 
   // Fixed lead-in lines from the housing's top/bottom edge to each port's exact center (not
@@ -216,12 +269,12 @@ export function createValve52(compLayer: HTMLElement, x: number, y: number): Com
     const p = fixedPortsLocal[key];
     svg.appendChild(
       createSvgEl('line', {
-        x1: GX0 + p.cx,
-        y1: GY0,
-        x2: GX0 + p.cx,
-        y2: GY0 + p.cy,
+        x1: geo.gx0 + p.cx,
+        y1: geo.gy0,
+        x2: geo.gx0 + p.cx,
+        y2: geo.gy0 + p.cy,
         stroke: '#111',
-        'stroke-width': STROKE,
+        'stroke-width': geo.stroke,
       }),
     );
   }
@@ -229,12 +282,12 @@ export function createValve52(compLayer: HTMLElement, x: number, y: number): Com
     const p = fixedPortsLocal[key];
     svg.appendChild(
       createSvgEl('line', {
-        x1: GX0 + p.cx,
-        y1: GY0 + H0,
-        x2: GX0 + p.cx,
-        y2: GY0 + p.cy,
+        x1: geo.gx0 + p.cx,
+        y1: geo.gy0 + H0,
+        x2: geo.gx0 + p.cx,
+        y2: geo.gy0 + p.cy,
         stroke: '#111',
-        'stroke-width': STROKE,
+        'stroke-width': geo.stroke,
       }),
     );
   }
@@ -243,29 +296,33 @@ export function createValve52(compLayer: HTMLElement, x: number, y: number): Com
   // 3) sit only 30 units apart, so that offset reads as ambiguous - closer to the neighboring
   // port than to its own dot. A tighter, port-specific offset keeps each digit next to the port
   // it actually labels. Ports 4/2 on the top row aren't crowded this way and keep the default.
-  function tightLeftLabeledPort(key: '5' | '1' | '3'): ReturnType<typeof createPort> {
+  function tightLeftLabeledPort(key: '5' | '1' | '3'): PortDef {
     const p = fixedPortsLocal[key];
-    const px = GX0 + p.cx;
-    const py = GY0 + p.cy;
+    const px = geo.gx0 + p.cx;
+    const py = geo.gy0 + p.cy;
     const port = createPort(svg, key, px, py, 'V');
-    createPortLabel(svg, px, py, key, { anchor: 'end', dx: -8, dy: 4 });
+    createPortLabel(svg, px, py, key, {
+      anchor: 'end',
+      dx: geo.tightLabelDx,
+      dy: geo.tightLabelDy,
+    });
     return port;
   }
 
-  const fixedPorts = {
+  const fixedPorts: Valve52Body['fixedPorts'] = {
     '4': createLabeledPort(
       svg,
       '4',
-      GX0 + fixedPortsLocal['4'].cx,
-      GY0 + fixedPortsLocal['4'].cy,
+      geo.gx0 + fixedPortsLocal['4'].cx,
+      geo.gy0 + fixedPortsLocal['4'].cy,
       'V',
       'left',
     ),
     '2': createLabeledPort(
       svg,
       '2',
-      GX0 + fixedPortsLocal['2'].cx,
-      GY0 + fixedPortsLocal['2'].cy,
+      geo.gx0 + fixedPortsLocal['2'].cx,
+      geo.gy0 + fixedPortsLocal['2'].cy,
       'V',
       'left',
     ),
@@ -278,31 +335,57 @@ export function createValve52(compLayer: HTMLElement, x: number, y: number): Com
   // gInner), so each silencer just moves with the whole component like everything else drawn
   // directly on `svg`. Default on, matching how these valves are conventionally fitted in
   // practice - most exhaust ports get a silencer unless there's a specific reason not to.
-  let silencer3: SilencerOption = 'silencer';
-  let silencer5: SilencerOption = 'silencer';
   const silencer3El = createSilencerSymbol(
-    GX0 + fixedPortsLocal['3'].cx,
-    GY0 + fixedPortsLocal['3'].cy,
+    geo.gx0 + fixedPortsLocal['3'].cx,
+    geo.gy0 + fixedPortsLocal['3'].cy,
     1,
   );
   const silencer5El = createSilencerSymbol(
-    GX0 + fixedPortsLocal['5'].cx,
-    GY0 + fixedPortsLocal['5'].cy,
+    geo.gx0 + fixedPortsLocal['5'].cx,
+    geo.gy0 + fixedPortsLocal['5'].cy,
     1,
   );
-  setSilencerState(fixedPorts['3'], silencer3El, silencer3);
-  setSilencerState(fixedPorts['5'], silencer5El, silencer5);
+  setSilencerState(fixedPorts['3'], silencer3El, 'silencer');
+  setSilencerState(fixedPorts['5'], silencer5El, 'silencer');
   svg.append(silencer3El, silencer5El);
 
+  return { gInner, gSlide, midX: W0, fixedPorts, port12, port14, silencer3El, silencer5El };
+}
+
+export function createValve52(compLayer: HTMLElement, x: number, y: number): Component {
+  const geo = VALVE_52_DEFAULT_GEOMETRY;
+  const svgW = geo.w0 * 2 + geo.extraW;
+  const svgH = geo.h0 + geo.extraH;
+
+  // The two-cell sliding assembly is always fully drawn (no clipping window), so its footprint
+  // physically shifts sideways by one cell width (w0) between states - state 0 spans
+  // [gx0, gx0+bodyW], state 1 spans [gx0-w0, gx0+w0]. The component defaults (and resets) to
+  // state 1, so that's the footprint getBounds() should report; using state 0's instead is what
+  // misplaced the selection outline and left half of every sidebar icon blank.
+  const shell = buildComponentShell(compLayer, VALVE_52_TYPE, x, y, svgW, svgH, '5/2 valve', {
+    x: geo.gx0 - geo.w0,
+    y: geo.gy0,
+    w: geo.w0 * 2,
+    h: geo.h0,
+  });
+  const svg = shell.svg;
+  svg.style.overflow = 'visible';
+
+  const arrowId = `arrow-v52-${uid()}`;
+  const { gInner, gSlide, midX, fixedPorts, port12, port14, silencer3El, silencer5El } =
+    drawValve52Body(svg, geo, arrowId);
+
+  let silencer3: SilencerOption = 'silencer';
+  let silencer5: SilencerOption = 'silencer';
   let state: 0 | 1 = 1;
   let pilot12Prev = false;
   let pilot14Prev = false;
 
   function setShift(shift: number): void {
-    gInner.setAttribute('transform', `translate(${GX0 + shift},${GY0})`);
+    gInner.setAttribute('transform', `translate(${geo.gx0 + shift},${geo.gy0})`);
   }
   function applyState(): void {
-    setShift(state === 0 ? 0 : -W0);
+    setShift(state === 0 ? 0 : -midX);
   }
   applyState();
 
@@ -312,8 +395,8 @@ export function createValve52(compLayer: HTMLElement, x: number, y: number): Com
     el: shell.el,
     x,
     y,
-    svgW: SVG_W,
-    svgH: SVG_H,
+    svgW,
+    svgH,
     gx: 0,
     gy: 0,
     ports: { ...fixedPorts, '12': port12, '14': port14 },

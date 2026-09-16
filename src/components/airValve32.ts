@@ -14,11 +14,88 @@ export const AIR_VALVE_32_TYPE = 'airValve32';
 // Extra right-side room for the spring symbol, beyond the offset already reserved on the left.
 const SVG_W = SLIDING_VALVE_OFFSET_X + SLIDING_VALVE_W + 48;
 const SVG_H = SLIDING_VALVE_OFFSET_Y + SLIDING_VALVE_H + 30;
-// Local to the mover (not the outer canvas) - reparented into it, so it must use the mover's
-// own coordinate system, matching SLIDING_VALVE_H rather than the padded outer SVG_H.
-const PILOT_LOCAL = { cx: -40, cy: SLIDING_VALVE_H / 2 };
+
+export interface AirValve32Geometry {
+  /** x of the pilot port 14, relative to the mover's own origin. */
+  pilotPortX: number;
+  /** x of the pilot wall triangle's flat base. */
+  pilotBaseX: number;
+  /** x of the pilot wall triangle's tip, and the inner link's inner end. */
+  pilotTipX: number;
+  pilotHalfHeight: number;
+  springSegLen: number;
+  springZigW: number;
+  springZigH: number;
+}
+
+export const AIR_VALVE_32_DEFAULT_GEOMETRY: AirValve32Geometry = {
+  pilotPortX: -40,
+  pilotBaseX: -26,
+  pilotTipX: -6,
+  pilotHalfHeight: 8,
+  springSegLen: 20,
+  springZigW: 10,
+  springZigH: 10,
+};
+
+/** Draws the pilot wall (inward triangle) + link + spring into the mover, matching the original
+ * app's air-piloted artwork. Coordinates are local to the mover, not the canvas. Port 14 is
+ * created here too since its position is one of this variant's own tunable dimensions. */
+export function drawAirValve32Actuator(
+  mover: SVGGElement,
+  svg: SVGSVGElement,
+  geo: AirValve32Geometry,
+): { port14: ReturnType<typeof createPort> } {
+  const cy = SLIDING_VALVE_H / 2;
+  const spring = createSvgEl('g', { transform: `translate(${SLIDING_VALVE_W}, ${cy})` });
+  spring.appendChild(
+    createSvgEl('path', {
+      d: `M 0 0 L ${geo.springSegLen} 0`,
+      fill: 'none',
+      stroke: '#111',
+      'stroke-width': 2,
+    }),
+  );
+  const s = geo.springSegLen;
+  const zw = geo.springZigW;
+  const zh = geo.springZigH;
+  spring.appendChild(
+    createSvgEl('path', {
+      d: `M ${s} 0 l ${zw} ${-zh} l ${zw} ${zh * 2} l ${zw} ${-zh * 2}`,
+      fill: 'none',
+      stroke: '#111',
+      'stroke-width': 2,
+    }),
+  );
+
+  const pilotTriangle = createSvgEl('path', {
+    d: `M ${geo.pilotBaseX} ${cy + geo.pilotHalfHeight} L ${geo.pilotTipX} ${cy} L ${geo.pilotBaseX} ${cy - geo.pilotHalfHeight} Z`,
+    fill: 'none',
+    stroke: '#111',
+    'stroke-width': 2,
+  });
+  const pilotLink = createSvgEl('path', {
+    d: `M ${geo.pilotBaseX} ${cy} L ${geo.pilotPortX} ${cy}`,
+    fill: 'none',
+    stroke: '#111',
+    'stroke-width': 2,
+  });
+  const pilotLink2 = createSvgEl('path', {
+    d: `M 0 ${cy} L ${geo.pilotTipX} ${cy}`,
+    fill: 'none',
+    stroke: '#111',
+    'stroke-width': 2,
+  });
+  const port14 = createPort(svg, '14', geo.pilotPortX, cy, 'H', {
+    isPilot: true,
+    pilotDir: -1,
+  });
+  mover.append(pilotTriangle, pilotLink, pilotLink2, port14.el, spring);
+  return { port14 };
+}
 
 export function createAirValve32(compLayer: HTMLElement, x: number, y: number): Component {
+  const geo = AIR_VALVE_32_DEFAULT_GEOMETRY;
   const shell = buildComponentShell(
     compLayer,
     AIR_VALVE_32_TYPE,
@@ -35,47 +112,7 @@ export function createAirValve32(compLayer: HTMLElement, x: number, y: number): 
     },
   );
   const valve = buildSlidingValve32Body(shell.svg, `arrow-air-${uid()}`);
-
-  const spring = createSvgEl('g', {
-    transform: `translate(${SLIDING_VALVE_W}, ${SLIDING_VALVE_H / 2})`,
-  });
-  spring.appendChild(
-    createSvgEl('path', { d: 'M 0 0 L 20 0', fill: 'none', stroke: '#111', 'stroke-width': 2 }),
-  );
-  spring.appendChild(
-    createSvgEl('path', {
-      d: 'M 20 0 l 10 -10 l 10 20 l 10 -20',
-      fill: 'none',
-      stroke: '#111',
-      'stroke-width': 2,
-    }),
-  );
-
-  // Pilot wall (inward triangle) + link + pilot port 14, all sliding with the mover - matches
-  // the original app's air-piloted artwork. Coordinates are local to the mover, not the canvas.
-  const pilotTriangle = createSvgEl('path', {
-    d: `M -26 ${SLIDING_VALVE_H / 2 + 8} L -6 ${SLIDING_VALVE_H / 2} L -26 ${SLIDING_VALVE_H / 2 - 8} Z`,
-    fill: 'none',
-    stroke: '#111',
-    'stroke-width': 2,
-  });
-  const pilotLink = createSvgEl('path', {
-    d: `M -26 ${PILOT_LOCAL.cy} L ${PILOT_LOCAL.cx} ${PILOT_LOCAL.cy}`,
-    fill: 'none',
-    stroke: '#111',
-    'stroke-width': 2,
-  });
-  const pilotLink2 = createSvgEl('path', {
-    d: `M 0 ${PILOT_LOCAL.cy} L -6 ${PILOT_LOCAL.cy}`,
-    fill: 'none',
-    stroke: '#111',
-    'stroke-width': 2,
-  });
-  const port14 = createPort(shell.svg, '14', PILOT_LOCAL.cx, PILOT_LOCAL.cy, 'H', {
-    isPilot: true,
-    pilotDir: -1,
-  });
-  valve.mover.append(pilotTriangle, pilotLink, pilotLink2, port14.el, spring);
+  const { port14 } = drawAirValve32Actuator(valve.mover, shell.svg, geo);
 
   const ports = { ...valve.ports, '14': port14 };
 

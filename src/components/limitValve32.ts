@@ -18,7 +18,117 @@ export const LIMIT_VALVE_32_TYPE = 'limitValve32';
 const SVG_W = SLIDING_VALVE_OFFSET_X + SLIDING_VALVE_W + 48;
 const SVG_H = SLIDING_VALVE_OFFSET_Y + SLIDING_VALVE_H + 30;
 
+export interface LimitValve32Geometry {
+  /** x of the roller-lever group, relative to the mover's own origin. */
+  rollerX: number;
+  rollerArmStartX: number;
+  rollerArmReach: number;
+  rollerArmHalfY: number;
+  rollerOuterR: number;
+  rollerInnerR: number;
+  rollerCenterX: number;
+  labelYOffset: number;
+  springSegLen: number;
+  springZigW: number;
+  springZigH: number;
+}
+
+export const LIMIT_VALVE_32_DEFAULT_GEOMETRY: LimitValve32Geometry = {
+  rollerX: -34,
+  rollerArmStartX: -6,
+  rollerArmReach: 35,
+  rollerArmHalfY: 7,
+  rollerOuterR: 13,
+  rollerInnerR: 6,
+  rollerCenterX: 4,
+  labelYOffset: -18,
+  springSegLen: 20,
+  springZigW: 10,
+  springZigH: 10,
+};
+
+/** Draws the roller lever + arms + spring into the mover, matching the original app's
+ * roller-lever limit-switch artwork. Coordinates are local to the mover, not the canvas. */
+export function drawLimitValve32Actuator(
+  mover: SVGGElement,
+  geo: LimitValve32Geometry,
+): { sensorLabel: SVGTextElement } {
+  const rollerGroup = createSvgEl('g', {
+    transform: `translate(${geo.rollerX}, ${SLIDING_VALVE_H / 2})`,
+  });
+  rollerGroup.appendChild(
+    createSvgEl('path', {
+      d: `M ${geo.rollerArmStartX} ${-geo.rollerArmHalfY} L ${geo.rollerArmReach} ${-geo.rollerArmHalfY}`,
+      fill: 'none',
+      stroke: '#111',
+      'stroke-width': 2,
+    }),
+  );
+  rollerGroup.appendChild(
+    createSvgEl('path', {
+      d: `M ${geo.rollerArmStartX} ${geo.rollerArmHalfY} L ${geo.rollerArmReach} ${geo.rollerArmHalfY}`,
+      fill: 'none',
+      stroke: '#111',
+      'stroke-width': 2,
+    }),
+  );
+  rollerGroup.appendChild(
+    createSvgEl('circle', {
+      cx: geo.rollerCenterX,
+      cy: 0,
+      r: geo.rollerOuterR,
+      fill: '#fff',
+      stroke: '#111',
+      'stroke-width': 2,
+    }),
+  );
+  rollerGroup.appendChild(
+    createSvgEl('circle', {
+      cx: geo.rollerCenterX,
+      cy: 0,
+      r: geo.rollerInnerR,
+      fill: '#fff',
+      stroke: '#111',
+      'stroke-width': 2,
+    }),
+  );
+  const sensorLabel = createSvgEl('text', {
+    x: geo.rollerCenterX,
+    y: geo.labelYOffset,
+    'text-anchor': 'middle',
+    'font-size': 11,
+  });
+  rollerGroup.appendChild(sensorLabel);
+
+  const spring = createSvgEl('g', {
+    transform: `translate(${SLIDING_VALVE_W}, ${SLIDING_VALVE_H / 2})`,
+  });
+  spring.appendChild(
+    createSvgEl('path', {
+      d: `M 0 0 L ${geo.springSegLen} 0`,
+      fill: 'none',
+      stroke: '#111',
+      'stroke-width': 2,
+    }),
+  );
+  const s = geo.springSegLen;
+  const zw = geo.springZigW;
+  const zh = geo.springZigH;
+  spring.appendChild(
+    createSvgEl('path', {
+      d: `M ${s} 0 l ${zw} ${-zh} l ${zw} ${zh * 2} l ${zw} ${-zh * 2} l ${zw} ${zh * 2} l ${zw} ${-zh * 2} l ${zw} ${zh * 2}`,
+      fill: 'none',
+      stroke: '#111',
+      'stroke-width': 2,
+    }),
+  );
+
+  mover.append(rollerGroup, spring);
+  return { sensorLabel };
+}
+
 export function createLimitValve32(compLayer: HTMLElement, x: number, y: number): Component {
+  const geo = LIMIT_VALVE_32_DEFAULT_GEOMETRY;
   const shell = buildComponentShell(
     compLayer,
     LIMIT_VALVE_32_TYPE,
@@ -35,46 +145,7 @@ export function createLimitValve32(compLayer: HTMLElement, x: number, y: number)
     },
   );
   const valve = buildSlidingValve32Body(shell.svg, `arrow-limit-${uid()}`);
-
-  // Roller + arms + spring, moving with the mover - matches the original app's roller-lever
-  // limit-switch artwork. Coordinates are local to the mover, not the canvas.
-  const rollerGroup = createSvgEl('g', { transform: `translate(-34, ${SLIDING_VALVE_H / 2})` });
-  rollerGroup.appendChild(
-    createSvgEl('path', { d: 'M -6 -7 L 35 -7', fill: 'none', stroke: '#111', 'stroke-width': 2 }),
-  );
-  rollerGroup.appendChild(
-    createSvgEl('path', { d: 'M -6 7 L 35 7', fill: 'none', stroke: '#111', 'stroke-width': 2 }),
-  );
-  rollerGroup.appendChild(
-    createSvgEl('circle', { cx: 4, cy: 0, r: 13, fill: '#fff', stroke: '#111', 'stroke-width': 2 }),
-  );
-  rollerGroup.appendChild(
-    createSvgEl('circle', { cx: 4, cy: 0, r: 6, fill: '#fff', stroke: '#111', 'stroke-width': 2 }),
-  );
-  const sensorLabel = createSvgEl('text', {
-    x: 4,
-    y: -18,
-    'text-anchor': 'middle',
-    'font-size': 11,
-  });
-  rollerGroup.appendChild(sensorLabel);
-
-  const spring = createSvgEl('g', {
-    transform: `translate(${SLIDING_VALVE_W}, ${SLIDING_VALVE_H / 2})`,
-  });
-  spring.appendChild(
-    createSvgEl('path', { d: 'M 0 0 L 20 0', fill: 'none', stroke: '#111', 'stroke-width': 2 }),
-  );
-  spring.appendChild(
-    createSvgEl('path', {
-      d: 'M 20 0 l 10 -10 l 10 20 l 10 -20 l 10 20 l 10 -20 l 10 20',
-      fill: 'none',
-      stroke: '#111',
-      'stroke-width': 2,
-    }),
-  );
-
-  valve.mover.append(rollerGroup, spring);
+  const { sensorLabel } = drawLimitValve32Actuator(valve.mover, geo);
 
   const id = uid();
 

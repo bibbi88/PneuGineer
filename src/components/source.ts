@@ -4,28 +4,35 @@ import { buildComponentShell, createSvgEl, createPort } from './shared/svgHelper
 
 export const SOURCE_TYPE = 'source';
 
-const SVG_W = 46;
-const SVG_H = 73;
-const GX = -27;
-const GY = 0;
-const CX = 50;
-const CY = 50;
-const R = 15;
+export interface SourceGeometry {
+  svgW: number;
+  svgH: number;
+  gx: number;
+  gy: number;
+  cx: number;
+  cy: number;
+  r: number;
+  /** Y of the port/stem tip, in the same local coordinates as cx/cy. */
+  portY: number;
+}
 
-export function createSource(compLayer: HTMLElement, x: number, y: number): Component {
-  const shell = buildComponentShell(compLayer, SOURCE_TYPE, x, y, SVG_W, SVG_H, 'Pressure source', {
-    x: GX + (CX - R),
-    y: GY + (CY - R),
-    w: R * 2,
-    h: R * 2,
-  });
-  const g = createSvgEl('g', { transform: `translate(${GX},${GY})` });
+export const SOURCE_DEFAULT_GEOMETRY: SourceGeometry = {
+  svgW: 46,
+  svgH: 73,
+  gx: -27,
+  gy: 0,
+  cx: 50,
+  cy: 50,
+  r: 15,
+  portY: 14,
+};
 
+export function drawSourceBody(g: SVGElement, geo: SourceGeometry): { cx: number; portY: number } {
   g.appendChild(
     createSvgEl('circle', {
-      cx: CX,
-      cy: CY,
-      r: R,
+      cx: geo.cx,
+      cy: geo.cy,
+      r: geo.r,
       fill: '#fff',
       stroke: '#111',
       'stroke-width': 2,
@@ -33,9 +40,9 @@ export function createSource(compLayer: HTMLElement, x: number, y: number): Comp
   );
   g.appendChild(
     createSvgEl('circle', {
-      cx: CX,
-      cy: CY,
-      r: R * 0.55,
+      cx: geo.cx,
+      cy: geo.cy,
+      r: geo.r * 0.55,
       fill: 'none',
       stroke: '#111',
       'stroke-width': 2,
@@ -45,11 +52,40 @@ export function createSource(compLayer: HTMLElement, x: number, y: number): Comp
   // is hidden - any gap between the stem and the port position would otherwise show up as a
   // visible blank break in the wire.
   g.appendChild(
-    createSvgEl('line', { x1: CX, y1: CY - R, x2: CX, y2: 14, stroke: '#111', 'stroke-width': 2 }),
+    createSvgEl('line', {
+      x1: geo.cx,
+      y1: geo.cy - geo.r,
+      x2: geo.cx,
+      y2: geo.portY,
+      stroke: '#111',
+      'stroke-width': 2,
+    }),
   );
+  return { cx: geo.cx, portY: geo.portY };
+}
+
+export function createSource(compLayer: HTMLElement, x: number, y: number): Component {
+  const geo = SOURCE_DEFAULT_GEOMETRY;
+  const shell = buildComponentShell(
+    compLayer,
+    SOURCE_TYPE,
+    x,
+    y,
+    geo.svgW,
+    geo.svgH,
+    'Pressure source',
+    {
+      x: geo.gx + (geo.cx - geo.r),
+      y: geo.gy + (geo.cy - geo.r),
+      w: geo.r * 2,
+      h: geo.r * 2,
+    },
+  );
+  const g = createSvgEl('g', { transform: `translate(${geo.gx},${geo.gy})` });
+  const { cx, portY } = drawSourceBody(g, geo);
   shell.svg.appendChild(g);
 
-  const port = createPort(g, 'OUT', CX, 14, 'V');
+  const port = createPort(g, 'OUT', cx, portY, 'V');
 
   const comp: Component = {
     id: uid(),
@@ -57,10 +93,10 @@ export function createSource(compLayer: HTMLElement, x: number, y: number): Comp
     el: shell.el,
     x,
     y,
-    svgW: SVG_W,
-    svgH: SVG_H,
-    gx: GX,
-    gy: GY,
+    svgW: geo.svgW,
+    svgH: geo.svgH,
+    gx: geo.gx,
+    gy: geo.gy,
     ports: { OUT: port },
 
     conductivityRule(): PortConnection[] {

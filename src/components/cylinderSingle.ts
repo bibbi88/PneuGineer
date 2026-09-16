@@ -16,46 +16,111 @@ import {
 
 export const CYLINDER_SINGLE_TYPE = 'cylinderSingle';
 
-const SVG_W = 186;
-const SVG_H = 84;
-const GX = 8;
-const GY = 8;
-const W = 160;
-const H = 56;
-const PORT_MARGIN = 6;
-const CAP_PORT_X = 12;
-const ROD_PORT_X = W - 12;
+export interface CylinderSingleGeometry {
+  svgW: number;
+  svgH: number;
+  gx: number;
+  gy: number;
+  w: number;
+  h: number;
+  portMargin: number;
+  capPortInset: number;
+  rodPortInset: number;
+  pistonWidth: number;
+  pistonTravelStartInset: number;
+  pistonTravelEndInset: number;
+  pistonToRodGap: number;
+  rodHeight: number;
+  rodTipInset: number;
+  rodTipWidth: number;
+  rodTipHeight: number;
+  springInset: number;
+  springSegment: number;
+}
 
-type CylinderMode = 'push' | 'pull';
+export const CYLINDER_SINGLE_DEFAULT_GEOMETRY: CylinderSingleGeometry = {
+  svgW: 186,
+  svgH: 84,
+  gx: 8,
+  gy: 8,
+  w: 160,
+  h: 56,
+  portMargin: 6,
+  capPortInset: 12,
+  rodPortInset: 12,
+  pistonWidth: 6,
+  pistonTravelStartInset: 10,
+  pistonTravelEndInset: 20,
+  pistonToRodGap: 6,
+  rodHeight: 6,
+  rodTipInset: 10,
+  rodTipWidth: 10,
+  rodTipHeight: 12,
+  springInset: 28,
+  springSegment: 10,
+};
 
-export function createCylinderSingle(compLayer: HTMLElement, x: number, y: number): Component {
-  let letter = nextCylinderLetter();
-  const shell = buildComponentShell(compLayer, CYLINDER_SINGLE_TYPE, x, y, SVG_W, SVG_H, '', {
-    x: GX,
-    y: GY,
-    w: W,
-    h: H,
-  });
+/** Piston/rod/tip x-layout for a given stroke position (0..1) - kept separate from the static
+ * body draw so the live simulation can recompute it every frame without redrawing anything else. */
+export function computeCylinderSinglePistonLayout(
+  geo: CylinderSingleGeometry,
+  pos: number,
+): { px: number; rodX: number; rodWidth: number; tipX: number } {
+  const travelStart = geo.pistonTravelStartInset;
+  const travelEnd = geo.w - geo.pistonTravelEndInset;
+  const px = travelStart + pos * (travelEnd - travelStart);
+  const rodX = px + geo.pistonToRodGap;
+  const tipX = px + (geo.w - geo.rodTipInset);
+  return { px, rodX, rodWidth: Math.max(0, tipX - rodX), tipX };
+}
 
-  const g = createSvgEl('g', { transform: `translate(${GX},${GY})` });
-
+export function drawCylinderSingleBody(
+  g: SVGElement,
+  geo: CylinderSingleGeometry,
+): {
+  piston: SVGRectElement;
+  rod: SVGRectElement;
+  rodTip: SVGRectElement;
+  leadA: SVGLineElement;
+  capPortX: number;
+  rodPortX: number;
+} {
   const body = createSvgEl('rect', {
     x: 0,
     y: 0,
-    width: W,
-    height: H,
+    width: geo.w,
+    height: geo.h,
     fill: '#fff',
     stroke: '#111',
     'stroke-width': 2,
   });
-  const piston = createSvgEl('rect', { x: 56, y: 0, width: 6, height: H, fill: '#888' });
-  const rod = createSvgEl('rect', { x: 62, y: H / 2 - 3, width: W - 62, height: 6, fill: '#888' });
-  const rodTip = createSvgEl('rect', { x: W, y: H / 2 - 6, width: 10, height: 12, fill: '#666' });
+  const layout = computeCylinderSinglePistonLayout(geo, 0);
+  const piston = createSvgEl('rect', {
+    x: layout.px,
+    y: 0,
+    width: geo.pistonWidth,
+    height: geo.h,
+    fill: '#888',
+  });
+  const rod = createSvgEl('rect', {
+    x: layout.rodX,
+    y: geo.h / 2 - geo.rodHeight / 2,
+    width: layout.rodWidth,
+    height: geo.rodHeight,
+    fill: '#888',
+  });
+  const rodTip = createSvgEl('rect', {
+    x: layout.tipX,
+    y: geo.h / 2 - geo.rodTipHeight / 2,
+    width: geo.rodTipWidth,
+    height: geo.rodTipHeight,
+    fill: '#666',
+  });
 
   // Spring symbol (right side, pushing the piston back when unpressurized).
-  const springY = H / 2;
-  const springX0 = W - 28;
-  const seg = 10;
+  const springY = geo.h / 2;
+  const springX0 = geo.w - geo.springInset;
+  const seg = geo.springSegment;
   const spring = createSvgEl('path', {
     d: [
       `M ${springX0} ${springY}`,
@@ -69,23 +134,43 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
     'stroke-width': 2,
   });
 
+  const capPortX = geo.capPortInset;
+  const rodPortX = geo.w - geo.rodPortInset;
   // Lead-in line reaching the exact port center (not just close to it), since a connected
   // port's own circle is hidden - any gap between the body and the port would otherwise show
   // up as a visible blank break in the wire. Repositioned in updatePortSide() when the port
   // moves between the cap and rod ends.
   const leadA = createSvgEl('line', {
-    x1: CAP_PORT_X,
-    y1: H,
-    x2: CAP_PORT_X,
-    y2: H + PORT_MARGIN,
+    x1: capPortX,
+    y1: geo.h,
+    x2: capPortX,
+    y2: geo.h + geo.portMargin,
     stroke: '#111',
     'stroke-width': 2,
   });
   g.append(body, piston, rod, rodTip, spring, leadA);
+
+  return { piston, rod, rodTip, leadA, capPortX, rodPortX };
+}
+
+type CylinderMode = 'push' | 'pull';
+
+export function createCylinderSingle(compLayer: HTMLElement, x: number, y: number): Component {
+  const geo = CYLINDER_SINGLE_DEFAULT_GEOMETRY;
+  let letter = nextCylinderLetter();
+  const shell = buildComponentShell(compLayer, CYLINDER_SINGLE_TYPE, x, y, geo.svgW, geo.svgH, '', {
+    x: geo.gx,
+    y: geo.gy,
+    w: geo.w,
+    h: geo.h,
+  });
+
+  const g = createSvgEl('g', { transform: `translate(${geo.gx},${geo.gy})` });
+  const { piston, rod, rodTip, leadA, capPortX, rodPortX } = drawCylinderSingleBody(g, geo);
   shell.svg.appendChild(g);
 
   let mode: CylinderMode = 'push';
-  const portACircle = createPort(g, 'A', CAP_PORT_X, H + PORT_MARGIN, 'V');
+  const portACircle = createPort(g, 'A', capPortX, geo.h + geo.portMargin, 'V');
 
   const ports = { A: portACircle };
 
@@ -94,15 +179,11 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
   let sensors: CylinderSensor[] = defaultSensors(letter);
 
   function updateVisual(): void {
-    const travelStart = 10;
-    const travelEnd = W - 20;
-    const px = travelStart + pos * (travelEnd - travelStart);
-    piston.setAttribute('x', String(px));
-    const rodX = px + 6;
-    const tipX = px + (W - 10);
-    rod.setAttribute('x', String(rodX));
-    rod.setAttribute('width', String(Math.max(0, tipX - rodX)));
-    rodTip.setAttribute('x', String(tipX));
+    const layout = computeCylinderSinglePistonLayout(geo, pos);
+    piston.setAttribute('x', String(layout.px));
+    rod.setAttribute('x', String(layout.rodX));
+    rod.setAttribute('width', String(layout.rodWidth));
+    rodTip.setAttribute('x', String(layout.tipX));
   }
   updateVisual();
 
@@ -112,7 +193,7 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
   updateLabel();
 
   function updatePortSide(): void {
-    const cx = mode === 'push' ? CAP_PORT_X : ROD_PORT_X;
+    const cx = mode === 'push' ? capPortX : rodPortX;
     portACircle.el.setAttribute('cx', String(cx));
     leadA.setAttribute('x1', String(cx));
     leadA.setAttribute('x2', String(cx));
@@ -131,10 +212,10 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
     el: shell.el,
     x,
     y,
-    svgW: SVG_W,
-    svgH: SVG_H,
-    gx: GX,
-    gy: GY,
+    svgW: geo.svgW,
+    svgH: geo.svgH,
+    gx: geo.gx,
+    gy: geo.gy,
     ports,
 
     conductivityRule(): PortConnection[] {

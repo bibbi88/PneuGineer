@@ -5,63 +5,58 @@ import { drawBallCheckSymbol } from './shared/checkValveSymbol';
 
 export const CHECK_VALVE_TYPE = 'checkValve';
 
-// Base (pre-scale) housing geometry, ported from the original app - only used here to place the
-// ball-check glyph and the two ports around it. SCALE shrinks the whole symbol around its own
-// center (BASE_CX, BASE_Y_MID) rather than toward the canvas corner, so shrinking it doesn't
-// also shift it sideways.
-const SCALE = 0.6;
-const BASE_HUS_X = 20;
-const BASE_HUS_Y = 40;
-const BASE_HUS_W = 50;
-const BASE_HUS_H = 50;
-const BASE_CX = BASE_HUS_X + BASE_HUS_W / 2;
-const BASE_Y_MID = BASE_HUS_Y + BASE_HUS_H / 2;
-const BASE_PORT_R = 7;
-
-const SVG_W = 66;
-const SVG_H = 100;
-const GX = -12;
-const GY = -15;
-
-function sx(x: number): number {
-  return BASE_CX + (x - BASE_CX) * SCALE;
-}
-function sy(y: number): number {
-  return BASE_Y_MID + (y - BASE_Y_MID) * SCALE;
+export interface CheckValveGeometry {
+  svgW: number;
+  svgH: number;
+  gx: number;
+  gy: number;
+  /** Uniform scale applied to the shared ball-check glyph and the housing box it's centered on. */
+  scale: number;
+  /** Base (pre-scale) housing box the glyph is placed around. */
+  baseHusX: number;
+  baseHusY: number;
+  baseHusW: number;
+  baseHusH: number;
+  basePortR: number;
+  /** Distance (pre-scale) from the housing edge to each port. */
+  basePortLead: number;
 }
 
-export function createCheckValve(compLayer: HTMLElement, x: number, y: number): Component {
-  const cx = sx(BASE_CX);
-  const cy = sy(BASE_Y_MID);
-  const portR = BASE_PORT_R * SCALE;
-  const stroke = 3 * SCALE;
+export const CHECK_VALVE_DEFAULT_GEOMETRY: CheckValveGeometry = {
+  svgW: 66,
+  svgH: 100,
+  gx: -12,
+  gy: -15,
+  scale: 0.6,
+  baseHusX: 20,
+  baseHusY: 40,
+  baseHusW: 50,
+  baseHusH: 50,
+  basePortR: 7,
+  basePortLead: 10,
+};
 
-  const OUT = { cx, cy: sy(BASE_HUS_Y - 10) };
-  const IN = { cx, cy: sy(BASE_HUS_Y + BASE_HUS_H + 10) };
+export function drawCheckValveBody(
+  g: SVGElement,
+  geo: CheckValveGeometry,
+): { in: { cx: number; cy: number }; out: { cx: number; cy: number }; portR: number } {
+  const baseCx = geo.baseHusX + geo.baseHusW / 2;
+  const baseYMid = geo.baseHusY + geo.baseHusH / 2;
+  const sx = (v: number): number => baseCx + (v - baseCx) * geo.scale;
+  const sy = (v: number): number => baseYMid + (v - baseYMid) * geo.scale;
 
-  const innerHus = {
-    x: sx(BASE_HUS_X),
-    y: sy(BASE_HUS_Y),
-    w: BASE_HUS_W * SCALE,
-    h: BASE_HUS_H * SCALE,
-  };
+  const cx = sx(baseCx);
+  const cy = sy(baseYMid);
+  const portR = geo.basePortR * geo.scale;
+  const stroke = 3 * geo.scale;
 
-  const shell = buildComponentShell(
-    compLayer,
-    CHECK_VALVE_TYPE,
-    x,
-    y,
-    SVG_W,
-    SVG_H,
-    'Check valve',
-    { x: GX + innerHus.x, y: GY + innerHus.y, w: innerHus.w, h: innerHus.h },
-  );
-  const g = createSvgEl('g', { transform: `translate(${GX},${GY})` });
+  const OUT = { cx, cy: sy(geo.baseHusY - geo.basePortLead) };
+  const IN = { cx, cy: sy(geo.baseHusY + geo.baseHusH + geo.basePortLead) };
 
   // No housing box around the ball/seat, matching the original app's check valve exactly - it's
   // just the ball-and-seat symbol floating between its two lead-in lines, unenclosed. IN is
   // below, OUT is above, so dir 1 (OUT is the "up"/-y direction in this vertical orientation).
-  const glyph = drawBallCheckSymbol(g, cx, cy, 'vertical', 1, SCALE);
+  const glyph = drawBallCheckSymbol(g, cx, cy, 'vertical', 1, geo.scale);
 
   // These lead-in lines reach all the way from each port to the ball-and-seat shape itself (the
   // circle's edge on top, the seat's tip on the bottom) rather than stopping partway - both so a
@@ -87,6 +82,33 @@ export function createCheckValve(compLayer: HTMLElement, x: number, y: number): 
       'stroke-width': stroke,
     }),
   );
+
+  return { in: IN, out: OUT, portR };
+}
+
+export function createCheckValve(compLayer: HTMLElement, x: number, y: number): Component {
+  const geo = CHECK_VALVE_DEFAULT_GEOMETRY;
+  const baseCx = geo.baseHusX + geo.baseHusW / 2;
+  const baseYMid = geo.baseHusY + geo.baseHusH / 2;
+  const innerHus = {
+    x: baseCx + (geo.baseHusX - baseCx) * geo.scale,
+    y: baseYMid + (geo.baseHusY - baseYMid) * geo.scale,
+    w: geo.baseHusW * geo.scale,
+    h: geo.baseHusH * geo.scale,
+  };
+
+  const shell = buildComponentShell(
+    compLayer,
+    CHECK_VALVE_TYPE,
+    x,
+    y,
+    geo.svgW,
+    geo.svgH,
+    'Check valve',
+    { x: geo.gx + innerHus.x, y: geo.gy + innerHus.y, w: innerHus.w, h: innerHus.h },
+  );
+  const g = createSvgEl('g', { transform: `translate(${geo.gx},${geo.gy})` });
+  const { in: IN, out: OUT, portR } = drawCheckValveBody(g, geo);
   shell.svg.appendChild(g);
 
   const ports = {
@@ -100,10 +122,10 @@ export function createCheckValve(compLayer: HTMLElement, x: number, y: number): 
     el: shell.el,
     x,
     y,
-    svgW: SVG_W,
-    svgH: SVG_H,
-    gx: GX,
-    gy: GY,
+    svgW: geo.svgW,
+    svgH: geo.svgH,
+    gx: geo.gx,
+    gy: geo.gy,
     ports,
 
     conductivityRule(ctx): PortConnection[] {

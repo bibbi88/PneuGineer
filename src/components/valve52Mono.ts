@@ -1,4 +1,4 @@
-import type { Component, ConductivityContext, PortConnection } from '../core/types';
+import type { Component, ConductivityContext, PortConnection, PortDef } from '../core/types';
 import { uid } from '../core/ids';
 import {
   buildComponentShell,
@@ -17,22 +17,53 @@ export const VALVE_52_MONO_TYPE = 'valve52Mono';
 // family's own spring symbol) takes its place, and there's only the one pilot port left to
 // drive the valve, so it's spring-return rather than holding whichever state it was last
 // pushed to.
-const W0 = 80;
-const H0 = 60;
-const BODY_W = W0 * 2;
-const BODY_H = H0;
-const GX0 = 115;
-const GY0 = 24;
-const SVG_W = BODY_W + 110;
-const SVG_H = BODY_H + 49;
-const STROKE = 2;
-const FONT = 10;
-const TRI_H = BODY_H / 4;
-const TRI_W = TRI_H * 1.2;
-const TRI_GAP = 7;
-const PILOT_PORT_OFFSET = 24;
-const PILOT_CY = H0 / 2;
-const PORT14_LOCAL_X = -15 - PILOT_PORT_OFFSET;
+export interface Valve52MonoGeometry {
+  w0: number;
+  h0: number;
+  gx0: number;
+  gy0: number;
+  extraW: number;
+  extraH: number;
+  stroke: number;
+  font: number;
+  triHRatio: number;
+  triWRatio: number;
+  triGap: number;
+  pilotPortOffset: number;
+  pilotLinkGap: number;
+  cellArrowInset: number;
+  fixedPortInset: number;
+  fixedPortLead: number;
+  tightLabelDx: number;
+  tightLabelDy: number;
+  springSegLen: number;
+  springZigW: number;
+  springZigH: number;
+}
+
+export const VALVE_52_MONO_DEFAULT_GEOMETRY: Valve52MonoGeometry = {
+  w0: 80,
+  h0: 60,
+  gx0: 115,
+  gy0: 24,
+  extraW: 110,
+  extraH: 49,
+  stroke: 2,
+  font: 10,
+  triHRatio: 0.25,
+  triWRatio: 1.2,
+  triGap: 7,
+  pilotPortOffset: 24,
+  pilotLinkGap: 15,
+  cellArrowInset: 10,
+  fixedPortInset: 10,
+  fixedPortLead: 10,
+  tightLabelDx: -8,
+  tightLabelDy: 4,
+  springSegLen: 20,
+  springZigW: 10,
+  springZigH: 10,
+};
 
 function addDoubleArrow(
   parent: SVGElement,
@@ -40,6 +71,7 @@ function addDoubleArrow(
   y1: number,
   x2: number,
   y2: number,
+  stroke: number,
   arrowId: string,
 ): void {
   parent.appendChild(
@@ -49,28 +81,35 @@ function addDoubleArrow(
       x2,
       y2,
       stroke: '#111',
-      'stroke-width': STROKE,
+      'stroke-width': stroke,
       'marker-start': `url(#${arrowId})`,
       'marker-end': `url(#${arrowId})`,
     }),
   );
 }
 
-export function createValve52Mono(compLayer: HTMLElement, x: number, y: number): Component {
-  const shell = buildComponentShell(
-    compLayer,
-    VALVE_52_MONO_TYPE,
-    x,
-    y,
-    SVG_W,
-    SVG_H,
-    '5/2 valve, monostable',
-    { x: GX0 - W0, y: GY0, w: BODY_W, h: BODY_H },
-  );
-  const svg = shell.svg;
-  svg.style.overflow = 'visible';
+export interface Valve52MonoBody {
+  gInner: SVGGElement;
+  midX: number;
+  fixedPorts: { '4': PortDef; '2': PortDef; '5': PortDef; '1': PortDef; '3': PortDef };
+  port14: PortDef;
+  silencer3El: SVGGElement;
+  silencer5El: SVGGElement;
+}
 
-  const arrowId = `arrow-v52m-${uid()}`;
+export function drawValve52MonoBody(
+  svg: SVGSVGElement,
+  geo: Valve52MonoGeometry,
+  arrowId: string,
+): Valve52MonoBody {
+  const W0 = geo.w0;
+  const H0 = geo.h0;
+  const BODY_W = W0 * 2;
+  const TRI_H = H0 * geo.triHRatio;
+  const TRI_W = TRI_H * geo.triWRatio;
+  const PILOT_CY = H0 / 2;
+  const PORT14_LOCAL_X = -geo.pilotLinkGap - geo.pilotPortOffset;
+
   addDoubleArrowMarker(svg, arrowId);
 
   const gInner = createSvgEl('g');
@@ -85,11 +124,19 @@ export function createValve52Mono(compLayer: HTMLElement, x: number, y: number):
       height: H0,
       fill: '#fff',
       stroke: '#111',
-      'stroke-width': STROKE,
+      'stroke-width': geo.stroke,
     }),
   );
-  addDoubleArrow(cell0, W0 / 2, H0, 10, 0, arrowId);
-  addDoubleArrow(cell0, W0 - 10, 0, W0 - 10, H0, arrowId);
+  addDoubleArrow(cell0, W0 / 2, H0, geo.cellArrowInset, 0, geo.stroke, arrowId);
+  addDoubleArrow(
+    cell0,
+    W0 - geo.cellArrowInset,
+    0,
+    W0 - geo.cellArrowInset,
+    H0,
+    geo.stroke,
+    arrowId,
+  );
 
   const cell1 = createSvgEl('g', { transform: `translate(${W0},0)` });
   cell1.appendChild(
@@ -100,11 +147,11 @@ export function createValve52Mono(compLayer: HTMLElement, x: number, y: number):
       height: H0,
       fill: '#fff',
       stroke: '#111',
-      'stroke-width': STROKE,
+      'stroke-width': geo.stroke,
     }),
   );
-  addDoubleArrow(cell1, W0 / 2, H0, W0 - 10, 0, arrowId);
-  addDoubleArrow(cell1, 10, 0, 10, H0, arrowId);
+  addDoubleArrow(cell1, W0 / 2, H0, W0 - geo.cellArrowInset, 0, geo.stroke, arrowId);
+  addDoubleArrow(cell1, geo.cellArrowInset, 0, geo.cellArrowInset, H0, geo.stroke, arrowId);
 
   // The spring (same symbol as the 3/2 push-button/air-piloted valves' own spring) sits where
   // the second pilot used to be, sliding with the two-cell picture just like theirs slides with
@@ -112,25 +159,28 @@ export function createValve52Mono(compLayer: HTMLElement, x: number, y: number):
   const spring = createSvgEl('g', { transform: `translate(${BODY_W},${PILOT_CY})` });
   spring.appendChild(
     createSvgEl('path', {
-      d: 'M 0 0 L 20 0',
+      d: `M 0 0 L ${geo.springSegLen} 0`,
       fill: 'none',
       stroke: '#111',
-      'stroke-width': STROKE,
+      'stroke-width': geo.stroke,
     }),
   );
+  const s = geo.springSegLen;
+  const zw = geo.springZigW;
+  const zh = geo.springZigH;
   spring.appendChild(
     createSvgEl('path', {
-      d: 'M 20 0 l 10 -10 l 10 20 l 10 -20',
+      d: `M ${s} 0 l ${zw} ${-zh} l ${zw} ${zh * 2} l ${zw} ${-zh * 2}`,
       fill: 'none',
       stroke: '#111',
-      'stroke-width': STROKE,
+      'stroke-width': geo.stroke,
     }),
   );
 
   gSlide.append(cell0, cell1, spring);
 
   function addTriangleAndWallLine(parent: SVGElement): void {
-    const tipX = -TRI_GAP;
+    const tipX = -geo.triGap;
     const points = [
       [tipX, PILOT_CY],
       [tipX - TRI_W, PILOT_CY - TRI_H / 2],
@@ -141,7 +191,7 @@ export function createValve52Mono(compLayer: HTMLElement, x: number, y: number):
         points: points.map((p) => p.join(',')).join(' '),
         fill: 'none',
         stroke: '#111',
-        'stroke-width': STROKE,
+        'stroke-width': geo.stroke,
       }),
     );
     parent.appendChild(
@@ -151,7 +201,7 @@ export function createValve52Mono(compLayer: HTMLElement, x: number, y: number):
         x2: 0,
         y2: PILOT_CY,
         stroke: '#111',
-        'stroke-width': STROKE,
+        'stroke-width': geo.stroke,
       }),
     );
   }
@@ -166,10 +216,10 @@ export function createValve52Mono(compLayer: HTMLElement, x: number, y: number):
     createSvgEl('line', {
       x1: PORT14_LOCAL_X,
       y1: PILOT_CY,
-      x2: -TRI_GAP - TRI_W,
+      x2: -geo.triGap - TRI_W,
       y2: PILOT_CY,
       stroke: '#111',
-      'stroke-width': STROKE,
+      'stroke-width': geo.stroke,
     }),
   );
 
@@ -182,7 +232,7 @@ export function createValve52Mono(compLayer: HTMLElement, x: number, y: number):
     x: PORT14_LOCAL_X,
     y: PILOT_CY - 10,
     'text-anchor': 'middle',
-    'font-size': FONT,
+    'font-size': geo.font,
   });
   label14.textContent = '14';
   gP14.append(port14.el, label14);
@@ -191,23 +241,23 @@ export function createValve52Mono(compLayer: HTMLElement, x: number, y: number):
   svg.appendChild(gInner);
 
   const fixedPortsLocal = {
-    '4': { cx: 10, cy: -10 },
-    '2': { cx: W0 - 10, cy: -10 },
-    '5': { cx: 10, cy: H0 + 10 },
-    '1': { cx: W0 / 2, cy: H0 + 10 },
-    '3': { cx: W0 - 10, cy: H0 + 10 },
+    '4': { cx: geo.fixedPortInset, cy: -geo.fixedPortLead },
+    '2': { cx: W0 - geo.fixedPortInset, cy: -geo.fixedPortLead },
+    '5': { cx: geo.fixedPortInset, cy: H0 + geo.fixedPortLead },
+    '1': { cx: W0 / 2, cy: H0 + geo.fixedPortLead },
+    '3': { cx: W0 - geo.fixedPortInset, cy: H0 + geo.fixedPortLead },
   } as const;
 
   for (const key of ['4', '2'] as const) {
     const p = fixedPortsLocal[key];
     svg.appendChild(
       createSvgEl('line', {
-        x1: GX0 + p.cx,
-        y1: GY0,
-        x2: GX0 + p.cx,
-        y2: GY0 + p.cy,
+        x1: geo.gx0 + p.cx,
+        y1: geo.gy0,
+        x2: geo.gx0 + p.cx,
+        y2: geo.gy0 + p.cy,
         stroke: '#111',
-        'stroke-width': STROKE,
+        'stroke-width': geo.stroke,
       }),
     );
   }
@@ -215,39 +265,43 @@ export function createValve52Mono(compLayer: HTMLElement, x: number, y: number):
     const p = fixedPortsLocal[key];
     svg.appendChild(
       createSvgEl('line', {
-        x1: GX0 + p.cx,
-        y1: GY0 + H0,
-        x2: GX0 + p.cx,
-        y2: GY0 + p.cy,
+        x1: geo.gx0 + p.cx,
+        y1: geo.gy0 + H0,
+        x2: geo.gx0 + p.cx,
+        y2: geo.gy0 + p.cy,
         stroke: '#111',
-        'stroke-width': STROKE,
+        'stroke-width': geo.stroke,
       }),
     );
   }
 
-  function tightLeftLabeledPort(key: '5' | '1' | '3'): ReturnType<typeof createPort> {
+  function tightLeftLabeledPort(key: '5' | '1' | '3'): PortDef {
     const p = fixedPortsLocal[key];
-    const px = GX0 + p.cx;
-    const py = GY0 + p.cy;
+    const px = geo.gx0 + p.cx;
+    const py = geo.gy0 + p.cy;
     const port = createPort(svg, key, px, py, 'V');
-    createPortLabel(svg, px, py, key, { anchor: 'end', dx: -8, dy: 4 });
+    createPortLabel(svg, px, py, key, {
+      anchor: 'end',
+      dx: geo.tightLabelDx,
+      dy: geo.tightLabelDy,
+    });
     return port;
   }
 
-  const fixedPorts = {
+  const fixedPorts: Valve52MonoBody['fixedPorts'] = {
     '4': createLabeledPort(
       svg,
       '4',
-      GX0 + fixedPortsLocal['4'].cx,
-      GY0 + fixedPortsLocal['4'].cy,
+      geo.gx0 + fixedPortsLocal['4'].cx,
+      geo.gy0 + fixedPortsLocal['4'].cy,
       'V',
       'left',
     ),
     '2': createLabeledPort(
       svg,
       '2',
-      GX0 + fixedPortsLocal['2'].cx,
-      GY0 + fixedPortsLocal['2'].cy,
+      geo.gx0 + fixedPortsLocal['2'].cx,
+      geo.gy0 + fixedPortsLocal['2'].cy,
       'V',
       'left',
     ),
@@ -256,29 +310,57 @@ export function createValve52Mono(compLayer: HTMLElement, x: number, y: number):
     '3': tightLeftLabeledPort('3'),
   };
 
-  let silencer3: SilencerOption = 'silencer';
-  let silencer5: SilencerOption = 'silencer';
   const silencer3El = createSilencerSymbol(
-    GX0 + fixedPortsLocal['3'].cx,
-    GY0 + fixedPortsLocal['3'].cy,
+    geo.gx0 + fixedPortsLocal['3'].cx,
+    geo.gy0 + fixedPortsLocal['3'].cy,
     1,
   );
   const silencer5El = createSilencerSymbol(
-    GX0 + fixedPortsLocal['5'].cx,
-    GY0 + fixedPortsLocal['5'].cy,
+    geo.gx0 + fixedPortsLocal['5'].cx,
+    geo.gy0 + fixedPortsLocal['5'].cy,
     1,
   );
-  setSilencerState(fixedPorts['3'], silencer3El, silencer3);
-  setSilencerState(fixedPorts['5'], silencer5El, silencer5);
+  setSilencerState(fixedPorts['3'], silencer3El, 'silencer');
+  setSilencerState(fixedPorts['5'], silencer5El, 'silencer');
   svg.append(silencer3El, silencer5El);
 
+  return { gInner, midX: W0, fixedPorts, port14, silencer3El, silencer5El };
+}
+
+export function createValve52Mono(compLayer: HTMLElement, x: number, y: number): Component {
+  const geo = VALVE_52_MONO_DEFAULT_GEOMETRY;
+  const svgW = geo.w0 * 2 + geo.extraW;
+  const svgH = geo.h0 + geo.extraH;
+
+  const shell = buildComponentShell(
+    compLayer,
+    VALVE_52_MONO_TYPE,
+    x,
+    y,
+    svgW,
+    svgH,
+    '5/2 valve, monostable',
+    { x: geo.gx0 - geo.w0, y: geo.gy0, w: geo.w0 * 2, h: geo.h0 },
+  );
+  const svg = shell.svg;
+  svg.style.overflow = 'visible';
+
+  const arrowId = `arrow-v52m-${uid()}`;
+  const { gInner, midX, fixedPorts, port14, silencer3El, silencer5El } = drawValve52MonoBody(
+    svg,
+    geo,
+    arrowId,
+  );
+
+  let silencer3: SilencerOption = 'silencer';
+  let silencer5: SilencerOption = 'silencer';
   let state: 0 | 1 = 1;
 
   function setShift(shift: number): void {
-    gInner.setAttribute('transform', `translate(${GX0 + shift},${GY0})`);
+    gInner.setAttribute('transform', `translate(${geo.gx0 + shift},${geo.gy0})`);
   }
   function applyState(): void {
-    setShift(state === 0 ? 0 : -W0);
+    setShift(state === 0 ? 0 : -midX);
   }
   applyState();
 
@@ -288,8 +370,8 @@ export function createValve52Mono(compLayer: HTMLElement, x: number, y: number):
     el: shell.el,
     x,
     y,
-    svgW: SVG_W,
-    svgH: SVG_H,
+    svgW,
+    svgH,
     gx: 0,
     gy: 0,
     ports: { ...fixedPorts, '14': port14 },

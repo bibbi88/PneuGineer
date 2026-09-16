@@ -23,6 +23,7 @@ import { renderInspector } from './ui/inspector';
 import { resetCylinderLetters } from './components/shared/letters';
 import { loadGridPreference } from './app/gridPreference';
 import { setGridEnabled } from './core/grid';
+import { initConfirmBeforeUnload } from './app/confirmClose';
 
 const workspaceQuery = document.querySelector<HTMLElement>('.workspace');
 const viewportQuery = document.getElementById('viewport');
@@ -70,6 +71,7 @@ initLinking(connLayer, viewport, workspaceEl);
 initMarquee(connLayer);
 initKeyboard();
 initWireSplitting(compLayer, viewport, workspaceEl);
+initConfirmBeforeUnload();
 
 const factoryCtx: ComponentFactoryContext = { compLayer };
 initHistory(factoryCtx, viewport);
