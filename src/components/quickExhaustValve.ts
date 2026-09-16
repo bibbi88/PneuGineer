@@ -278,11 +278,15 @@ export function createQuickExhaustValve(compLayer: HTMLElement, x: number, y: nu
       // Highlights whichever half of the internal path is actually open right now: 1->2 while
       // port 1 is fed, or 2->3 (the quick-exhaust route) the instant it isn't - matching
       // conductivityRule above exactly, since the ball itself is what makes them exclusive.
-      p.toPort2.classList.toggle('qevFlowPath--active', feeding1);
-      p.toExhaust.classList.toggle('qevFlowPath--active', !feeding1);
-      // Port 2's own line is part of whichever side is open (either being fed or being vented),
-      // so it's live for the same reason the ball has made exactly one of the sides above live.
-      p.port2Line.classList.add('qevFlowPath--active');
+      // 1->2 is supply reaching the cylinder, so it reads the same red as any other pressurized
+      // wire; 2->3 is genuinely exhausting to atmosphere, so it gets the amber "exhausting" look
+      // instead - the same distinction .wire.active vs .wire.exhausting draws for connections.
+      p.toPort2.classList.toggle('qevFlowPath--pressurized', feeding1);
+      p.toExhaust.classList.toggle('qevFlowPath--exhausting', !feeding1);
+      // Port 2's own line carries whichever of the two is currently open, so it takes on that
+      // same side's color rather than a fixed one of its own.
+      p.port2Line.classList.toggle('qevFlowPath--pressurized', feeding1);
+      p.port2Line.classList.toggle('qevFlowPath--exhausting', !feeding1);
     },
 
     snapshot(): Record<string, unknown> {
@@ -298,15 +302,15 @@ export function createQuickExhaustValve(compLayer: HTMLElement, x: number, y: nu
       showPortNumbers = Boolean(data.showPortNumbers);
       applyPortNumbersVisible();
       p.ball.classList.remove('right');
-      p.toPort2.classList.remove('qevFlowPath--active');
-      p.toExhaust.classList.remove('qevFlowPath--active');
-      p.port2Line.classList.remove('qevFlowPath--active');
+      p.toPort2.classList.remove('qevFlowPath--pressurized');
+      p.toExhaust.classList.remove('qevFlowPath--exhausting');
+      p.port2Line.classList.remove('qevFlowPath--pressurized', 'qevFlowPath--exhausting');
     },
     reset(): void {
       p.ball.classList.remove('right');
-      p.toPort2.classList.remove('qevFlowPath--active');
-      p.toExhaust.classList.remove('qevFlowPath--active');
-      p.port2Line.classList.remove('qevFlowPath--active');
+      p.toPort2.classList.remove('qevFlowPath--pressurized');
+      p.toExhaust.classList.remove('qevFlowPath--exhausting');
+      p.port2Line.classList.remove('qevFlowPath--pressurized', 'qevFlowPath--exhausting');
     },
 
     setPos(nx: number, ny: number): void {

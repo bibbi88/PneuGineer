@@ -297,4 +297,29 @@ describe('computeFrameGraph', () => {
     markExhaustFlow(graph, []);
     expect(graph.exhausting.size).toBe(0);
   });
+
+  it('one-way flow control valve highlights the throttle path (not the check valve) when only exhausting outward', () => {
+    // Regression test: this valve's own edge is undirected, so IN and OUT always read the same
+    // `isPressurized` value regardless of which side actually has a source behind it - and in
+    // this exact "meter-out" wiring (OUT tied straight to a cylinder's exhaust, IN left open)
+    // neither port is ever pressurized at all, since venting isn't the same as being fed from a
+    // source. Only `isExhausting` can tell the throttled direction is what's actually live here.
+    const valve = createOneWayFlowControlValve(compLayer(), 0, 0);
+    valve.updateFlowVisual?.({ isPressurized: () => false, isExhausting: (p) => p === 'OUT' });
+
+    expect(valve.el.querySelectorAll('.owfvFlowPath--pressurized').length).toBe(0);
+    expect(valve.el.querySelectorAll('.owfvFlowPath--exhausting').length).toBeGreaterThan(0);
+    expect(valve.el.querySelector('.flowThrottleCircle')?.classList.contains('flowing')).toBe(
+      false,
+    );
+  });
+
+  it('one-way flow control valve highlights the check valve path (not the throttle) for ordinary forward supply', () => {
+    const valve = createOneWayFlowControlValve(compLayer(), 0, 0);
+    valve.updateFlowVisual?.({ isPressurized: (p) => p === 'IN', isExhausting: () => false });
+
+    expect(valve.el.querySelectorAll('.owfvFlowPath--pressurized').length).toBe(1);
+    expect(valve.el.querySelectorAll('.owfvFlowPath--exhausting').length).toBe(0);
+    expect(valve.el.querySelector('.flowThrottleCircle')?.classList.contains('flowing')).toBe(true);
+  });
 });

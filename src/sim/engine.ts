@@ -1,4 +1,4 @@
-import type { ConductivityContext, SimStepContext } from '../core/types';
+import type { ConductivityContext, FlowVisualContext, SimStepContext } from '../core/types';
 import { appState } from '../app/AppState';
 import {
   computeFrameGraph,
@@ -59,6 +59,18 @@ export function stepSimulation(dt: number): FrameGraph {
     for (const p of c.currentlyVenting?.() ?? []) ventingKeys.push(portKey(c.id, p));
   }
   markExhaustFlow(graph, ventingKeys);
+
+  // Only now that markExhaustFlow has run does anything have a reliable answer to "is this port
+  // exhausting" - a separate, purely-cosmetic pass so a component's step() (which runs before
+  // it's known) never has to fall back on `isPressurized` alone for that.
+  for (const c of appState.components) {
+    if (!c.updateFlowVisual) continue;
+    const ctx: FlowVisualContext = {
+      isPressurized: (p) => graph.pressurized.has(portKey(c.id, p)),
+      isExhausting: (p) => graph.exhausting.has(portKey(c.id, p)),
+    };
+    c.updateFlowVisual(ctx);
+  }
 
   return graph;
 }

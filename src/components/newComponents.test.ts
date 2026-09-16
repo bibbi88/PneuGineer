@@ -31,6 +31,25 @@ describe('quickExhaustValve', () => {
     const edges = valve.conductivityRule({ isPressurized: () => false });
     expect(edges).toEqual([{ a: '2', b: '3', directed: true }]);
   });
+
+  it('colors the supply-to-cylinder path pressurized (red), not exhausting (amber)', () => {
+    // Regression test: both directions previously shared one generic "exhausting" amber class,
+    // which is only correct for the genuine 2->3 vent to atmosphere - 1->2 is ordinary supply
+    // reaching the cylinder and should read the same red as any other pressurized wire.
+    const valve = createQuickExhaustValve(compLayer(), 0, 0);
+    valve.step?.(0.1, stepCtx({ isPressurized: (p: string) => p === '1' }));
+
+    expect(valve.el.querySelectorAll('.qevFlowPath--pressurized').length).toBeGreaterThan(0);
+    expect(valve.el.querySelectorAll('.qevFlowPath--exhausting').length).toBe(0);
+  });
+
+  it('colors the exhaust-to-atmosphere path exhausting (amber), not pressurized (red)', () => {
+    const valve = createQuickExhaustValve(compLayer(), 0, 0);
+    valve.step?.(0.1, stepCtx({ isPressurized: () => false }));
+
+    expect(valve.el.querySelectorAll('.qevFlowPath--exhausting').length).toBeGreaterThan(0);
+    expect(valve.el.querySelectorAll('.qevFlowPath--pressurized').length).toBe(0);
+  });
 });
 
 describe('oneWayFlowControlValve', () => {

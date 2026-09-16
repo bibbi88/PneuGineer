@@ -33,6 +33,18 @@ export interface SimStepContext {
   readSignal(key: string): boolean;
 }
 
+export interface FlowVisualContext {
+  isPressurized(port: PortKey): boolean;
+  /** Whether `port` is currently carrying live exhaust flow (see `markExhaustFlow` in
+   * sim/pressure.ts) - only known after every component's step() has already run this frame
+   * (a cylinder doesn't report what it's venting until then), which is why this is its own
+   * hook rather than something `step()`/`SimStepContext` can offer directly. Ports on either
+   * side of a component whose own edge is undirected (conducts both ways, e.g. a one-way flow
+   * control valve's IN<->OUT) always share the same `isPressurized` value regardless of which
+   * side actually has a source behind it - `isExhausting` is what can still tell them apart. */
+  isExhausting(port: PortKey): boolean;
+}
+
 export interface ComponentBounds {
   x: number;
   y: number;
@@ -98,6 +110,11 @@ export interface Component<TSnapshot = Record<string, unknown>> {
   recompute?(): void;
   onPressureChange?(ctx: ConductivityContext): void;
   step?(dt: number, ctx: SimStepContext): void;
+  /** Purely cosmetic per-frame update (e.g. highlighting which internal path currently has air
+   * moving through it) that needs `FlowVisualContext.isExhausting` - called once per frame,
+   * after every component's step() and after exhaust flow has been computed, so never a place
+   * to put anything that affects the simulation itself. */
+  updateFlowVisual?(ctx: FlowVisualContext): void;
 }
 
 export interface ConnectionEndpoint {

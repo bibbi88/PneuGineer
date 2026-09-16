@@ -1,4 +1,4 @@
-import type { Component, PortConnection, PortKey, SimStepContext } from '../core/types';
+import type { Component, FlowVisualContext, PortConnection, PortKey } from '../core/types';
 import { uid } from '../core/ids';
 import { buildComponentShell, createPort, createSvgEl } from './shared/svgHelpers';
 
@@ -204,18 +204,24 @@ export function createOneWayFlowControlValve(
 
     // Purely a visual cue (nudges the throttle's circle glyph up a touch, and highlights
     // whichever of the two parallel paths air is actually taking - see .flowThrottleCircle and
-    // .owfvFlowPath in app.css) - forward flow is signaled the same way the check valve itself
-    // conducts unconditionally (IN pressurized); reverse (throttled) flow is read the same way
-    // the rest of the sim treats a "this is the driving side" port elsewhere, mirroring
-    // quickExhaustValve's ball logic. A step() rather than onPressureChange() deliberately,
-    // since the latter tells the engine "this may have just changed my own conductivity" and
-    // forces an extra frame-graph recompute - this never does.
-    step(_dt: number, ctx: SimStepContext): void {
-      const forward = ctx.isPressurized('IN');
-      const reverse = !forward && ctx.isPressurized('OUT');
+    // .owfvFlowPath in app.css). This can't be based on IN/OUT's own isPressurized: this
+    // valve's own edge is undirected (conducts both ways, just at different rates), so once
+    // *either* side reaches a source the flood-fill pressurizes both - IN and OUT always end up
+    // reading the exact same boolean, which can't by itself say which side actually has the
+    // supply behind it. And in the realistic "meter-out" wiring (this valve's OUT tied straight
+    // to a cylinder's own exhaust, nothing else), that exhausting side never reads pressurized
+    // at all - it's just venting, not connected to a source - so `isPressurized` alone would
+    // never even notice the throttled direction is active. `isExhausting` (only known after
+    // every step() this frame, hence updateFlowVisual rather than step()) is what actually
+    // distinguishes them: OUT genuinely exhausting means air can only be leaving through the
+    // throttle (the check valve blocks that direction), full stop; otherwise, any pressurized
+    // reading here means the direct/check-valve path is what's carrying it.
+    updateFlowVisual(ctx: FlowVisualContext): void {
+      const reverse = ctx.isExhausting('OUT');
+      const forward = !reverse && (ctx.isPressurized('IN') || ctx.isPressurized('OUT'));
       throttleCircle.classList.toggle('flowing', forward);
-      mainPath.classList.toggle('owfvFlowPath--active', forward);
-      for (const seg of branchPath) seg.classList.toggle('owfvFlowPath--active', reverse);
+      mainPath.classList.toggle('owfvFlowPath--pressurized', forward);
+      for (const seg of branchPath) seg.classList.toggle('owfvFlowPath--exhausting', reverse);
     },
 
     snapshot(): Record<string, unknown> {
@@ -228,8 +234,8 @@ export function createOneWayFlowControlValve(
     },
     reset(): void {
       throttleCircle.classList.remove('flowing');
-      mainPath.classList.remove('owfvFlowPath--active');
-      for (const seg of branchPath) seg.classList.remove('owfvFlowPath--active');
+      mainPath.classList.remove('owfvFlowPath--pressurized');
+      for (const seg of branchPath) seg.classList.remove('owfvFlowPath--exhausting');
     },
 
     setPos(nx: number, ny: number): void {
