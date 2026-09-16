@@ -43,6 +43,13 @@ interface TextField {
   label: FieldLabel;
 }
 
+/** A plain boolean snapshot key/value, e.g. a cylinder's "show force" toggle. */
+interface CheckboxField {
+  kind: 'checkbox';
+  key: string;
+  label: FieldLabel;
+}
+
 /** A limit switch's sensor key, shown as a dropdown of every sensor label that actually exists
  * in the project rather than free text - binding becomes a choice, not something that can
  * silently typo-mismatch a cylinder's signal. */
@@ -99,6 +106,7 @@ interface SilencerField {
 type InspectorField =
   | NumberField
   | TextField
+  | CheckboxField
   | SensorListField
   | ActuatorModeField
   | SensorKeySelectField
@@ -146,11 +154,17 @@ const INSPECTOR_FIELDS: Record<string, InspectorField[]> = {
   ],
   [CYLINDER_DOUBLE_TYPE]: [
     { kind: 'relabel', label: 'Cylinder letter' },
+    { kind: 'number', key: 'boreDiameter', label: 'Bore diameter (mm)', min: 1, max: 500, step: 1 },
+    { kind: 'number', key: 'rodDiameter', label: 'Rod diameter (mm)', min: 1, max: 500, step: 1 },
+    { kind: 'checkbox', key: 'showForce', label: 'Show force' },
     { kind: 'sensorList', arrayKey: 'sensors', min: 0, max: 100, step: 1 },
   ],
   [CYLINDER_SINGLE_TYPE]: [
     { kind: 'relabel', label: 'Cylinder letter' },
     { kind: 'cylinderMode' },
+    { kind: 'number', key: 'boreDiameter', label: 'Bore diameter (mm)', min: 1, max: 500, step: 1 },
+    { kind: 'number', key: 'rodDiameter', label: 'Rod diameter (mm)', min: 1, max: 500, step: 1 },
+    { kind: 'checkbox', key: 'showForce', label: 'Show force' },
     { kind: 'sensorList', arrayKey: 'sensors', min: 0, max: 100, step: 1 },
   ],
   [TEXT_ANNOTATION_TYPE]: [{ kind: 'text', key: 'text', label: 'Text' }],
@@ -198,6 +212,29 @@ function renderNumberOrTextField(
   });
 
   row.append(span, input);
+  container.appendChild(row);
+}
+
+function renderCheckboxField(
+  container: HTMLElement,
+  comp: Component,
+  field: CheckboxField,
+  snap: Record<string, unknown>,
+): void {
+  const row = document.createElement('label');
+  row.className = 'inspectorRow';
+
+  const span = document.createElement('span');
+  span.textContent = resolveLabel(field.label, comp);
+
+  const checkbox = document.createElement('input');
+  checkbox.type = 'checkbox';
+  checkbox.checked = Boolean(snap[field.key]);
+  checkbox.addEventListener('change', () => {
+    updateComponentField(comp, field.key, checkbox.checked);
+  });
+
+  row.append(span, checkbox);
   container.appendChild(row);
 }
 
@@ -713,6 +750,7 @@ export function renderInspector(container: HTMLElement, viewport: ViewportAdapte
       else if (field.kind === 'relabel') renderRelabelField(container, comp, field, refresh);
       else if (field.kind === 'cylinderMode') renderCylinderModeField(container, comp, refresh);
       else if (field.kind === 'silencer') renderSilencerField(container, comp, field, snap);
+      else if (field.kind === 'checkbox') renderCheckboxField(container, comp, field, snap);
       else renderNumberOrTextField(container, comp, field, snap);
     }
   }

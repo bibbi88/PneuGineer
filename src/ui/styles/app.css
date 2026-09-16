@@ -341,6 +341,19 @@ body {
   pointer-events: none;
 }
 
+/* A cylinder's live output-force readout ("Show force" in the inspector) - placed below the
+   body (mirroring .label's position above it) so it never collides with the name label. */
+.forceLabel {
+  position: absolute;
+  bottom: -18px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted);
+  pointer-events: none;
+}
+
 svg.compSvg {
   display: block;
   overflow: visible;
@@ -485,6 +498,17 @@ rect.wireHandle.wireStubHandle {
   font-size: 10px;
   fill: var(--muted);
   text-anchor: middle;
+}
+
+/* Quick-exhaust valve's floating ball, sliding over to whichever seat is currently closed
+   (see quickExhaustValve.ts's step()) - a plain CSS transition rather than a per-frame redraw,
+   since it only ever has two resting positions. */
+.qevBall {
+  transition: transform 0.15s ease-out;
+}
+
+.qevBall.right {
+  transform: translateX(34px);
 }
 
 /* A limit switch's sensor-key label turns red when another limit switch is bound to the same

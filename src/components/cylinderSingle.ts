@@ -13,6 +13,13 @@ import {
   renameSensorKeyBindings,
   type CylinderSensor,
 } from './shared/sensorPositions';
+import {
+  DEFAULT_BORE_DIAMETER_MM,
+  DEFAULT_ROD_DIAMETER_MM,
+  annularAreaMm2,
+  boreAreaMm2,
+  forceFromArea,
+} from './shared/cylinderForce';
 
 export const CYLINDER_SINGLE_TYPE = 'cylinderSingle';
 
@@ -181,6 +188,14 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
   let normallyExtended = false;
   let sensors: CylinderSensor[] = defaultSensors(letter);
   let ventingNow = false;
+  let boreDiameter = DEFAULT_BORE_DIAMETER_MM;
+  let rodDiameter = DEFAULT_ROD_DIAMETER_MM;
+  let showForce = false;
+
+  const forceLabelEl = document.createElement('div');
+  forceLabelEl.className = 'forceLabel';
+  forceLabelEl.style.display = 'none';
+  shell.el.appendChild(forceLabelEl);
 
   function updateVisual(): void {
     const layout = computeCylinderSinglePistonLayout(geo, pos);
@@ -247,6 +262,23 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
         updateVisual();
       }
 
+      // Force keeps acting even once the piston has already reached the end of its stroke
+      // (that's how clamping/pressing applications actually work), so this isn't gated on the
+      // movement check above. Push mode ports air onto the full bore (cap end); pull mode's
+      // port has moved to the rod end, so it only ever pushes against the smaller annular area.
+      // The spring return stroke has no air force to report - it's not modeled with a rate.
+      if (showForce) {
+        const force = pressurizedA
+          ? mode === 'push'
+            ? forceFromArea(boreAreaMm2(boreDiameter))
+            : forceFromArea(annularAreaMm2(boreDiameter, rodDiameter))
+          : 0;
+        forceLabelEl.textContent = `${force.toFixed(0)} N`;
+        forceLabelEl.style.display = '';
+      } else {
+        forceLabelEl.style.display = 'none';
+      }
+
       for (const sensor of sensors) {
         ctx.emitSignal(sensor.label, isInSensorRange(pos, sensor));
       }
@@ -261,6 +293,9 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
         sensors,
         showName: shell.getNameVisible(),
         customName: shell.getCustomName(),
+        boreDiameter,
+        rodDiameter,
+        showForce,
       };
     },
     restore(data: Record<string, unknown>): void {
@@ -271,6 +306,14 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
       sensors = isValidSensorArray(data.sensors) ? data.sensors : defaultSensors(letter);
       shell.setNameVisible(Boolean(data.showName));
       shell.setCustomName((data.customName as string | null) ?? null);
+      boreDiameter = (data.boreDiameter as number) || DEFAULT_BORE_DIAMETER_MM;
+      rodDiameter = (data.rodDiameter as number) || DEFAULT_ROD_DIAMETER_MM;
+      showForce = Boolean(data.showForce);
+      // The actual force value depends on live pressurization, only known during step() - this
+      // just gets the checkbox's own on/off state to take effect immediately (showing 0 N until
+      // the sim's next tick recomputes it) instead of waiting on that next tick to even appear.
+      forceLabelEl.style.display = showForce ? '' : 'none';
+      if (showForce) forceLabelEl.textContent = '0 N';
       updatePortSide();
       updateLabel();
       updateVisual();
@@ -278,6 +321,7 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
     reset(): void {
       pos = normallyExtended ? 1 : 0;
       ventingNow = false;
+      if (showForce) forceLabelEl.textContent = '0 N';
       updateVisual();
     },
 

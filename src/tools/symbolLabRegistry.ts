@@ -309,16 +309,28 @@ const QUICK_EXHAUST_VALVE_ENTRY: SymbolLabEntry = {
   sourceFile: 'src/components/quickExhaustValve.ts',
   exportName: 'QUICK_EXHAUST_VALVE_DEFAULT_GEOMETRY',
   fields: [
-    field('localW', 'Body width', QUICK_EXHAUST_VALVE_DEFAULT_GEOMETRY.localW),
-    field('localH', 'Body height', QUICK_EXHAUST_VALVE_DEFAULT_GEOMETRY.localH),
+    field('localW', 'Canvas width', QUICK_EXHAUST_VALVE_DEFAULT_GEOMETRY.localW),
+    field('localH', 'Canvas height', QUICK_EXHAUST_VALVE_DEFAULT_GEOMETRY.localH),
     field('ox', 'Canvas offset X', QUICK_EXHAUST_VALVE_DEFAULT_GEOMETRY.ox),
     field('oy', 'Canvas offset Y', QUICK_EXHAUST_VALVE_DEFAULT_GEOMETRY.oy),
-    field('svgW', 'Canvas width', QUICK_EXHAUST_VALVE_DEFAULT_GEOMETRY.svgW),
-    field('svgH', 'Canvas height', QUICK_EXHAUST_VALVE_DEFAULT_GEOMETRY.svgH),
-    field('bodyMargin', 'Body margin', QUICK_EXHAUST_VALVE_DEFAULT_GEOMETRY.bodyMargin, {
-      min: 0,
-      max: 20,
+    field('housingX', 'Housing x', QUICK_EXHAUST_VALVE_DEFAULT_GEOMETRY.housingX),
+    field('housingW', 'Housing width', QUICK_EXHAUST_VALVE_DEFAULT_GEOMETRY.housingW),
+    field(
+      'housingCenterY',
+      'Housing center y',
+      QUICK_EXHAUST_VALVE_DEFAULT_GEOMETRY.housingCenterY,
+    ),
+    field('housingHalfH', 'Housing half-height', QUICK_EXHAUST_VALVE_DEFAULT_GEOMETRY.housingHalfH),
+    field('port1LeadX', 'Port 1 lead x', QUICK_EXHAUST_VALVE_DEFAULT_GEOMETRY.port1LeadX),
+    field('ballLeftCx', 'Ball left x', QUICK_EXHAUST_VALVE_DEFAULT_GEOMETRY.ballLeftCx),
+    field('ballRadius', 'Ball radius', QUICK_EXHAUST_VALVE_DEFAULT_GEOMETRY.ballRadius, {
+      min: 1,
+      max: 12,
     }),
+    field('ballTravel', 'Ball travel', QUICK_EXHAUST_VALVE_DEFAULT_GEOMETRY.ballTravel),
+    field('port2LeadTopY', 'Port 2 lead top y', QUICK_EXHAUST_VALVE_DEFAULT_GEOMETRY.port2LeadTopY),
+    field('port3TipX', 'Exhaust arrow tip x', QUICK_EXHAUST_VALVE_DEFAULT_GEOMETRY.port3TipX),
+    field('port3LeadX', 'Port 3 lead x', QUICK_EXHAUST_VALVE_DEFAULT_GEOMETRY.port3LeadX),
   ],
   createDefaultGeometry: () => ({ ...QUICK_EXHAUST_VALVE_DEFAULT_GEOMETRY }),
   renderPreview(svg, geo) {
@@ -326,10 +338,10 @@ const QUICK_EXHAUST_VALVE_ENTRY: SymbolLabEntry = {
     const g = createSvgEl('g', { transform: `translate(${typed.ox},${typed.oy})` });
     svg.appendChild(g);
     const p = drawQuickExhaustValveBody(g, typed);
-    createLabeledPort(g, '1', p['1'].cx, p['1'].cy, 'V', 'below');
-    createLabeledPort(g, '2', p['2'].cx, p['2'].cy, 'H', 'right');
-    createLabeledPort(g, '3', p['3'].cx, p['3'].cy, 'H', 'left');
-    return { w: typed.svgW, h: typed.svgH };
+    createLabeledPort(g, '1', p['1'].cx, p['1'].cy, 'H', 'above');
+    createLabeledPort(g, '2', p['2'].cx, p['2'].cy, 'V', 'above');
+    createLabeledPort(g, '3', p['3'].cx, p['3'].cy, 'H', 'above');
+    return { w: typed.localW + typed.ox * 2, h: typed.localH + typed.oy * 2 };
   },
 };
 

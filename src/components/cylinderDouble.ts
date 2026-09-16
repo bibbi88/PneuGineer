@@ -12,6 +12,13 @@ import {
   renameSensorKeyBindings,
   type CylinderSensor,
 } from './shared/sensorPositions';
+import {
+  DEFAULT_BORE_DIAMETER_MM,
+  DEFAULT_ROD_DIAMETER_MM,
+  annularAreaMm2,
+  boreAreaMm2,
+  forceFromArea,
+} from './shared/cylinderForce';
 
 export const CYLINDER_DOUBLE_TYPE = 'cylinderDouble';
 
@@ -161,6 +168,14 @@ export function createCylinderDouble(compLayer: HTMLElement, x: number, y: numbe
   let pos = 0;
   let sensors: CylinderSensor[] = defaultSensors(letter);
   let ventingNow: 'A' | 'B' | null = null;
+  let boreDiameter = DEFAULT_BORE_DIAMETER_MM;
+  let rodDiameter = DEFAULT_ROD_DIAMETER_MM;
+  let showForce = false;
+
+  const forceLabelEl = document.createElement('div');
+  forceLabelEl.className = 'forceLabel';
+  forceLabelEl.style.display = 'none';
+  shell.el.appendChild(forceLabelEl);
 
   function updateVisual(): void {
     const layout = computeCylinderDoublePistonLayout(geo, pos);
@@ -224,6 +239,24 @@ export function createCylinderDouble(compLayer: HTMLElement, x: number, y: numbe
         updateVisual();
       }
 
+      // Force keeps acting even once the piston has already reached the end of its stroke
+      // (that's how clamping/pressing applications actually work) - so this reads `drivingPort`
+      // directly rather than being gated on the movement check above. B's chamber is the
+      // rod-side one (the rod passes out through the same end its port sits on), so it only
+      // ever pushes against the smaller annular area, not the full bore.
+      if (showForce) {
+        const force =
+          drivingPort === 'A'
+            ? forceFromArea(boreAreaMm2(boreDiameter))
+            : drivingPort === 'B'
+              ? forceFromArea(annularAreaMm2(boreDiameter, rodDiameter))
+              : 0;
+        forceLabelEl.textContent = `${force.toFixed(0)} N`;
+        forceLabelEl.style.display = '';
+      } else {
+        forceLabelEl.style.display = 'none';
+      }
+
       for (const sensor of sensors) {
         ctx.emitSignal(sensor.label, isInSensorRange(pos, sensor));
       }
@@ -236,6 +269,9 @@ export function createCylinderDouble(compLayer: HTMLElement, x: number, y: numbe
         sensors,
         showName: shell.getNameVisible(),
         customName: shell.getCustomName(),
+        boreDiameter,
+        rodDiameter,
+        showForce,
       };
     },
     restore(data: Record<string, unknown>): void {
@@ -245,11 +281,20 @@ export function createCylinderDouble(compLayer: HTMLElement, x: number, y: numbe
       shell.setDefaultName(`Cylinder ${letter}`);
       shell.setNameVisible(Boolean(data.showName));
       shell.setCustomName((data.customName as string | null) ?? null);
+      boreDiameter = (data.boreDiameter as number) || DEFAULT_BORE_DIAMETER_MM;
+      rodDiameter = (data.rodDiameter as number) || DEFAULT_ROD_DIAMETER_MM;
+      showForce = Boolean(data.showForce);
+      // The actual force value depends on live pressurization, only known during step() - this
+      // just gets the checkbox's own on/off state to take effect immediately (showing 0 N until
+      // the sim's next tick recomputes it) instead of waiting on that next tick to even appear.
+      forceLabelEl.style.display = showForce ? '' : 'none';
+      if (showForce) forceLabelEl.textContent = '0 N';
       updateVisual();
     },
     reset(): void {
       pos = 0;
       ventingNow = null;
+      if (showForce) forceLabelEl.textContent = '0 N';
       updateVisual();
     },
 
