@@ -41,9 +41,12 @@ export const CYLINDER_DOUBLE_DEFAULT_GEOMETRY: CylinderDoubleGeometry = {
   gy: 8,
   w: 176,
   h: 56,
-  portMargin: 6,
-  portInsetA: 10,
-  portInsetB: 10,
+  // portMargin (8, not the "natural" 6) and portInsetA/B (13, not 10) are chosen together so
+  // ports A/B land exactly on the 10px grid relative to this canvas's own center - see
+  // src/core/grid.ts.
+  portMargin: 8,
+  portInsetA: 13,
+  portInsetB: 13,
   pistonWidth: 6,
   pistonTravelInset: 10,
   pistonToRodGap: 6,
@@ -157,6 +160,7 @@ export function createCylinderDouble(compLayer: HTMLElement, x: number, y: numbe
 
   let pos = 0;
   let sensors: CylinderSensor[] = defaultSensors(letter);
+  let ventingNow: 'A' | 'B' | null = null;
 
   function updateVisual(): void {
     const layout = computeCylinderDoublePistonLayout(geo, pos);
@@ -189,16 +193,30 @@ export function createCylinderDouble(compLayer: HTMLElement, x: number, y: numbe
 
       let target = pos;
       let drivingPort: 'A' | 'B' | null = null;
+      let ventingPort: 'A' | 'B' | null = null;
       if (aPressurized && !bPressurized) {
         target = 1;
         drivingPort = 'A';
+        ventingPort = 'B';
       } else if (bPressurized && !aPressurized) {
         target = 0;
         drivingPort = 'B';
+        ventingPort = 'A';
       }
 
-      if (drivingPort) {
-        const multiplier = ctx.flowMultiplierToNearestSource(drivingPort);
+      // Only actually venting while there's still a real move left to make - once the piston
+      // bottoms out there's no more volume to displace, so the exhaust flow (and its animation)
+      // should stop right along with the motion.
+      ventingNow = drivingPort && ventingPort && target !== pos ? ventingPort : null;
+
+      if (drivingPort && ventingPort) {
+        // Whichever side is more restricted sets the pace - a flow control valve throttling
+        // the exhausting chamber slows the piston down just as much as one throttling the
+        // supply would, matching how these are actually used (a "meter-out" flow control on
+        // the exhaust is the standard way to control cylinder speed in real pneumatics).
+        const inMultiplier = ctx.flowMultiplierToNearestSource(drivingPort);
+        const outMultiplier = ctx.flowMultiplierToOpenExhaust(ventingPort);
+        const multiplier = Math.min(inMultiplier, outMultiplier);
         const dir = target > pos ? 1 : -1;
         const step = BASE_CYL_SPEED * multiplier * dt;
         pos += dir * Math.min(step, Math.abs(target - pos));
@@ -231,6 +249,7 @@ export function createCylinderDouble(compLayer: HTMLElement, x: number, y: numbe
     },
     reset(): void {
       pos = 0;
+      ventingNow = null;
       updateVisual();
     },
 
@@ -241,6 +260,7 @@ export function createCylinderDouble(compLayer: HTMLElement, x: number, y: numbe
     },
     getBounds: shell.getBounds,
     setSelected: shell.setSelected,
+    currentlyVenting: () => (ventingNow ? [ventingNow] : []),
 
     relabel(): void {
       const oldLetter = letter;

@@ -12,6 +12,7 @@ function stepCtx(overrides: Partial<Record<string, unknown>> = {}) {
     dt: 0.1,
     isPressurized: () => false,
     flowMultiplierToNearestSource: () => 1,
+    flowMultiplierToOpenExhaust: () => 1,
     emitSignal: vi.fn(),
     readSignal: () => false,
     ...overrides,

@@ -17,16 +17,21 @@ export interface RestrictorGeometry {
   portLead: number;
 }
 
+// svgH (144, not the "natural" 145), gy (-3, not -6) and portLead (15, not 18) are all chosen
+// together so IN/OUT land exactly on the 10px grid relative to this canvas's own center - an
+// odd svgH alone leaves every port a permanent half-pixel off, and IN/OUT's spread also needs
+// to become a multiple of 10 for a single canvas-center shift to align both at once - see
+// src/core/grid.ts.
 export const RESTRICTOR_DEFAULT_GEOMETRY: RestrictorGeometry = {
   svgW: 76,
-  svgH: 145,
+  svgH: 144,
   gx: -22,
-  gy: -6,
+  gy: -3,
   husX: 30,
   husY: 50,
   husW: 60,
   husH: 60,
-  portLead: 18,
+  portLead: 15,
 };
 
 export function drawRestrictorBody(

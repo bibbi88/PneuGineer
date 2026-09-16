@@ -5,6 +5,7 @@ import { canEdit } from '../app/modes';
 import { snap } from '../core/grid';
 import { getSelectedComponents, selectOnly } from './selection';
 import { redrawAllConnections } from '../wires/connection';
+import { computePortSnapCorrection } from './portSnap';
 
 export function makeDraggable(comp: Component, viewport: ViewportAdapter): void {
   comp.el.classList.add('draggable');
@@ -46,6 +47,17 @@ export function makeDraggable(comp: Component, viewport: ViewportAdapter): void 
         if (!origin) continue;
         c.setPos(snap(origin.x + dx), snap(origin.y + dy));
       }
+
+      // Port-to-port alignment only makes sense with a single, unambiguous "this is what I'm
+      // aligning" component - with a multi-selection drag there's no single set of ports to
+      // magnet-snap without the correction fighting the group's own relative layout.
+      if (dragging.length === 1) {
+        const correction = computePortSnapCorrection(comp, viewport);
+        if (correction.dx !== 0 || correction.dy !== 0) {
+          comp.setPos(comp.x + correction.dx, comp.y + correction.dy);
+        }
+      }
+
       redrawAllConnections();
     }
 

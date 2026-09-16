@@ -11,10 +11,55 @@ export interface FrameGraph {
   /** Directed weighted adjacency: neighbor -> multiplier to apply when flow crosses that edge. */
   adjacency: Map<PortKeyStr, Map<PortKeyStr, number>>;
   sourceKeys: Set<PortKeyStr>;
+  /** Ports carrying live exhaust flow this frame (populated by `markExhaustFlow`, after step()
+   * has run and components can report what they're currently venting) - purely a
+   * visualization signal, not consulted anywhere in the pressure/conductivity simulation. */
+  exhausting: Set<PortKeyStr>;
+  /** Hop count from the nearest venting port, for every port in `exhausting` - lets a renderer
+   * tell which end of a wire air is coming from without needing its own separate walk. */
+  exhaustDepth: Map<PortKeyStr, number>;
 }
 
 export function emptyFrameGraph(): FrameGraph {
-  return { pressurized: new Set(), adjacency: new Map(), sourceKeys: new Set() };
+  return {
+    pressurized: new Set(),
+    adjacency: new Map(),
+    sourceKeys: new Set(),
+    exhausting: new Set(),
+    exhaustDepth: new Map(),
+  };
+}
+
+/**
+ * Walks outward from every currently-venting port (see `Component.currentlyVenting`) over the
+ * same adjacency graph the pressure simulation itself uses, marking every port air can reach on
+ * its way out - wires between two marked ports are exhausting live air this frame. Call after
+ * the step() pass (venting state isn't known until then) and before rendering; mutates `graph`
+ * in place rather than returning a new one so callers already holding a reference see it too.
+ */
+export function markExhaustFlow(graph: FrameGraph, ventingKeys: PortKeyStr[]): void {
+  graph.exhausting.clear();
+  graph.exhaustDepth.clear();
+
+  const queue: PortKeyStr[] = [];
+  for (const key of ventingKeys) {
+    if (graph.exhausting.has(key)) continue;
+    graph.exhausting.add(key);
+    graph.exhaustDepth.set(key, 0);
+    queue.push(key);
+  }
+
+  while (queue.length > 0) {
+    const cur = queue.shift() as PortKeyStr;
+    const curDepth = graph.exhaustDepth.get(cur) ?? 0;
+    for (const next of graph.adjacency.get(cur)?.keys() ?? []) {
+      if (!graph.exhausting.has(next)) {
+        graph.exhausting.add(next);
+        graph.exhaustDepth.set(next, curDepth + 1);
+        queue.push(next);
+      }
+    }
+  }
 }
 
 interface WireAdjacencyCache {
@@ -122,7 +167,43 @@ export function computeFrameGraph(
     changed = pressurized.size > sizeBefore;
   }
 
-  return { pressurized, adjacency, sourceKeys };
+  return { pressurized, adjacency, sourceKeys, exhausting: new Set(), exhaustDepth: new Map() };
+}
+
+/**
+ * Multiplier for air escaping outward from `fromKey` (a cylinder's currently-venting port) to
+ * open atmosphere - i.e. a "meter-out" speed control, the flow-control placement real pneumatic
+ * circuits actually favor for controlling actuator speed (throttling the exhaust rather than
+ * the supply gives much steadier control, since the exhausting chamber is what's resisting the
+ * piston's motion). Walks the graph outward from `fromKey`, multiplying each edge's flow
+ * multiplier along the way, until it dead-ends at a port with no further unvisited neighbors -
+ * there's no dedicated "atmosphere" node in this graph, so a true dead end (an open exhaust
+ * port, typically fitted with just a silencer that doesn't itself appear here) is what stands
+ * in for it. When more than one dead end is reachable (a branching exhaust path), the most
+ * restrictive one wins, matching this simulator's existing multiply-along-the-path model for
+ * components in series. Returns 1 (unrestricted) if `fromKey` isn't wired to anything at all.
+ */
+export function flowMultiplierToOpenExhaust(graph: FrameGraph, fromKey: PortKeyStr): number {
+  const queue: Array<{ key: PortKeyStr; mult: number }> = [{ key: fromKey, mult: 1 }];
+  const visited = new Set<PortKeyStr>([fromKey]);
+  let leafMult = Infinity;
+
+  while (queue.length > 0) {
+    const cur = queue.shift();
+    if (!cur) break;
+    const neighbors = graph.adjacency.get(cur.key);
+    const unvisited = [...(neighbors?.keys() ?? [])].filter((k) => !visited.has(k));
+    if (unvisited.length === 0) {
+      leafMult = Math.min(leafMult, cur.mult);
+      continue;
+    }
+    for (const next of unvisited) {
+      visited.add(next);
+      queue.push({ key: next, mult: cur.mult * (neighbors?.get(next) ?? 1) });
+    }
+  }
+
+  return leafMult === Infinity ? 1 : leafMult;
 }
 
 /**

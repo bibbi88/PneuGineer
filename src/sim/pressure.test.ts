@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { Component, Connection } from '../core/types';
-import { computeFrameGraph, flowMultiplierToNearestSource, portKey } from './pressure';
+import {
+  computeFrameGraph,
+  flowMultiplierToNearestSource,
+  flowMultiplierToOpenExhaust,
+  markExhaustFlow,
+  portKey,
+} from './pressure';
 import { createSource } from '../components/source';
 import { createAndValve } from '../components/andValve';
 import { createOrValve } from '../components/orValve';
@@ -9,6 +15,8 @@ import { createRestrictor } from '../components/restrictor';
 import { createValve52 } from '../components/valve52';
 import { createValve52Mono } from '../components/valve52Mono';
 import { createOneWayFlowControlValve } from '../components/oneWayFlowControlValve';
+import { createCylinderDouble } from '../components/cylinderDouble';
+import { BASE_CYL_SPEED } from './constants';
 
 let version = 0;
 function nextVersion(): number {
@@ -215,5 +223,78 @@ describe('computeFrameGraph', () => {
 
     const reverseGraph = computeFrameGraph([sourceOnOut, valve], reverseConnections, nextVersion());
     expect(flowMultiplierToNearestSource(reverseGraph, portKey(valve.id, 'IN'))).toBeCloseTo(0.5);
+  });
+
+  it('flowMultiplierToOpenExhaust is unrestricted for a port with nothing wired to it', () => {
+    const cyl = createCylinderDouble(compLayer(), 0, 0);
+    const graph = computeFrameGraph([cyl], [], nextVersion());
+    expect(flowMultiplierToOpenExhaust(graph, portKey(cyl.id, 'B'))).toBe(1);
+  });
+
+  it('flowMultiplierToOpenExhaust picks up a one-way flow control valve throttling the exhaust', () => {
+    const cyl = createCylinderDouble(compLayer(), 0, 0);
+    const flowValve = createOneWayFlowControlValve(compLayer(), 0, 0);
+    // Cylinder's exhaust wired to the flow control valve's OUT side, its IN side left open (a
+    // stand-in for "leads on out to atmosphere") - free IN->OUT into the cylinder, throttled
+    // OUT->IN on the way back out, the standard "meter-out" placement for speed control.
+    const connections = [wire(cyl.id, 'B', flowValve.id, 'OUT')];
+    const graph = computeFrameGraph([cyl, flowValve], connections, nextVersion());
+    expect(flowMultiplierToOpenExhaust(graph, portKey(cyl.id, 'B'))).toBeCloseTo(0.5);
+  });
+
+  it('a throttled exhaust slows the cylinder down, not just a throttled supply', () => {
+    // Regression test: cylinder speed used to only ever look at flowMultiplierToNearestSource on
+    // the driving port, so a flow control valve wired to meter the exhaust (the way these are
+    // actually used in practice) had no effect on speed at all.
+    const source = createSource(compLayer(), 0, 0);
+    const cyl = createCylinderDouble(compLayer(), 0, 0);
+    const flowValve = createOneWayFlowControlValve(compLayer(), 0, 0);
+    const connections = [
+      wire(source.id, 'OUT', cyl.id, 'A'),
+      wire(cyl.id, 'B', flowValve.id, 'OUT'),
+    ];
+    const graph = computeFrameGraph([source, cyl, flowValve], connections, nextVersion());
+
+    const ctx = {
+      dt: 0.1,
+      isPressurized: (p: string) => graph.pressurized.has(portKey(cyl.id, p)),
+      flowMultiplierToNearestSource: (p: string) =>
+        flowMultiplierToNearestSource(graph, portKey(cyl.id, p)),
+      flowMultiplierToOpenExhaust: (p: string) =>
+        flowMultiplierToOpenExhaust(graph, portKey(cyl.id, p)),
+      emitSignal: () => {},
+      readSignal: () => false,
+    };
+
+    cyl.step?.(0.1, ctx);
+    const throttledPos = (cyl.snapshot() as { pos: number }).pos;
+
+    expect(throttledPos).toBeCloseTo(BASE_CYL_SPEED * 0.5 * 0.1);
+    // Sanity check against the untouched, unthrottled rate - the throttle must have actually
+    // done something, not coincidentally matched the free-flow distance.
+    expect(throttledPos).toBeLessThan(BASE_CYL_SPEED * 0.1);
+  });
+
+  it('markExhaustFlow marks every port air passes through on its way to atmosphere', () => {
+    const cyl = createCylinderDouble(compLayer(), 0, 0);
+    const flowValve = createOneWayFlowControlValve(compLayer(), 0, 0);
+    const connections = [wire(cyl.id, 'B', flowValve.id, 'OUT')];
+    const graph = computeFrameGraph([cyl, flowValve], connections, nextVersion());
+
+    markExhaustFlow(graph, [portKey(cyl.id, 'B')]);
+
+    expect(graph.exhausting.has(portKey(cyl.id, 'B'))).toBe(true);
+    expect(graph.exhausting.has(portKey(flowValve.id, 'OUT'))).toBe(true);
+    expect(graph.exhausting.has(portKey(flowValve.id, 'IN'))).toBe(true);
+    // A port on some unrelated, unwired component must not light up too.
+    const bystander = createSource(compLayer(), 0, 0);
+    const graph2 = computeFrameGraph([cyl, flowValve, bystander], connections, nextVersion());
+    markExhaustFlow(graph2, [portKey(cyl.id, 'B')]);
+    expect(graph2.exhausting.has(portKey(bystander.id, 'OUT'))).toBe(false);
+
+    // Called again with no venting ports (e.g. the cylinder just reached its target and stopped)
+    // must clear out anything left over from a previous frame.
+    markExhaustFlow(graph, []);
+    expect(graph.exhausting.size).toBe(0);
   });
 });

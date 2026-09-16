@@ -16,15 +16,18 @@ export interface SourceGeometry {
   portY: number;
 }
 
+// svgH (72, not the "natural" 73) and portY (16, not 14) are chosen together so the OUT port
+// lands exactly on the 10px grid relative to this canvas's own center - an odd svgH alone
+// leaves it a permanent half-pixel off - see src/core/grid.ts.
 export const SOURCE_DEFAULT_GEOMETRY: SourceGeometry = {
   svgW: 46,
-  svgH: 73,
+  svgH: 72,
   gx: -27,
   gy: 0,
   cx: 50,
   cy: 50,
   r: 15,
-  portY: 14,
+  portY: 16,
 };
 
 export function drawSourceBody(g: SVGElement, geo: SourceGeometry): { cx: number; portY: number } {

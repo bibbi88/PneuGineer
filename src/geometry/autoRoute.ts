@@ -163,13 +163,18 @@ function astar(
  * extra perpendicular corner (which reads as a needless little zigzag right at the port), shift
  * the path's leading and trailing straight runs sideways so they align exactly with the stub -
  * the run's own length absorbs the few pixels of grid-rounding instead of adding a new segment.
- * Left alone (returned unchanged) when the two runs would overlap, since that's only possible
- * for a very short path where the caller's fallback bridge is the simpler, safer option.
+ * Returns null when the two runs would overlap - meaning the whole grid path is really just one
+ * straight run with no bend in it at all (e.g. start and goal landed in the same row/column),
+ * so there's nothing for a "shift this run" adjustment to anchor to. The caller falls back to
+ * `directBridge` for that case, which connects the stubs directly instead of replaying a coarse
+ * grid path whose only content was rounding noise.
  */
-function alignRunsToStubs(gridPath: Point[], stubOut: Point, stubIn: Point): Point[] {
+function alignRunsToStubs(gridPath: Point[], stubOut: Point, stubIn: Point): Point[] | null {
   const points = gridPath.map((p) => ({ ...p }));
   const n = points.length;
-  if (n < 3) return points;
+  // Fewer than 3 points can't contain a bend either (0 or 1 grid moves) - same "nothing to
+  // anchor an alignment to" situation as the overlap check below.
+  if (n < 3) return null;
 
   const p0 = points[0] as Point;
   const p1 = points[1] as Point;
@@ -205,7 +210,7 @@ function alignRunsToStubs(gridPath: Point[], stubOut: Point, stubIn: Point): Poi
   // aligning both is safe since each only ever writes its own axis. Only bail to the caller's
   // fallback bridge when they constrain the SAME axis and still overlap, meaning there's no
   // real bend between them at all (e.g. a dead-straight path) to anchor an alignment to.
-  if (leadHorizontal === tailHorizontal && leadEnd > tailStart) return points;
+  if (leadHorizontal === tailHorizontal && leadEnd > tailStart) return null;
 
   for (let i = 0; i < leadEnd; i++) {
     const p = points[i] as Point;
@@ -224,6 +229,21 @@ function alignRunsToStubs(gridPath: Point[], stubOut: Point, stubIn: Point): Poi
   points[0] = { ...stubOut };
   points[n - 1] = { ...stubIn };
   return points;
+}
+
+/**
+ * Connects the two stubs directly with at most one corner, ignoring the coarse A* grid
+ * entirely - used both when no grid path exists at all, and when the grid path that was found
+ * turned out to carry no real bend (see `alignRunsToStubs`), since in either case the exact
+ * stub coordinates already say everything the route needs to.
+ */
+function directBridge(from: Point, to: Point, stubOut: Point, stubIn: Point): Point[] {
+  const points: Point[] = [from, stubOut];
+  if (stubOut.x !== stubIn.x && stubOut.y !== stubIn.y) {
+    points.push({ x: stubIn.x, y: stubOut.y });
+  }
+  points.push(stubIn, to);
+  return collapseColinear(points);
 }
 
 /**
@@ -247,16 +267,11 @@ export function autoRouteAStar(
   const goalCell = toCell(grid, stubIn);
 
   const gridPath = astar(grid, startCell, goalCell);
-  if (!gridPath) {
-    const points: Point[] = [from.pos, stubOut];
-    if (stubOut.x !== stubIn.x && stubOut.y !== stubIn.y) {
-      points.push({ x: stubIn.x, y: stubOut.y });
-    }
-    points.push(stubIn, to.pos);
-    return collapseColinear(points);
-  }
+  if (!gridPath) return directBridge(from.pos, to.pos, stubOut, stubIn);
 
   const alignedPath = alignRunsToStubs(gridPath, stubOut, stubIn);
+  if (!alignedPath) return directBridge(from.pos, to.pos, stubOut, stubIn);
+
   const firstGridPoint = alignedPath[0] as Point;
   const lastGridPoint = alignedPath[alignedPath.length - 1] as Point;
   const points: Point[] = [from.pos, stubOut];

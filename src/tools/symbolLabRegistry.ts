@@ -91,9 +91,12 @@ const ONE_WAY_FLOW_CONTROL_VALVE_ENTRY: SymbolLabEntry = {
   fields: [
     field('localW', 'Body width', ONE_WAY_FLOW_DEFAULT_GEOMETRY.localW),
     field('localH', 'Body height', ONE_WAY_FLOW_DEFAULT_GEOMETRY.localH),
-    field('portY', 'Check-valve line height', ONE_WAY_FLOW_DEFAULT_GEOMETRY.portY),
-    field('branchY', 'Throttle line height', ONE_WAY_FLOW_DEFAULT_GEOMETRY.branchY),
-    field('leftX', 'Port margin', ONE_WAY_FLOW_DEFAULT_GEOMETRY.leftX, { min: 0, max: 40 }),
+    field('portX', 'Check-valve line position', ONE_WAY_FLOW_DEFAULT_GEOMETRY.portX),
+    field('branchX', 'Throttle line position', ONE_WAY_FLOW_DEFAULT_GEOMETRY.branchX),
+    field('portMargin', 'Port margin', ONE_WAY_FLOW_DEFAULT_GEOMETRY.portMargin, {
+      min: 0,
+      max: 40,
+    }),
     field('decorScale', 'Glyph scale', ONE_WAY_FLOW_DEFAULT_GEOMETRY.decorScale, {
       min: 0.5,
       max: 4,
@@ -107,9 +110,9 @@ const ONE_WAY_FLOW_CONTROL_VALVE_ENTRY: SymbolLabEntry = {
     const g = createSvgEl('g', { transform: 'translate(8,8)' });
     svg.appendChild(g);
     const typed = geo as unknown as typeof ONE_WAY_FLOW_DEFAULT_GEOMETRY;
-    const { leftX, rightX, portY } = drawOneWayFlowControlValveBody(g, typed);
-    createLabeledPort(g, 'IN', leftX, portY, 'H', 'above');
-    createLabeledPort(g, 'OUT', rightX, portY, 'H', 'above');
+    const { bottomY, topY, portX } = drawOneWayFlowControlValveBody(g, typed);
+    createPort(g, 'IN', portX, bottomY, 'V');
+    createPort(g, 'OUT', portX, topY, 'V');
     return { w: typed.localW + 16, h: typed.localH + 16 };
   },
 };

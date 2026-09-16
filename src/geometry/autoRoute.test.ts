@@ -86,6 +86,24 @@ describe('autoRouteAStar', () => {
     expect(points.length).toBe(5);
   });
 
+  it('stays a single straight line when an unrelated component shifts the routing grid off true stub coordinates', () => {
+    // Regression test: the A* search grid is 20px-celled and its origin depends on every
+    // component currently in the scene (not just the two being connected) via GRID_MARGIN_PX,
+    // so an unrelated component elsewhere routinely leaves the two same-row stub points a few
+    // pixels short of landing on an exact grid line. Previously, when that rounding made the
+    // whole path collapse to a single (already straight) row, the aligner bailed out and the
+    // caller's bridging fallback then "corrected" the harmless rounding remainder with a real,
+    // needless detour - even though the two ports were dead-aligned to begin with.
+    const from: PortAnchor = { pos: { x: 0, y: 100 }, entryOrientation: 'H' };
+    const to: PortAnchor = { pos: { x: 300, y: 100 }, entryOrientation: 'H' };
+    const bystander = fakeComponent(7, { x: 500, y: 41, w: 40, h: 40 });
+
+    const points = autoRouteAStar(from, to, [bystander], new Set());
+
+    assertOrthogonal(points);
+    expect(points.every((p) => p.y === 100)).toBe(true);
+  });
+
   it('excludes the endpoints own components from obstacle marking', () => {
     const from: PortAnchor = { pos: { x: 10, y: 10 }, entryOrientation: 'H' };
     const to: PortAnchor = { pos: { x: 90, y: 10 }, entryOrientation: 'H' };

@@ -50,14 +50,19 @@ export const VALVE_52_DEFAULT_GEOMETRY: Valve52Geometry = {
   gx0: 115,
   gy0: 24,
   extraW: 110,
-  extraH: 49,
+  // 48 rather than the "natural" 49: keeps svgH even (an odd canvas height leaves every port a
+  // permanent half-pixel off the 10px grid, however else the geometry is tuned) and lands the
+  // fixed ports exactly on it - see src/core/grid.ts.
+  extraH: 48,
   stroke: 2,
   font: 10,
   triHRatio: 0.25,
   triWRatio: 1.2,
   triGap: 7,
   pilotPortOffset: 24,
-  pilotLinkGap: 15,
+  // 16 rather than the "natural" 15: lands the pilot ports (14/12) exactly on the grid too,
+  // given the extraH fix above.
+  pilotLinkGap: 16,
   cellArrowInset: 10,
   fixedPortInset: 10,
   fixedPortLead: 10,

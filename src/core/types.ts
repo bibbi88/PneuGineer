@@ -25,6 +25,10 @@ export interface SimStepContext {
   dt: number;
   isPressurized(port: PortKey): boolean;
   flowMultiplierToNearestSource(port: PortKey): number;
+  /** Companion to `flowMultiplierToNearestSource` for the port on the opposite (venting) side -
+   * how restricted the path out to open atmosphere is, so a flow control valve throttling a
+   * cylinder's exhaust actually slows it down instead of only supply-side throttling counting. */
+  flowMultiplierToOpenExhaust(port: PortKey): number;
   emitSignal(key: string, value: boolean): void;
   readSignal(key: string): boolean;
 }
@@ -57,6 +61,11 @@ export interface Component<TSnapshot = Record<string, unknown>> {
   flowMultiplier?(fromPort: PortKey, toPort: PortKey): number;
   /** Ports that inject pressure into the system (e.g. a pressure source's outlet). */
   sourcePorts?(): PortKey[];
+  /** Ports this component is actively venting air out through as of the most recent step() -
+   * e.g. a cylinder's currently-retracting chamber. Purely a visualization hook (drives the
+   * exhaust flow animation on wires); has no effect on the pressure/conductivity simulation
+   * itself. Empty (or omitted) when nothing is currently moving/exhausting. */
+  currentlyVenting?(): PortKey[];
 
   snapshot(): TSnapshot;
   restore(data: TSnapshot): void;

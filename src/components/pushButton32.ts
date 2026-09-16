@@ -14,8 +14,10 @@ import {
 export const PUSH_BUTTON_32_TYPE = 'pushButton32';
 
 // Extra right-side room for the spring symbol, beyond the offset already reserved on the left.
-const SVG_W = SLIDING_VALVE_OFFSET_X + SLIDING_VALVE_W + 48;
-const SVG_H = SLIDING_VALVE_OFFSET_Y + SLIDING_VALVE_H + 30;
+// (+50/+34 rather than the "natural" +48/+30: chosen so ports 1/2/3 land exactly on the 10px
+// grid relative to this canvas's own center - see src/core/grid.ts.)
+const SVG_W = SLIDING_VALVE_OFFSET_X + SLIDING_VALVE_W + 50;
+const SVG_H = SLIDING_VALVE_OFFSET_Y + SLIDING_VALVE_H + 34;
 const MID_X = SLIDING_VALVE_OFFSET_X + SLIDING_VALVE_W / 2;
 
 export interface PushButton32Geometry {

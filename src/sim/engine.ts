@@ -3,6 +3,8 @@ import { appState } from '../app/AppState';
 import {
   computeFrameGraph,
   flowMultiplierToNearestSource,
+  flowMultiplierToOpenExhaust,
+  markExhaustFlow,
   portKey,
   type FrameGraph,
 } from './pressure';
@@ -42,11 +44,21 @@ export function stepSimulation(dt: number): FrameGraph {
       dt,
       isPressurized: (p) => graph.pressurized.has(portKey(c.id, p)),
       flowMultiplierToNearestSource: (p) => flowMultiplierToNearestSource(graph, portKey(c.id, p)),
+      flowMultiplierToOpenExhaust: (p) => flowMultiplierToOpenExhaust(graph, portKey(c.id, p)),
       emitSignal: setSignal,
       readSignal: getSignal,
     };
     c.step(dt, ctx);
   }
+
+  // Venting state (e.g. which chamber a cylinder is currently exhausting through) is only known
+  // now that every step() has run - collect it and flood it over the same adjacency graph used
+  // for pressure, purely so render.ts can animate the wires actually carrying exhaust flow.
+  const ventingKeys: string[] = [];
+  for (const c of appState.components) {
+    for (const p of c.currentlyVenting?.() ?? []) ventingKeys.push(portKey(c.id, p));
+  }
+  markExhaustFlow(graph, ventingKeys);
 
   return graph;
 }

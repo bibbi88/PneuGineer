@@ -12,8 +12,10 @@ import {
 export const TIME_DELAY_VALVE_TYPE = 'timeDelayValve';
 
 // Extra right-side room for the spring symbol, beyond the offset already reserved on the left.
-const SVG_W = SLIDING_VALVE_OFFSET_X + SLIDING_VALVE_W + 48;
-const SVG_H = SLIDING_VALVE_OFFSET_Y + SLIDING_VALVE_H + 30;
+// (+50/+34 rather than the "natural" +48/+30: chosen so ports 1/2/3 land exactly on the 10px
+// grid relative to this canvas's own center - see src/core/grid.ts.)
+const SVG_W = SLIDING_VALVE_OFFSET_X + SLIDING_VALVE_W + 50;
+const SVG_H = SLIDING_VALVE_OFFSET_Y + SLIDING_VALVE_H + 34;
 const DEFAULT_DELAY_SEC = 1.0;
 
 export interface TimeDelayValveGeometry {
@@ -34,7 +36,9 @@ export interface TimeDelayValveGeometry {
 }
 
 export const TIME_DELAY_VALVE_DEFAULT_GEOMETRY: TimeDelayValveGeometry = {
-  pilotPortX: -40,
+  // -42 rather than the "natural" -40: lands port 12 exactly on the 10px grid given the
+  // SVG_W fix above.
+  pilotPortX: -42,
   pilotLinkInnerX: -14,
   clockX: -26,
   clockR: 12,

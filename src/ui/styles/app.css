@@ -7,6 +7,7 @@
   --faint: #96969e;
   --accent: #d00;
   --port: #0a74ff;
+  --exhaust: #e08a00;
   --line: #ccc;
   --line-soft: #dcdce2;
 }
@@ -435,6 +436,29 @@ rect.wireHandle.wireStubHandle {
   stroke-dasharray: 8 5;
 }
 
+/* Live exhaust flow (e.g. a cylinder's currently-retracting chamber venting to atmosphere) -
+   marching dashes rather than just a static color, so it reads as air actually moving through
+   the wire right now rather than a fixed state like .active's steady supply-pressurized color.
+   Wins over .dashed (a user styling choice) since it's transient, informative simulation
+   feedback, but .selected still wins over this - keeps the "this is selected" signal strongest,
+   matching .selected's existing precedence over .dashed. */
+.wire.exhausting {
+  stroke: var(--exhaust);
+  stroke-width: 3;
+  stroke-dasharray: 6 6;
+  animation: exhaustFlow 0.5s linear infinite;
+}
+
+.wire.exhausting-reverse {
+  animation-direction: reverse;
+}
+
+@keyframes exhaustFlow {
+  to {
+    stroke-dashoffset: -12;
+  }
+}
+
 .wireGhost {
   stroke: var(--port);
   stroke-width: 2;
@@ -474,6 +498,18 @@ rect.wireHandle.wireStubHandle {
 .port.pressurized {
   fill: var(--accent);
   stroke: var(--accent);
+}
+
+/* One-way flow control valve's throttle glyph: nudges up while the check valve's own path is
+   conducting (see oneWayFlowControlValve.ts's onPressureChange), as a small "air is passing
+   through here" cue. Transform is in the ellipse's own local units, before the decor group's
+   2x scale, so this reads as a modest ~6px shift on screen rather than a large jump. */
+.flowThrottleCircle {
+  transition: transform 0.15s ease-out;
+}
+
+.flowThrottleCircle.flowing {
+  transform: translateY(-3px);
 }
 
 .port.portHover {

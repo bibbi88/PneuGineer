@@ -15,14 +15,17 @@ export interface QuickExhaustValveGeometry {
   bodyMargin: number;
 }
 
+// svgH (60, not the "natural" 61) and bodyMargin (10, not 8) are both chosen so ports 1/2/3
+// land exactly on the 10px grid relative to this canvas's own center - an odd svgH alone
+// leaves every port a permanent half-pixel off - see src/core/grid.ts.
 export const QUICK_EXHAUST_VALVE_DEFAULT_GEOMETRY: QuickExhaustValveGeometry = {
   localW: 60,
   localH: 40,
   ox: 22,
   oy: 0,
   svgW: 104,
-  svgH: 61,
-  bodyMargin: 8,
+  svgH: 60,
+  bodyMargin: 10,
 };
 
 export function drawQuickExhaustValveBody(

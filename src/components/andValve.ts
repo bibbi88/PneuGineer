@@ -23,7 +23,9 @@ export const AND_VALVE_DEFAULT_GEOMETRY: AndValveGeometry = {
   svgW: 200,
   svgH: 102,
   gx: 10,
-  gy: -26,
+  // -29 rather than the "natural" -26: lands ports A/B/OUT exactly on the 10px grid relative
+  // to this canvas's own center - see src/core/grid.ts.
+  gy: -29,
   husX: 40,
   husY: 60,
   husW: 100,

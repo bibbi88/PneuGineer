@@ -33,7 +33,12 @@ export const CHECK_VALVE_DEFAULT_GEOMETRY: CheckValveGeometry = {
   baseHusW: 50,
   baseHusH: 50,
   basePortR: 7,
-  basePortLead: 10,
+  // 25/3 rather than the "natural" 10: after the 0.6 scale is applied this lands IN/OUT exactly
+  // 20px (a grid multiple) above/below this canvas's own center, instead of ~21px - see
+  // src/core/grid.ts. A plain integer pre-scale value can't hit an exact post-scale multiple of
+  // 10 without a much bigger (9px+) visual change, so this one constant is intentionally a
+  // fraction rather than rounded.
+  basePortLead: 25 / 3,
 };
 
 export function drawCheckValveBody(

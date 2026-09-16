@@ -45,9 +45,12 @@ export const CYLINDER_SINGLE_DEFAULT_GEOMETRY: CylinderSingleGeometry = {
   gy: 8,
   w: 160,
   h: 56,
-  portMargin: 6,
-  capPortInset: 12,
-  rodPortInset: 12,
+  // portMargin (8, not the "natural" 6) and capPortInset/rodPortInset (15, not 12) are chosen
+  // together so port A lands exactly on the 10px grid relative to this canvas's own center, in
+  // both push and pull mode - see src/core/grid.ts.
+  portMargin: 8,
+  capPortInset: 15,
+  rodPortInset: 15,
   pistonWidth: 6,
   pistonTravelStartInset: 10,
   pistonTravelEndInset: 20,
@@ -177,6 +180,7 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
   let pos = 0;
   let normallyExtended = false;
   let sensors: CylinderSensor[] = defaultSensors(letter);
+  let ventingNow = false;
 
   function updateVisual(): void {
     const layout = computeCylinderSinglePistonLayout(geo, pos);
@@ -225,9 +229,17 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
     step(dt: number, ctx: SimStepContext): void {
       const pressurizedA = ctx.isPressurized('A');
       const target = targetFor(pressurizedA);
+      ventingNow = !pressurizedA && target !== pos;
 
       if (target !== pos) {
-        const multiplier = pressurizedA ? ctx.flowMultiplierToNearestSource('A') : 1;
+        // While air is coming in through A, only the supply side can restrict it (the spring
+        // side vents to atmosphere directly, with no port or valve of its own). On the spring
+        // return stroke, A is what the piston is now exhausting through - a flow control valve
+        // out that way (a "meter-out" setup, the standard way to control cylinder speed) throttles
+        // the return just as it would a driven stroke.
+        const multiplier = pressurizedA
+          ? ctx.flowMultiplierToNearestSource('A')
+          : ctx.flowMultiplierToOpenExhaust('A');
         const dir = target > pos ? 1 : -1;
         const step = BASE_CYL_SPEED * multiplier * dt;
         pos += dir * Math.min(step, Math.abs(target - pos));
@@ -265,6 +277,7 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
     },
     reset(): void {
       pos = normallyExtended ? 1 : 0;
+      ventingNow = false;
       updateVisual();
     },
 
@@ -275,6 +288,7 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
     },
     getBounds: shell.getBounds,
     setSelected: shell.setSelected,
+    currentlyVenting: () => (ventingNow ? ['A'] : []),
 
     relabel(): void {
       const oldLetter = letter;

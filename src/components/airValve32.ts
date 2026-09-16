@@ -12,8 +12,10 @@ import {
 export const AIR_VALVE_32_TYPE = 'airValve32';
 
 // Extra right-side room for the spring symbol, beyond the offset already reserved on the left.
-const SVG_W = SLIDING_VALVE_OFFSET_X + SLIDING_VALVE_W + 48;
-const SVG_H = SLIDING_VALVE_OFFSET_Y + SLIDING_VALVE_H + 30;
+// (+50/+34 rather than the "natural" +48/+30: chosen so ports 1/2/3 land exactly on the 10px
+// grid relative to this canvas's own center - see src/core/grid.ts.)
+const SVG_W = SLIDING_VALVE_OFFSET_X + SLIDING_VALVE_W + 50;
+const SVG_H = SLIDING_VALVE_OFFSET_Y + SLIDING_VALVE_H + 34;
 
 export interface AirValve32Geometry {
   /** x of the pilot port 14, relative to the mover's own origin. */
@@ -29,7 +31,9 @@ export interface AirValve32Geometry {
 }
 
 export const AIR_VALVE_32_DEFAULT_GEOMETRY: AirValve32Geometry = {
-  pilotPortX: -40,
+  // -42 rather than the "natural" -40: lands port 14 exactly on the 10px grid given the
+  // SVG_W fix above.
+  pilotPortX: -42,
   pilotBaseX: -26,
   pilotTipX: -6,
   pilotHalfHeight: 8,
