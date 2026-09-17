@@ -7,6 +7,19 @@ class AppState {
   selectedComponents = new Set<ComponentId>();
   selectedConnectionId: ComponentId | null = null;
   mode: Mode = Modes.STOP;
+  /** Title-block metadata - shown/edited in the inspector's "Project info" section (see
+   * ui/inspector.ts) and round-tripped through the project file (see persistence/project.ts)
+   * alongside the project name itself, which lives in ui/projectBar.ts instead since it's also
+   * shown in the sidebar. */
+  projectAuthor = '';
+  projectCheckedBy = '';
+  projectCompany = '';
+  /** The optional print-sheet guide (see ui/pageFrame.ts and persistence/schema.ts's PageFrame
+   * doc) - 'none' draws nothing. x/y are its world-space center, meaningless while size is
+   * 'none'. */
+  pageFrameSize: 'none' | 'a4' | 'a3' = 'none';
+  pageFrameX = 0;
+  pageFrameY = 0;
   /** Bumped whenever components/connections are added or removed, so cached graphs know to rebuild. */
   topologyVersion = 0;
 

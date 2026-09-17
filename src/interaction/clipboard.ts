@@ -6,7 +6,8 @@ import { canEdit } from '../app/modes';
 import { spawnComponent } from './spawn';
 import { createConnection, redrawAllConnections } from '../wires/connection';
 import { getSelectedComponents, clearSelection, addToSelection } from './selection';
-import { showContextMenu } from './contextMenu';
+import { showContextMenu, type ContextMenuItem } from './contextMenu';
+import { zoomToFit } from './zoomToFit';
 
 interface ClipboardComp {
   origId: ComponentId;
@@ -45,7 +46,6 @@ export function initClipboard(
   // Only reaches here for a right-click that wasn't already claimed (and stopPropagation'd) by
   // a component, wire, or handle - i.e. genuinely empty canvas.
   window.addEventListener('contextmenu', (e) => {
-    if (!canEdit(appState.mode) || !hasClipboardContent()) return;
     const rect = workspaceEl.getBoundingClientRect();
     const overWorkspace =
       e.clientX >= rect.left &&
@@ -54,10 +54,17 @@ export function initClipboard(
       e.clientY <= rect.bottom;
     if (!overWorkspace) return;
 
-    const world = viewport.clientToWorld(e.clientX, e.clientY);
-    showContextMenu(e.clientX, e.clientY, [
-      { label: 'Paste', onClick: () => pasteClipboardAt(world.x, world.y) },
-    ]);
+    // Paste is an edit, gated the same as everywhere else; Zoom to fit only ever moves the
+    // camera, so it's offered regardless of mode - including mid-simulation, where re-framing
+    // the view is exactly when you'd want it most.
+    const items: ContextMenuItem[] = [];
+    if (canEdit(appState.mode) && hasClipboardContent()) {
+      const world = viewport.clientToWorld(e.clientX, e.clientY);
+      items.push({ label: 'Paste', onClick: () => pasteClipboardAt(world.x, world.y) });
+    }
+    items.push({ label: 'Zoom to fit', onClick: () => zoomToFit(viewport, workspaceEl) });
+
+    showContextMenu(e.clientX, e.clientY, items);
   });
 }
 

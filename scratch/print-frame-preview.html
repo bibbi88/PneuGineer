@@ -1,0 +1,586 @@
+<title>Print Frame Preview</title>
+<style>
+  :root {
+    --bg: #f7f7f9;
+    --panel: #ececf1;
+    --panel-2: #e2e2ea;
+    --ink: #111;
+    --muted: #666;
+    --faint: #96969e;
+    --accent: #d00;
+    --port: #0a74ff;
+    --exhaust: #e08a00;
+    --line: #ccc;
+    --line-soft: #dcdce2;
+    --frame: #5b6b8c;
+    --frame-fill: rgba(91, 107, 140, 0.045);
+    --page-bg: #fbfbfc;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    padding-block: 32px;
+    background: var(--page-bg);
+    color: var(--ink);
+    font-family:
+      system-ui,
+      -apple-system,
+      'Segoe UI',
+      Roboto,
+      sans-serif;
+  }
+
+  .page {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding-inline: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+  }
+
+  /* ---------- Header ---------- */
+
+  .intro {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-width: 66ch;
+  }
+
+  .eyebrow {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--frame);
+  }
+
+  h1 {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+  }
+
+  .intro p {
+    margin: 0;
+    font-size: 13.5px;
+    line-height: 1.55;
+    color: var(--muted);
+  }
+
+  /* ---------- App shell mockup ---------- */
+
+  .shell {
+    display: grid;
+    grid-template-columns: 220px 1fr 224px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    overflow: hidden;
+    background: var(--bg);
+    box-shadow: 0 1px 2px rgba(17, 17, 17, 0.04);
+  }
+
+  .shellLabel {
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #fff;
+    background: var(--ink);
+    padding: 3px 9px;
+    border-radius: 100px;
+    opacity: 0.82;
+    pointer-events: none;
+    z-index: 3;
+    white-space: nowrap;
+  }
+
+  .sidebar,
+  .inspectorPanel {
+    background: var(--panel);
+    padding: 10px;
+    font-size: 12px;
+  }
+
+  .sidebar {
+    border-right: 1px solid var(--line);
+  }
+
+  .inspectorPanel {
+    border-left: 1px solid var(--line);
+  }
+
+  .panelH2 {
+    margin: 4px 0 10px;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  hr {
+    border: none;
+    border-top: 1px solid var(--line-soft);
+    margin: 10px 0;
+  }
+
+  .projectName {
+    display: block;
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: #fff;
+    font-size: 12px;
+    color: var(--ink);
+    margin-bottom: 6px;
+  }
+
+  .btnRow {
+    display: flex;
+    gap: 6px;
+    margin: 6px 0;
+  }
+
+  .btn {
+    display: block;
+    width: 100%;
+    padding: 7px 9px;
+    border: 1px solid #bbb;
+    background: #fff;
+    border-radius: 6px;
+    text-align: left;
+    font-size: 11.5px;
+    color: var(--ink);
+    cursor: default;
+  }
+
+  .btnRow .btn {
+    flex: 1;
+    text-align: center;
+  }
+
+  .libCategory {
+    border-bottom: 1px solid var(--line-soft);
+    padding: 7px 2px;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--ink);
+  }
+
+  .libCategory::before {
+    content: '';
+    width: 8px;
+    height: 8px;
+    border-right: 1.6px solid var(--muted);
+    border-bottom: 1.6px solid var(--muted);
+    transform: rotate(-45deg);
+    flex: none;
+  }
+
+  .toolbarBtn {
+    padding: 6px 9px;
+    border: 1px solid #bbb;
+    background: #fff;
+    border-radius: 6px;
+    font-size: 11.5px;
+    margin: 0 0 5px;
+  }
+
+  /* ---------- Workspace ---------- */
+
+  .workspace {
+    position: relative;
+    background: var(--bg);
+    min-height: 560px;
+    overflow: hidden;
+  }
+
+  .gridLayer {
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(to right, rgba(0, 0, 0, 0.045) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(0, 0, 0, 0.045) 1px, transparent 1px);
+    background-size: 21px 21px;
+  }
+
+  .canvasSvg {
+    position: relative;
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  #viewGroup {
+    transform-origin: 450px 300px;
+    transition: transform 0.55s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .frameRect {
+    fill: var(--frame-fill);
+    stroke: var(--frame);
+    stroke-width: 1.6;
+    stroke-dasharray: 7 5;
+    transition:
+      width 0.4s,
+      height 0.4s,
+      x 0.4s,
+      y 0.4s;
+  }
+
+  .frameLabel {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    fill: var(--frame);
+  }
+
+  .frameCorner {
+    stroke: var(--frame);
+    stroke-width: 1.6;
+    fill: none;
+  }
+
+  .wire {
+    stroke: var(--ink);
+    stroke-width: 2;
+    fill: none;
+  }
+
+  .wire.active {
+    stroke: var(--accent);
+  }
+
+  .wire.exhausting {
+    stroke: var(--exhaust);
+    stroke-dasharray: 5 5;
+  }
+
+  .compBody {
+    fill: #fff;
+    stroke: var(--ink);
+    stroke-width: 2;
+  }
+
+  .compFill {
+    fill: #888;
+  }
+
+  .portDot {
+    fill: var(--port);
+    stroke: var(--port);
+  }
+
+  .compLabel {
+    font-size: 10.5px;
+    fill: var(--muted);
+  }
+
+  .hint {
+    position: absolute;
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 11.5px;
+    color: var(--faint);
+    pointer-events: none;
+  }
+
+  /* ---------- Inspector: the new control ---------- */
+
+  .inspectorRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 5px 0;
+    font-size: 12px;
+  }
+
+  .inspectorRow.isNew {
+    background: rgba(91, 107, 140, 0.08);
+    margin: 0 -6px;
+    padding: 7px 6px;
+    border-radius: 6px;
+    position: relative;
+  }
+
+  .newBadge {
+    position: absolute;
+    top: -7px;
+    right: 4px;
+    background: var(--frame);
+    color: #fff;
+    font-size: 8.5px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    padding: 1.5px 5px;
+    border-radius: 100px;
+  }
+
+  .frameSelect {
+    font-size: 12px;
+    padding: 4px 6px;
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    background: #fff;
+    color: var(--ink);
+  }
+
+  .inspectorHint {
+    font-size: 11px;
+    line-height: 1.5;
+    color: var(--faint);
+    margin: 6px 0 12px;
+  }
+
+  /* ---------- Notes ---------- */
+
+  .notes {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+  }
+
+  .noteCard {
+    border: 1px solid var(--line-soft);
+    border-radius: 8px;
+    padding: 12px 14px;
+    background: #fff;
+  }
+
+  .noteCard h3 {
+    margin: 0 0 5px;
+    font-size: 12.5px;
+    font-weight: 600;
+  }
+
+  .noteCard p {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.55;
+    color: var(--muted);
+  }
+
+  @media (max-width: 780px) {
+    .shell {
+      grid-template-columns: 1fr;
+    }
+    .sidebar,
+    .inspectorPanel {
+      display: none;
+    }
+    .notes {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+
+<div class="page">
+  <div class="intro">
+    <div class="eyebrow">Proposal · Editor</div>
+    <h1>An optional page-frame guide, sized to A4 or A3</h1>
+    <p>
+      A dashed sheet outline drawn behind the diagram, driven by one new dropdown next to "Show
+      grid." It's a visual guide only - never touches simulation or wiring - and the view zooms to
+      fit it, the same way panning already works today. Try the dropdown on the right.
+    </p>
+  </div>
+
+  <div class="shell">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <input class="projectName" value="pneumatic_circuit_03" readonly />
+      <div class="btnRow">
+        <div class="btn">💾 Save</div>
+        <div class="btn">📂 Load</div>
+      </div>
+      <div class="btn">⬇ Export ▾</div>
+      <hr />
+      <div class="panelH2">Component Library</div>
+      <div class="libCategory">Sources</div>
+      <div class="libCategory">Valves</div>
+      <div class="libCategory">Flow</div>
+      <div class="libCategory">Cylinders</div>
+      <hr />
+      <div class="toolbarBtn">▶ Play</div>
+      <div class="toolbarBtn">↶ Undo</div>
+    </aside>
+
+    <!-- Workspace -->
+    <main class="workspace">
+      <span class="shellLabel">Canvas — zooms to fit the selected frame</span>
+      <div class="gridLayer"></div>
+      <svg class="canvasSvg" viewBox="0 0 900 600" preserveAspectRatio="xMidYMid meet">
+        <g id="viewGroup">
+          <!-- page frame (drawn first, so the circuit sits on top) -->
+          <g id="frameGroup"></g>
+
+          <!-- sample circuit -->
+          <g>
+            <!-- source -->
+            <circle class="compBody" cx="170" cy="300" r="24" />
+            <line class="wire active" x1="194" y1="300" x2="252" y2="300" />
+            <text class="compLabel" x="170" y="342" text-anchor="middle">Source</text>
+
+            <!-- 5/2 valve -->
+            <rect class="compBody" x="252" y="270" width="60" height="60" rx="2" />
+            <circle class="portDot" cx="252" cy="286" r="4" />
+            <circle class="portDot" cx="252" cy="314" r="4" />
+            <text class="compLabel" x="282" y="352" text-anchor="middle">Valve 5/2</text>
+
+            <line class="wire active" x1="312" y1="286" x2="404" y2="286" />
+            <line class="wire exhausting" x1="312" y1="314" x2="360" y2="314" />
+            <line class="wire exhausting" x1="360" y1="314" x2="360" y2="360" />
+
+            <!-- throttle -->
+            <circle class="portDot" cx="404" cy="286" r="3.5" />
+            <ellipse
+              cx="426"
+              cy="286"
+              rx="9"
+              ry="9"
+              fill="#fff"
+              stroke="#111"
+              stroke-width="1.4"
+            />
+            <path d="M420,281 l6,5 l6,-5" fill="none" stroke="#111" stroke-width="1.4" />
+            <line class="wire active" x1="448" y1="286" x2="470" y2="286" />
+            <text class="compLabel" x="426" y="322" text-anchor="middle">Flow control</text>
+
+            <!-- cylinder -->
+            <rect class="compBody" x="470" y="246" width="250" height="80" />
+            <rect class="compFill" x="560" y="246" width="8" height="80" />
+            <rect class="compFill" x="568" y="278" width="150" height="16" />
+            <rect fill="#666" x="700" y="272" width="12" height="28" />
+            <circle class="portDot" cx="470" cy="286" r="4" />
+            <circle class="portDot" cx="720" cy="286" r="4" />
+            <text class="compLabel" x="595" y="352" text-anchor="middle">Cylinder A</text>
+          </g>
+        </g>
+      </svg>
+      <div class="hint">Drag components from the sidebar onto the canvas.</div>
+    </main>
+
+    <!-- Inspector -->
+    <aside class="inspectorPanel">
+      <div class="panelH2">Inspector</div>
+      <div class="panelH2" style="font-size: 11.5px; color: var(--muted); font-weight: 500">
+        Grid
+      </div>
+      <label class="inspectorRow">
+        <span>Show grid</span>
+        <input type="checkbox" checked disabled />
+      </label>
+      <label class="inspectorRow isNew">
+        <span class="newBadge">New</span>
+        <span>Page frame</span>
+        <select id="frameSelect" class="frameSelect" aria-label="Page frame size">
+          <option value="none">None</option>
+          <option value="a4" selected>A4 (297 × 210 mm)</option>
+          <option value="a3">A3 (420 × 297 mm)</option>
+        </select>
+      </label>
+      <p class="inspectorHint" id="frameHint">
+        A4 fits most of this circuit - the source and part of the cylinder fall outside the sheet.
+        Nothing about the diagram itself changes; it's a print guide, not a boundary.
+      </p>
+    </aside>
+  </div>
+
+  <div class="notes">
+    <div class="noteCard">
+      <h3>Why a dropdown, not a toggle</h3>
+      <p>
+        None keeps today's behavior exactly as-is. A4/A3 match the sizes people actually print or
+        drop into a PDF report, without inventing a whole paper-size picker for a niche need.
+      </p>
+    </div>
+    <div class="noteCard">
+      <h3>Purely visual</h3>
+      <p>
+        The frame never clips content, blocks clicks, or affects the grid/snap. It's drawn once,
+        below the components, the same way the grid lines already are.
+      </p>
+    </div>
+    <div class="noteCard">
+      <h3>Pairs naturally with Export</h3>
+      <p>
+        A likely next step: "Export → as PNG" could offer "fit to frame," cropping the image to
+        exactly the sheet instead of the current auto-bounds around everything drawn.
+      </p>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    var select = document.getElementById('frameSelect');
+    var frameGroup = document.getElementById('frameGroup');
+    var viewGroup = document.getElementById('viewGroup');
+    var hint = document.getElementById('frameHint');
+    var CENTER_X = 450,
+      CENTER_Y = 300;
+
+    var SIZES = {
+      none: null,
+      a4: { w: 480, h: 339, label: 'A4 · 297 × 210 mm' },
+      a3: { w: 679, h: 480, label: 'A3 · 420 × 297 mm' },
+    };
+
+    var HINTS = {
+      none: 'No sheet guide - the canvas behaves exactly as it does today.',
+      a4: 'A4 fits most of this circuit - the source and part of the cylinder fall outside the sheet. Nothing about the diagram itself changes; it’s a print guide, not a boundary.',
+      a3: 'A3 comfortably contains the whole circuit with room to spare - the size most of these diagrams would actually print at.',
+    };
+
+    function render() {
+      var key = select.value;
+      var size = SIZES[key];
+      hint.textContent = HINTS[key];
+
+      if (!size) {
+        frameGroup.innerHTML = '';
+        viewGroup.style.transform = 'scale(1)';
+        return;
+      }
+
+      var x = CENTER_X - size.w / 2;
+      var y = CENTER_Y - size.h / 2;
+      frameGroup.innerHTML =
+        '<rect class="frameRect" x="' +
+        x +
+        '" y="' +
+        y +
+        '" width="' +
+        size.w +
+        '" height="' +
+        size.h +
+        '"></rect>' +
+        '<text class="frameLabel" x="' +
+        (x + 12) +
+        '" y="' +
+        (y + 24) +
+        '">' +
+        size.label +
+        '</text>';
+
+      var s = Math.min((900 * 0.92) / size.w, (600 * 0.92) / size.h);
+      viewGroup.style.transform = 'scale(' + s + ')';
+    }
+
+    select.addEventListener('change', render);
+    render();
+  })();
+</script>

@@ -20,14 +20,16 @@ import { scheduleAutosave, readAutosave, clearAutosave } from './persistence/aut
 import { loadProject } from './persistence/project';
 import { initHistory, pushHistory, resetHistory } from './history/historyStore';
 import { renderInspector } from './ui/inspector';
+import { initPageFrame } from './ui/pageFrame';
 import { resetCylinderLetters } from './components/shared/letters';
 import { loadGridPreference } from './app/gridPreference';
-import { setGridEnabled } from './core/grid';
+import { setGridEnabled, snap } from './core/grid';
 import { initConfirmBeforeUnload } from './app/confirmClose';
 
 const workspaceQuery = document.querySelector<HTMLElement>('.workspace');
 const viewportQuery = document.getElementById('viewport');
 const gridLayerQuery = document.getElementById('gridLayer');
+const frameLayerQuery = document.getElementById('frameLayer') as SVGSVGElement | null;
 const compLayerQuery = document.getElementById('compLayer');
 const connLayerQuery = document.getElementById('connLayer') as SVGSVGElement | null;
 const handleLayerQuery = document.getElementById('handleLayer') as SVGSVGElement | null;
@@ -40,6 +42,7 @@ if (
   !workspaceQuery ||
   !viewportQuery ||
   !gridLayerQuery ||
+  !frameLayerQuery ||
   !compLayerQuery ||
   !connLayerQuery ||
   !handleLayerQuery ||
@@ -53,6 +56,7 @@ if (
 
 const workspaceEl: HTMLElement = workspaceQuery;
 const gridLayerEl: HTMLElement = gridLayerQuery;
+const frameLayer: SVGSVGElement = frameLayerQuery;
 const compLayer: HTMLElement = compLayerQuery;
 const connLayer: SVGSVGElement = connLayerQuery;
 const handleLayer: SVGSVGElement = handleLayerQuery;
@@ -81,11 +85,12 @@ initClipboard(factoryCtx, viewport, workspaceEl);
 function addComponentAtViewCenter(type: string): void {
   const rect = workspaceEl.getBoundingClientRect();
   const world = viewport.clientToWorld(rect.left + rect.width / 2, rect.top + rect.height / 2);
-  spawnComponent(type, factoryCtx, viewport, world.x, world.y);
+  spawnComponent(type, factoryCtx, viewport, snap(world.x), snap(world.y));
 }
 
-// Dragging a library tile onto the canvas places it exactly where it's dropped, rather than
-// always at the view center like a click does.
+// Dragging a library tile onto the canvas places it wherever it's dropped (like a click, snapped
+// to the grid) rather than always at the view center - an unsnapped drop would otherwise leave
+// every wire into/out of it with the same off-grid jog a click-insert used to.
 workspaceEl.addEventListener('dragover', (e) => {
   if (!e.dataTransfer?.types.includes(COMPONENT_DRAG_MIME)) return;
   e.preventDefault();
@@ -96,7 +101,7 @@ workspaceEl.addEventListener('drop', (e) => {
   if (!type) return;
   e.preventDefault();
   const world = viewport.clientToWorld(e.clientX, e.clientY);
-  spawnComponent(type, factoryCtx, viewport, world.x, world.y);
+  spawnComponent(type, factoryCtx, viewport, snap(world.x), snap(world.y));
 });
 
 renderComponentLibrary(
@@ -117,7 +122,8 @@ resetCylinderLetters();
 
 renderToolbar(toolbarButtons);
 const projectBar = renderProjectBar(projectBarEl, factoryCtx, viewport, connLayer);
-renderInspector(inspectorEl, viewport);
+renderInspector(inspectorEl, viewport, projectBar);
+initPageFrame(frameLayer, projectBar);
 startSimLoop();
 
 appState.onChange(() => {

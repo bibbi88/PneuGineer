@@ -10,6 +10,13 @@ export interface FrameGraph {
   pressurized: Set<PortKeyStr>;
   /** Directed weighted adjacency: neighbor -> multiplier to apply when flow crosses that edge. */
   adjacency: Map<PortKeyStr, Map<PortKeyStr, number>>;
+  /** `adjacency` transposed - port -> every port with an edge pointing *into* it. Wires and
+   * components like the one-way flow control valve add both directions of their edge to
+   * `adjacency` already, so this only actually matters for a genuinely one-directional edge
+   * (e.g. a plain check valve's `directed: true`), where it's the only way to discover, from the
+   * downstream port, that an edge from the upstream port exists at all - `adjacency` alone only
+   * exposes edges leaving a port, never ones arriving at it. */
+  reverseAdjacency: Map<PortKeyStr, Set<PortKeyStr>>;
   sourceKeys: Set<PortKeyStr>;
   /** Ports carrying live exhaust flow this frame (populated by `markExhaustFlow`, after step()
    * has run and components can report what they're currently venting) - purely a
@@ -24,6 +31,7 @@ export function emptyFrameGraph(): FrameGraph {
   return {
     pressurized: new Set(),
     adjacency: new Map(),
+    reverseAdjacency: new Map(),
     sourceKeys: new Set(),
     exhausting: new Set(),
     exhaustDepth: new Map(),
@@ -92,12 +100,15 @@ function getWireAdjacency(
 
 function addDirEdge(
   adjacency: Map<PortKeyStr, Map<PortKeyStr, number>>,
+  reverseAdjacency: Map<PortKeyStr, Set<PortKeyStr>>,
   a: PortKeyStr,
   b: PortKeyStr,
   multiplier: number,
 ): void {
   if (!adjacency.has(a)) adjacency.set(a, new Map());
   adjacency.get(a)?.set(b, multiplier);
+  if (!reverseAdjacency.has(b)) reverseAdjacency.set(b, new Set());
+  reverseAdjacency.get(b)?.add(a);
 }
 
 function flood(
@@ -132,8 +143,9 @@ export function computeFrameGraph(
   const wireAdjacency = getWireAdjacency(connections, topologyVersion);
 
   const adjacency = new Map<PortKeyStr, Map<PortKeyStr, number>>();
+  const reverseAdjacency = new Map<PortKeyStr, Set<PortKeyStr>>();
   for (const [a, neighbors] of wireAdjacency) {
-    for (const b of neighbors) addDirEdge(adjacency, a, b, 1);
+    for (const b of neighbors) addDirEdge(adjacency, reverseAdjacency, a, b, 1);
   }
 
   const pressurized = new Set<PortKeyStr>();
@@ -159,15 +171,24 @@ export function computeFrameGraph(
         // control valve conducts both ways on one undirected edge but throttles only one of
         // them, so reusing a single (edge.a, edge.b) multiplier for both directions would
         // silently apply the free-flow rate to the throttled direction too.
-        addDirEdge(adjacency, a, b, c.flowMultiplier?.(edge.a, edge.b) ?? 1);
-        if (!edge.directed) addDirEdge(adjacency, b, a, c.flowMultiplier?.(edge.b, edge.a) ?? 1);
+        addDirEdge(adjacency, reverseAdjacency, a, b, c.flowMultiplier?.(edge.a, edge.b) ?? 1);
+        if (!edge.directed) {
+          addDirEdge(adjacency, reverseAdjacency, b, a, c.flowMultiplier?.(edge.b, edge.a) ?? 1);
+        }
       }
     }
     flood(adjacency, pressurized);
     changed = pressurized.size > sizeBefore;
   }
 
-  return { pressurized, adjacency, sourceKeys, exhausting: new Set(), exhaustDepth: new Map() };
+  return {
+    pressurized,
+    adjacency,
+    reverseAdjacency,
+    sourceKeys,
+    exhausting: new Set(),
+    exhaustDepth: new Map(),
+  };
 }
 
 /**
@@ -207,6 +228,37 @@ export function flowMultiplierToOpenExhaust(graph: FrameGraph, fromKey: PortKeyS
 }
 
 /**
+ * Shortest hop-count from `fromKey` to the nearest currently-pressurized source, over the same
+ * adjacency graph the pressure simulation itself uses. Returns Infinity if none is reachable.
+ * Companion to `exhaustDepth` (same idea, outward from a venting port instead): together they
+ * let a component whose own edge is undirected - conducts both ways, but by a different path
+ * each way, e.g. the one-way flow control valve's check-valve path vs its throttle path - tell
+ * which of its own two ports actually has the supply (or the open vent) behind it, something
+ * `isPressurized`/`isExhausting` alone can't do since both ports of such an edge always read the
+ * same boolean regardless of which side is actually upstream.
+ */
+export function sourceDistance(graph: FrameGraph, fromKey: PortKeyStr): number {
+  if (graph.sourceKeys.has(fromKey) && graph.pressurized.has(fromKey)) return 0;
+
+  const queue: Array<{ key: PortKeyStr; depth: number }> = [{ key: fromKey, depth: 0 }];
+  const visited = new Set<PortKeyStr>([fromKey]);
+  while (queue.length > 0) {
+    const cur = queue.shift();
+    if (!cur) break;
+    // Backward walk (toward whatever has an edge *into* cur, not out of it) - see
+    // `reverseAdjacency`'s own doc for why a directed edge (e.g. a plain check valve) makes this
+    // different from just following `adjacency` again.
+    for (const next of graph.reverseAdjacency.get(cur.key) ?? []) {
+      if (visited.has(next)) continue;
+      visited.add(next);
+      if (graph.sourceKeys.has(next) && graph.pressurized.has(next)) return cur.depth + 1;
+      queue.push({ key: next, depth: cur.depth + 1 });
+    }
+  }
+  return Infinity;
+}
+
+/**
  * Shortest-hop path from `fromKey` to any currently-pressurized source, multiplying each edge's
  * flow multiplier along the way. Returns 0 if no pressurized source is reachable.
  */
@@ -219,15 +271,19 @@ export function flowMultiplierToNearestSource(graph: FrameGraph, fromKey: PortKe
     if (!cur) break;
     if (graph.sourceKeys.has(cur.key) && graph.pressurized.has(cur.key)) return cur.mult;
 
-    for (const [next] of graph.adjacency.get(cur.key) ?? []) {
+    // This walk goes from the query port back toward a source, i.e. backwards relative to the
+    // direction air actually flows - so it has to follow `reverseAdjacency` (who has an edge
+    // *into* cur), not `adjacency` (who cur has an edge into). Using `adjacency` here would miss
+    // any genuinely one-directional edge entirely once walking from its downstream side (e.g. a
+    // plain check valve's `directed: true` IN->OUT edge has no OUT->IN entry to find at all),
+    // silently reporting no source reachable - see `reverseAdjacency`'s own doc.
+    for (const next of graph.reverseAdjacency.get(cur.key) ?? []) {
       if (!visited.has(next)) {
         visited.add(next);
-        // This walk goes from the query port back toward a source, i.e. backwards relative to
-        // the direction air actually flows. The multiplier that matters is the one for the real
-        // flow direction (next -> cur, since next sits closer to the source), not the multiplier
-        // stored on the edge this walk just traversed (cur -> next) - those two can differ for
-        // an asymmetric-but-undirected edge like the one-way flow control valve, which conducts
-        // both ways but only throttles one of them.
+        // The multiplier that matters is the one for the real flow direction (next -> cur, since
+        // next sits closer to the source), not some multiplier for the cur -> next direction -
+        // those two can differ for an asymmetric-but-undirected edge like the one-way flow
+        // control valve, which conducts both ways but only throttles one of them.
         const realMult = graph.adjacency.get(next)?.get(cur.key) ?? 1;
         queue.push({ key: next, mult: cur.mult * realMult });
       }

@@ -48,13 +48,16 @@ export interface QuickExhaustValveGeometry {
   port3LeadX: number;
 }
 
+// scale 1.0 - the reference icon's own drawn size, ~17% smaller than the previous 1.2. At scale
+// 1.0 every raw coordinate below *is* its own final on-canvas position, so landing on the 10px
+// grid just means each one is already a multiple of 10 relative to localW/2 (76) or localH/2
+// (37) - no scale-dependent re-nudging needed, unlike 0.8 or 1.2 (see src/core/grid.ts).
 export const QUICK_EXHAUST_VALVE_DEFAULT_GEOMETRY: QuickExhaustValveGeometry = {
   localW: 152,
   localH: 74,
   ox: 8,
   oy: 8,
-  // 20% smaller than the reference icon's own drawn size, per request.
-  scale: 0.8,
+  scale: 1.0,
   housingX: 24,
   housingW: 64,
   housingCenterY: 47,

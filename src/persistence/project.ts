@@ -2,20 +2,33 @@ import type { ComponentFactoryContext } from '../components/registry';
 import type { ViewportAdapter } from '../ui/viewport';
 import { appState } from '../app/AppState';
 import { spawnComponent } from '../interaction/spawn';
+import { getComponentRotation, setComponentRotation } from '../interaction/componentContextMenu';
 import { createConnection, redrawAllConnections } from '../wires/connection';
 import { clearSelection } from '../interaction/selection';
 import { resetCylinderLetters } from '../components/shared/letters';
+import { renderPageFrame } from '../ui/pageFrame';
 import { CURRENT_SCHEMA_VERSION, type ProjectFileV1 } from './schema';
 
 export function serializeProject(name: string): ProjectFileV1 {
   return {
     schemaVersion: CURRENT_SCHEMA_VERSION,
     name,
+    meta: {
+      author: appState.projectAuthor,
+      checkedBy: appState.projectCheckedBy,
+      company: appState.projectCompany,
+    },
+    pageFrame: {
+      size: appState.pageFrameSize,
+      x: appState.pageFrameX,
+      y: appState.pageFrameY,
+    },
     comps: appState.components.map((c) => ({
       id: c.id,
       type: c.type,
       x: c.x,
       y: c.y,
+      rot: getComponentRotation(c),
       data: c.snapshot(),
     })),
     conns: appState.connections.map((c) => ({
@@ -50,11 +63,18 @@ export function loadProject(
 ): void {
   appState.runSuppressed(() => {
     clearProject();
+    appState.projectAuthor = file.meta?.author ?? '';
+    appState.projectCheckedBy = file.meta?.checkedBy ?? '';
+    appState.projectCompany = file.meta?.company ?? '';
+    appState.pageFrameSize = file.pageFrame?.size ?? 'none';
+    appState.pageFrameX = file.pageFrame?.x ?? 0;
+    appState.pageFrameY = file.pageFrame?.y ?? 0;
 
     const idMap = new Map<number, number>();
     for (const snap of file.comps) {
       const comp = spawnComponent(snap.type, ctx, viewport, snap.x, snap.y);
       comp.restore(snap.data);
+      if (snap.rot) setComponentRotation(comp, snap.rot);
       idMap.set(snap.id, comp.id);
     }
 
@@ -75,4 +95,10 @@ export function loadProject(
   });
 
   redrawAllConnections();
+  renderPageFrame();
+  // Nothing actually changes selection-wise (clearProject's own clearSelection() already left it
+  // empty), but the inspector's "Project info" section only re-renders on a selection-change
+  // notification - without this second one, it would keep showing whatever author/checked
+  // by/company were on screen before this load instead of the values just restored above.
+  clearSelection();
 }

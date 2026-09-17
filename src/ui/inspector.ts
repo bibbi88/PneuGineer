@@ -1,12 +1,15 @@
 import type { Component } from '../core/types';
 import type { ViewportAdapter } from './viewport';
+import type { ProjectBarRefs } from './projectBar';
 import { appState } from '../app/AppState';
 import { getSelectedComponents, onSelectionChange } from '../interaction/selection';
 import { redrawAllConnections } from '../wires/connection';
 import { setGridEnabled } from '../core/grid';
 import { loadGridPreference, saveGridPreference } from '../app/gridPreference';
+import { setPageFrameSize, renderPageFrame, type PageFrameSize } from './pageFrame';
 import { RESTRICTOR_TYPE } from '../components/restrictor';
 import { ONE_WAY_FLOW_CONTROL_VALVE_TYPE } from '../components/oneWayFlowControlValve';
+import { THROTTLE_VALVE_TYPE } from '../components/throttleValve';
 import { QUICK_EXHAUST_VALVE_TYPE } from '../components/quickExhaustValve';
 import { TIME_DELAY_VALVE_TYPE } from '../components/timeDelayValve';
 import { LIMIT_VALVE_32_TYPE } from '../components/limitValve32';
@@ -127,6 +130,9 @@ const INSPECTOR_FIELDS: Record<string, InspectorField[]> = {
   ],
   [ONE_WAY_FLOW_CONTROL_VALVE_TYPE]: [
     { kind: 'number', key: 'flowPct', label: 'Reverse flow %', min: 0, max: 100, step: 5 },
+  ],
+  [THROTTLE_VALVE_TYPE]: [
+    { kind: 'number', key: 'flowPct', label: 'Flow %', min: 0, max: 100, step: 5 },
   ],
   [QUICK_EXHAUST_VALVE_TYPE]: [
     { kind: 'checkbox', key: 'showPortNumbers', label: 'Show port numbers' },
@@ -683,6 +689,78 @@ function renderNameSection(
   container.appendChild(nameRow);
 }
 
+const PAGE_FRAME_OPTIONS: Array<{ value: PageFrameSize; label: string }> = [
+  { value: 'none', label: 'None' },
+  { value: 'a4', label: 'A4' },
+  { value: 'a3', label: 'A3' },
+];
+
+/** Title-block metadata - project name, author, checked by, company - plus the page-frame size
+ * picker, shown only while nothing is selected, same as Grid below. Project name mirrors the
+ * sidebar's own name field (writes through `projectBar.setName` so both stay in sync); the rest
+ * live only on `appState` and round-trip through the project file (see persistence/project.ts)
+ * alongside it. Every field here also appears in the page frame's own title block (see
+ * ui/pageFrame.ts), which is why each commit re-renders that too, not just this panel. */
+function renderProjectInfoSection(container: HTMLElement, projectBar: ProjectBarRefs): void {
+  const heading = document.createElement('div');
+  heading.className = 'inspectorSectionHeading';
+  heading.textContent = 'Project info';
+  container.appendChild(heading);
+
+  function textRow(label: string, value: string, onCommit: (v: string) => void): void {
+    const row = document.createElement('label');
+    row.className = 'inspectorRow';
+    const span = document.createElement('span');
+    span.textContent = label;
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'inspectorCustomNameInput';
+    input.value = value;
+    input.addEventListener('change', () => {
+      onCommit(input.value);
+      renderPageFrame();
+    });
+    row.append(span, input);
+    container.appendChild(row);
+  }
+
+  textRow('Project name', projectBar.getName(), (v) => projectBar.setName(v));
+  textRow('Author', appState.projectAuthor, (v) => {
+    appState.projectAuthor = v;
+  });
+  textRow('Checked by', appState.projectCheckedBy, (v) => {
+    appState.projectCheckedBy = v;
+  });
+  textRow('Company', appState.projectCompany, (v) => {
+    appState.projectCompany = v;
+  });
+
+  const frameRow = document.createElement('label');
+  frameRow.className = 'inspectorRow';
+  const frameSpan = document.createElement('span');
+  frameSpan.textContent = 'Page frame';
+  const frameSelect = document.createElement('select');
+  for (const opt of PAGE_FRAME_OPTIONS) {
+    const option = document.createElement('option');
+    option.value = opt.value;
+    option.textContent = opt.label;
+    frameSelect.appendChild(option);
+  }
+  frameSelect.value = appState.pageFrameSize;
+  frameSelect.addEventListener('change', () => {
+    setPageFrameSize(frameSelect.value as PageFrameSize);
+  });
+  frameRow.append(frameSpan, frameSelect);
+  container.appendChild(frameRow);
+
+  const frameHint = document.createElement('p');
+  frameHint.className = 'inspectorHint';
+  frameHint.textContent =
+    'Draws a dashed sheet outline with the fields above as a title block - a visual guide only, ' +
+    'centered on the current diagram when picked.';
+  container.appendChild(frameHint);
+}
+
 /** A workspace-wide preference, not tied to any component, so it renders unconditionally -
  * unlike everything else in this panel, it stays visible with nothing (or several things)
  * selected. Turns off both the visual grid and snap-to-grid together, since a hidden grid a
@@ -709,16 +787,23 @@ function renderGridSection(container: HTMLElement, viewport: ViewportAdapter): v
   container.appendChild(row);
 }
 
-export function renderInspector(container: HTMLElement, viewport: ViewportAdapter): void {
+export function renderInspector(
+  container: HTMLElement,
+  viewport: ViewportAdapter,
+  projectBar: ProjectBarRefs,
+): void {
   function refresh(): void {
     container.replaceChildren();
 
     const selected = getSelectedComponents();
     if (selected.length !== 1) {
-      // The grid is a workspace-wide setting, not a component one - but it only gets its own
-      // section here while nothing is selected, so it doesn't compete for space with (or look
-      // like part of) whatever's actually being edited.
-      if (selected.length === 0) renderGridSection(container, viewport);
+      // Project info and the grid are workspace-wide settings, not component ones - but they
+      // only get their own section here while nothing is selected, so they don't compete for
+      // space with (or look like part of) whatever's actually being edited.
+      if (selected.length === 0) {
+        renderProjectInfoSection(container, projectBar);
+        renderGridSection(container, viewport);
+      }
 
       const hint = document.createElement('p');
       hint.className = 'inspectorHint';

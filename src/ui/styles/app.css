@@ -10,6 +10,8 @@
   --exhaust: #e08a00;
   --line: #ccc;
   --line-soft: #dcdce2;
+  --frame: #5b6b8c;
+  --frame-fill: rgba(91, 107, 140, 0.045);
 }
 
 * {
@@ -291,6 +293,45 @@ body {
 
 #connLayer {
   z-index: 0;
+}
+
+/* Deliberately no z-index (paints below #connLayer's explicit 0 within #viewport's own
+   transform-created stacking context) and before it in the DOM - it needs to sit behind the
+   diagram, the same relationship #gridLayer has to everything, but inside #viewport (unlike
+   #gridLayer) so it pans/zooms with the diagram instead of staying pinned to the workspace. */
+#frameLayer {
+  pointer-events: none;
+}
+
+.pageFrameRect {
+  fill: var(--frame-fill);
+  stroke: var(--frame);
+  stroke-width: 2;
+  stroke-dasharray: 10 7;
+}
+
+.pageFrameLabel {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  fill: var(--frame);
+}
+
+.pageFrameTitleBlock {
+  fill: var(--bg);
+  stroke: var(--frame);
+  stroke-width: 1.5;
+}
+
+.pageFrameTitleLabel {
+  font-size: 11px;
+  fill: var(--muted);
+}
+
+.pageFrameTitleValue {
+  font-size: 12px;
+  font-weight: 500;
+  fill: var(--ink);
 }
 
 #compLayer {

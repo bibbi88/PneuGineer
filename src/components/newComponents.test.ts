@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createQuickExhaustValve } from './quickExhaustValve';
 import { createOneWayFlowControlValve } from './oneWayFlowControlValve';
+import { createThrottleValve } from './throttleValve';
 import { createTimeDelayValve } from './timeDelayValve';
 
 function compLayer(): HTMLElement {
@@ -58,6 +59,28 @@ describe('oneWayFlowControlValve', () => {
     expect(valve.conductivityRule({ isPressurized: () => false })).toEqual([{ a: 'IN', b: 'OUT' }]);
     expect(valve.flowMultiplier?.('IN', 'OUT')).toBe(1);
     expect(valve.flowMultiplier?.('OUT', 'IN')).toBeCloseTo(0.5);
+  });
+
+  it('flowPct can be adjusted live via restore(), like the inspector does mid-simulation', () => {
+    const valve = createOneWayFlowControlValve(compLayer(), 0, 0);
+    valve.restore({ ...valve.snapshot(), flowPct: 25 });
+    expect(valve.flowMultiplier?.('OUT', 'IN')).toBeCloseTo(0.25);
+  });
+});
+
+describe('throttleValve', () => {
+  it('throttles both directions equally, unlike the one-way flow control valve', () => {
+    const valve = createThrottleValve(compLayer(), 0, 0);
+    expect(valve.conductivityRule({ isPressurized: () => false })).toEqual([{ a: 'IN', b: 'OUT' }]);
+    expect(valve.flowMultiplier?.('IN', 'OUT')).toBeCloseTo(0.5);
+    expect(valve.flowMultiplier?.('OUT', 'IN')).toBeCloseTo(0.5);
+  });
+
+  it('flowPct can be adjusted live via restore(), like the inspector does mid-simulation', () => {
+    const valve = createThrottleValve(compLayer(), 0, 0);
+    valve.restore({ ...valve.snapshot(), flowPct: 10 });
+    expect(valve.flowMultiplier?.('IN', 'OUT')).toBeCloseTo(0.1);
+    expect(valve.flowMultiplier?.('OUT', 'IN')).toBeCloseTo(0.1);
   });
 });
 

@@ -6,6 +6,7 @@ import {
   flowMultiplierToOpenExhaust,
   markExhaustFlow,
   portKey,
+  sourceDistance,
   type FrameGraph,
 } from './pressure';
 import { getSignal, setSignal } from './signals';
@@ -68,6 +69,8 @@ export function stepSimulation(dt: number): FrameGraph {
     const ctx: FlowVisualContext = {
       isPressurized: (p) => graph.pressurized.has(portKey(c.id, p)),
       isExhausting: (p) => graph.exhausting.has(portKey(c.id, p)),
+      exhaustDistance: (p) => graph.exhaustDepth.get(portKey(c.id, p)) ?? Infinity,
+      sourceDistance: (p) => sourceDistance(graph, portKey(c.id, p)),
     };
     c.updateFlowVisual(ctx);
   }

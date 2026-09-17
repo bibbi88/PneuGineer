@@ -41,8 +41,21 @@ export interface FlowVisualContext {
    * hook rather than something `step()`/`SimStepContext` can offer directly. Ports on either
    * side of a component whose own edge is undirected (conducts both ways, e.g. a one-way flow
    * control valve's IN<->OUT) always share the same `isPressurized` value regardless of which
-   * side actually has a source behind it - `isExhausting` is what can still tell them apart. */
+   * side actually has a source behind it - and, less obviously, also always share the same
+   * `isExhausting` value (the flood-fill that computes it walks the same undirected edge just
+   * as indiscriminately) - so neither boolean alone can tell such a pair of ports apart. Use
+   * `exhaustDistance`/`sourceDistance` for that. */
   isExhausting(port: PortKey): boolean;
+  /** Hop-count from `port` to the nearest actively-venting port, over the same graph
+   * `isExhausting` floods - Infinity if `port` isn't part of any exhaust path right now.
+   * Comparing this between a component's own two ports (which always share one `isExhausting`
+   * boolean when the edge between them is undirected) says which one is actually closer to
+   * the open vent, i.e. which way air is really leaving through this component. */
+  exhaustDistance(port: PortKey): number;
+  /** Hop-count from `port` to the nearest currently-pressurized source - Infinity if none is
+   * reachable. The supply-side companion to `exhaustDistance`, for telling apart two ports
+   * that likewise always share one `isPressurized` boolean. */
+  sourceDistance(port: PortKey): number;
 }
 
 export interface ComponentBounds {

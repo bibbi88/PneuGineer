@@ -18,6 +18,7 @@ import {
   createOneWayFlowControlValve,
   ONE_WAY_FLOW_CONTROL_VALVE_TYPE,
 } from './oneWayFlowControlValve';
+import { createThrottleValve, THROTTLE_VALVE_TYPE } from './throttleValve';
 import { createTextAnnotation, TEXT_ANNOTATION_TYPE } from './textAnnotation';
 
 export interface ComponentFactoryContext {
@@ -144,6 +145,15 @@ export const componentRegistry = new Map<string, RegistryEntry>([
     {
       factory: (ctx, x, y) => createOneWayFlowControlValve(ctx.compLayer, x, y),
       label: 'One-way flow control',
+      placeable: true,
+      category: ComponentCategory.FLOW,
+    },
+  ],
+  [
+    THROTTLE_VALVE_TYPE,
+    {
+      factory: (ctx, x, y) => createThrottleValve(ctx.compLayer, x, y),
+      label: 'Throttle valve',
       placeable: true,
       category: ComponentCategory.FLOW,
     },

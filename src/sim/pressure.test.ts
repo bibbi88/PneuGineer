@@ -6,6 +6,8 @@ import {
   flowMultiplierToOpenExhaust,
   markExhaustFlow,
   portKey,
+  sourceDistance,
+  type FrameGraph,
 } from './pressure';
 import { createSource } from '../components/source';
 import { createAndValve } from '../components/andValve';
@@ -25,6 +27,15 @@ function nextVersion(): number {
 
 function compLayer(): HTMLElement {
   return document.createElement('div');
+}
+
+function flowVisualCtx(graph: FrameGraph, componentId: number) {
+  return {
+    isPressurized: (p: string) => graph.pressurized.has(portKey(componentId, p)),
+    isExhausting: (p: string) => graph.exhausting.has(portKey(componentId, p)),
+    exhaustDistance: (p: string) => graph.exhaustDepth.get(portKey(componentId, p)) ?? Infinity,
+    sourceDistance: (p: string) => sourceDistance(graph, portKey(componentId, p)),
+  };
 }
 
 function wire(fromId: number, fromPort: string, toId: number, toPort: string): Connection {
@@ -101,6 +112,21 @@ describe('computeFrameGraph', () => {
 
     const graph = computeFrameGraph([source, check], connections, nextVersion());
     expect(graph.pressurized.has(portKey(check.id, 'OUT'))).toBe(true);
+  });
+
+  it('flowMultiplierToNearestSource finds the source through a check valve, not just wires', () => {
+    // Regression test: a check valve's edge is genuinely one-directional (`directed: true`, no
+    // reverse entry in `adjacency` at all, unlike the one-way flow control valve's undirected
+    // pair). Walking "backward" from a port downstream of it used to only ever look at that
+    // port's own outgoing edges, which for a one-directional edge never includes the one leading
+    // back to the source - so a cylinder driven through a check valve read a pressurized supply
+    // port yet always computed a 0 speed multiplier and never actually moved.
+    const source = createSource(compLayer(), 0, 0);
+    const check = createCheckValve(compLayer(), 0, 0);
+    const connections = [wire(source.id, 'OUT', check.id, 'IN')];
+
+    const graph = computeFrameGraph([source, check], connections, nextVersion());
+    expect(flowMultiplierToNearestSource(graph, portKey(check.id, 'OUT'))).toBeCloseTo(1);
   });
 
   it('valve52 toggles which ports connect after a pilot rising edge', () => {
@@ -298,14 +324,19 @@ describe('computeFrameGraph', () => {
     expect(graph.exhausting.size).toBe(0);
   });
 
-  it('one-way flow control valve highlights the throttle path (not the check valve) when only exhausting outward', () => {
+  it('one-way flow control valve highlights the throttle path (not the check valve) when actually exhausting', () => {
     // Regression test: this valve's own edge is undirected, so IN and OUT always read the same
-    // `isPressurized` value regardless of which side actually has a source behind it - and in
-    // this exact "meter-out" wiring (OUT tied straight to a cylinder's exhaust, IN left open)
-    // neither port is ever pressurized at all, since venting isn't the same as being fed from a
-    // source. Only `isExhausting` can tell the throttled direction is what's actually live here.
+    // `isExhausting` (and `isPressurized`) boolean regardless of which side actually has the
+    // vent behind it - only the distance variants can tell them apart. In this "meter-out"
+    // wiring (OUT tied straight to a cylinder's exhaust, IN left open) OUT is one hop from the
+    // venting port and IN is two, so OUT should win.
+    const cyl = createCylinderDouble(compLayer(), 0, 0);
     const valve = createOneWayFlowControlValve(compLayer(), 0, 0);
-    valve.updateFlowVisual?.({ isPressurized: () => false, isExhausting: (p) => p === 'OUT' });
+    const connections = [wire(cyl.id, 'B', valve.id, 'OUT')];
+    const graph = computeFrameGraph([cyl, valve], connections, nextVersion());
+    markExhaustFlow(graph, [portKey(cyl.id, 'B')]);
+
+    valve.updateFlowVisual?.(flowVisualCtx(graph, valve.id));
 
     expect(valve.el.querySelectorAll('.owfvFlowPath--pressurized').length).toBe(0);
     expect(valve.el.querySelectorAll('.owfvFlowPath--exhausting').length).toBeGreaterThan(0);
@@ -315,11 +346,36 @@ describe('computeFrameGraph', () => {
   });
 
   it('one-way flow control valve highlights the check valve path (not the throttle) for ordinary forward supply', () => {
+    const source = createSource(compLayer(), 0, 0);
     const valve = createOneWayFlowControlValve(compLayer(), 0, 0);
-    valve.updateFlowVisual?.({ isPressurized: (p) => p === 'IN', isExhausting: () => false });
+    const connections = [wire(source.id, 'OUT', valve.id, 'IN')];
+    const graph = computeFrameGraph([source, valve], connections, nextVersion());
+    markExhaustFlow(graph, []);
+
+    valve.updateFlowVisual?.(flowVisualCtx(graph, valve.id));
 
     expect(valve.el.querySelectorAll('.owfvFlowPath--pressurized').length).toBe(1);
     expect(valve.el.querySelectorAll('.owfvFlowPath--exhausting').length).toBe(0);
     expect(valve.el.querySelector('.flowThrottleCircle')?.classList.contains('flowing')).toBe(true);
+  });
+
+  it('one-way flow control valve highlights the throttle path (not the check valve) when the source sits on OUT, the check-valve-blocked side', () => {
+    // Regression test for the reported bug: a source wired directly to OUT - the direction the
+    // check valve blocks, so only the throttle can actually carry it - used to still light up
+    // the check valve path, because plain `isPressurized` can't tell which port the source is
+    // actually behind (both read pressurized either way).
+    const source = createSource(compLayer(), 0, 0);
+    const valve = createOneWayFlowControlValve(compLayer(), 0, 0);
+    const connections = [wire(source.id, 'OUT', valve.id, 'OUT')];
+    const graph = computeFrameGraph([source, valve], connections, nextVersion());
+    markExhaustFlow(graph, []);
+
+    valve.updateFlowVisual?.(flowVisualCtx(graph, valve.id));
+
+    expect(valve.el.querySelectorAll('.owfvFlowPath--pressurized').length).toBe(0);
+    expect(valve.el.querySelectorAll('.owfvFlowPath--exhausting').length).toBeGreaterThan(0);
+    expect(valve.el.querySelector('.flowThrottleCircle')?.classList.contains('flowing')).toBe(
+      false,
+    );
   });
 });

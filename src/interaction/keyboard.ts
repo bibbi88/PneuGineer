@@ -8,6 +8,7 @@ import {
 } from '../wires/connection';
 import { cancelLinking } from './linking';
 import { copySelection, pasteClipboard } from './clipboard';
+import { undo, redo } from '../history/historyStore';
 import { GRID_SIZE } from '../core/grid';
 
 function isTypingTarget(el: Element | null): boolean {
@@ -61,6 +62,20 @@ export function initKeyboard(): void {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') {
       e.preventDefault();
       pasteClipboard();
+      return;
+    }
+
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+      e.preventDefault();
+      undo();
+      return;
+    }
+
+    // Ctrl+R is the browser's own page-reload shortcut - preventDefault() here is what stops
+    // that instead of redoing and then immediately reloading out from under it.
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'r') {
+      e.preventDefault();
+      redo();
       return;
     }
 

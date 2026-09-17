@@ -113,7 +113,7 @@ export function initViewport(
     applyTransform,
     getTransform: () => ({ scale, tx, ty }),
     setTransform: (s, x, y) => {
-      scale = s;
+      scale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, s));
       tx = x;
       ty = y;
       applyTransform();

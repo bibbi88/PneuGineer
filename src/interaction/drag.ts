@@ -11,7 +11,6 @@ export function makeDraggable(comp: Component, viewport: ViewportAdapter): void 
   comp.el.classList.add('draggable');
 
   comp.el.addEventListener('mousedown', (e: MouseEvent) => {
-    if (!canEdit(appState.mode)) return;
     if (e.button !== 0) return;
     if ((e.target as Element).closest('.port')) return;
     // A component that hosts its own editable text (e.g. a text annotation) needs plain clicks
@@ -30,6 +29,12 @@ export function makeDraggable(comp: Component, viewport: ViewportAdapter): void 
     if (!appState.selectedComponents.has(comp.id)) {
       selectOnly(comp.id);
     }
+
+    // Selecting (to inspect/tweak a component's live parameters, e.g. a flow control valve's
+    // percentage, while a simulation is running) should work regardless of mode - only the drag
+    // itself, an actual layout edit, stays restricted to STOP so a running simulation can't have
+    // its components rearranged out from under it.
+    if (!canEdit(appState.mode)) return;
 
     const dragging = getSelectedComponents();
     const startWorld = viewport.clientToWorld(e.clientX, e.clientY);

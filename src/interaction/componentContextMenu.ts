@@ -6,11 +6,21 @@ import { redrawAllConnections, removeComponentAndConnections } from '../wires/co
 import { selectOnly, getSelectedComponents } from './selection';
 import { copySelection } from './clipboard';
 
-function rotateComponent(comp: Component, deltaDeg: number): void {
-  const current = Number(comp.el.dataset.rot ?? '0');
-  const next = (current + deltaDeg + 360) % 360;
+export function getComponentRotation(comp: Component): number {
+  return Number(comp.el.dataset.rot ?? '0');
+}
+
+/** Sets `comp`'s rotation to an absolute angle (normalized to [0, 360)) - the one place that
+ * actually writes `dataset.rot` and the CSS transform together, so a project reload (see
+ * persistence/project.ts) can restore it the same way a right-click rotate sets it. */
+export function setComponentRotation(comp: Component, deg: number): void {
+  const next = ((deg % 360) + 360) % 360;
   comp.el.dataset.rot = String(next);
   comp.el.style.transform = `translate(-50%, -50%) rotate(${next}deg)`;
+}
+
+function rotateComponent(comp: Component, deltaDeg: number): void {
+  setComponentRotation(comp, getComponentRotation(comp) + deltaDeg);
 }
 
 export function wireUpComponentContextMenu(comp: Component): void {

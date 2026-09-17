@@ -22,23 +22,27 @@ export interface CheckValveGeometry {
   basePortLead: number;
 }
 
+// scale 0.8 (~11% smaller than the previous 0.9) keeps IN/OUT on the 10px grid for the same
+// reason 0.9 did: the housing/port geometry (baseHus*, basePortLead) always scales around its own
+// fixed center (baseCx/baseYMid, themselves independent of `scale`), so a port's offset from that
+// center is exactly ±(baseHusH/2 + basePortLead) * scale. 0.9 could stay on a whole-number
+// basePortLead multiple of 0.3; 0.8 can't land that same offset (30) without also adjusting
+// basePortLead - so it grows a bit (7.5 -> 10, still a minor lead-in stub, not the housing/ball
+// itself) to compensate, keeping the port offset unchanged at 30 while the housing/ball glyph
+// itself is what actually shrinks (25 -> 20 half-width). svgW/svgH/gx/gy are recomputed so the
+// housing's own fixed center still lands on the canvas's own center - see src/core/grid.ts.
 export const CHECK_VALVE_DEFAULT_GEOMETRY: CheckValveGeometry = {
-  svgW: 66,
-  svgH: 100,
-  gx: -12,
-  gy: -15,
-  scale: 0.6,
+  svgW: 90,
+  svgH: 110,
+  gx: 0,
+  gy: -10,
+  scale: 0.8,
   baseHusX: 20,
   baseHusY: 40,
   baseHusW: 50,
   baseHusH: 50,
   basePortR: 7,
-  // 25/3 rather than the "natural" 10: after the 0.6 scale is applied this lands IN/OUT exactly
-  // 20px (a grid multiple) above/below this canvas's own center, instead of ~21px - see
-  // src/core/grid.ts. A plain integer pre-scale value can't hit an exact post-scale multiple of
-  // 10 without a much bigger (9px+) visual change, so this one constant is intentionally a
-  // fraction rather than rounded.
-  basePortLead: 25 / 3,
+  basePortLead: 12.5,
 };
 
 export function drawCheckValveBody(

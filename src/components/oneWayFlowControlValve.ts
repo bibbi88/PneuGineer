@@ -40,19 +40,27 @@ export interface OneWayFlowGeometry {
   decorOffsetY: number;
 }
 
+// Roughly 0.85x the original reference-derived numbers (~25% bigger than the previous 0.7x size,
+// per request) - a port's offset from the component's own center is `portX - localW/2` (x) and
+// `localH/2 - portMargin` (y), independent of OX/OY, so grid alignment (see src/core/grid.ts)
+// only constrains portX/localW and portMargin/localH, not a single global scale factor: portX and
+// portMargin are nudged off the pure 0.85x values (32.3 and 6.8) to the nearest values landing
+// those two offsets on a multiple of 10, while branchX/decorScale/decorOffsetY stay at their
+// natural 0.85x proportions (branchX has no grid constraint of its own, and decorOffsetX is what
+// keeps the throttle circle centered on branchX, so it's derived from branchX rather than portX).
 export const ONE_WAY_FLOW_DEFAULT_GEOMETRY: OneWayFlowGeometry = {
-  localW: 116,
-  localH: 96,
-  portX: 38,
-  branchX: 90,
-  portMargin: 8,
-  decorScale: 2,
-  decorOffsetX: 2,
-  decorOffsetY: -40,
+  localW: 100,
+  localH: 80,
+  portX: 30,
+  branchX: 74,
+  portMargin: 10,
+  decorScale: 1.7,
+  decorOffsetX: -0.8,
+  decorOffsetY: -34,
 };
 
-const OX = 8;
-const OY = 8;
+const OX = 7;
+const OY = 7;
 const DEFAULT_FLOW_PCT = 50;
 
 function line(x1: number, y1: number, x2: number, y2: number): SVGLineElement {
@@ -204,21 +212,35 @@ export function createOneWayFlowControlValve(
 
     // Purely a visual cue (nudges the throttle's circle glyph up a touch, and highlights
     // whichever of the two parallel paths air is actually taking - see .flowThrottleCircle and
-    // .owfvFlowPath in app.css). This can't be based on IN/OUT's own isPressurized: this
-    // valve's own edge is undirected (conducts both ways, just at different rates), so once
-    // *either* side reaches a source the flood-fill pressurizes both - IN and OUT always end up
-    // reading the exact same boolean, which can't by itself say which side actually has the
-    // supply behind it. And in the realistic "meter-out" wiring (this valve's OUT tied straight
-    // to a cylinder's own exhaust, nothing else), that exhausting side never reads pressurized
-    // at all - it's just venting, not connected to a source - so `isPressurized` alone would
-    // never even notice the throttled direction is active. `isExhausting` (only known after
-    // every step() this frame, hence updateFlowVisual rather than step()) is what actually
-    // distinguishes them: OUT genuinely exhausting means air can only be leaving through the
-    // throttle (the check valve blocks that direction), full stop; otherwise, any pressurized
-    // reading here means the direct/check-valve path is what's carrying it.
+    // .owfvFlowPath in app.css). This can't be based on IN/OUT's own isPressurized or
+    // isExhausting: this valve's own edge is undirected (conducts both ways, just at different
+    // rates), so the flood-fills behind both of those always reach IN and OUT together - neither
+    // boolean alone can say which side actually has the supply (or the open vent) behind it. The
+    // distance variants can: whichever port is fewer hops from a live source is the one air is
+    // entering from, so IN closer means free flow through the check valve (IN->OUT), OUT closer
+    // means throttled flow the other way (OUT->IN) - the check valve blocks that direction, so
+    // the throttle is the only path left. Same idea for the exhaust side (e.g. the realistic
+    // "meter-out" wiring, this valve's OUT tied straight to a cylinder's own exhaust): a merely-
+    // pressurized-but-static source distance shouldn't win over air that's actually mid-flight to
+    // atmosphere right now, so exhaust distance is checked first and source distance is only the
+    // fallback for when nothing is currently venting through here at all.
     updateFlowVisual(ctx: FlowVisualContext): void {
-      const reverse = ctx.isExhausting('OUT');
-      const forward = !reverse && (ctx.isPressurized('IN') || ctx.isPressurized('OUT'));
+      const inExhaust = ctx.exhaustDistance('IN');
+      const outExhaust = ctx.exhaustDistance('OUT');
+      const inSource = ctx.sourceDistance('IN');
+      const outSource = ctx.sourceDistance('OUT');
+
+      let forward = false; // IN -> OUT, free through the check valve
+      let reverse = false; // OUT -> IN, throttled
+
+      if (Number.isFinite(Math.min(inExhaust, outExhaust)) && inExhaust !== outExhaust) {
+        forward = inExhaust < outExhaust;
+        reverse = outExhaust < inExhaust;
+      } else if (Number.isFinite(Math.min(inSource, outSource)) && inSource !== outSource) {
+        forward = inSource < outSource;
+        reverse = outSource < inSource;
+      }
+
       throttleCircle.classList.toggle('flowing', forward);
       mainPath.classList.toggle('owfvFlowPath--pressurized', forward);
       for (const seg of branchPath) seg.classList.toggle('owfvFlowPath--exhausting', reverse);

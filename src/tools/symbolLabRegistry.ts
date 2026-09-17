@@ -107,13 +107,13 @@ const ONE_WAY_FLOW_CONTROL_VALVE_ENTRY: SymbolLabEntry = {
   ],
   createDefaultGeometry: () => ({ ...ONE_WAY_FLOW_DEFAULT_GEOMETRY }),
   renderPreview(svg, geo) {
-    const g = createSvgEl('g', { transform: 'translate(8,8)' });
+    const g = createSvgEl('g', { transform: 'translate(7,7)' });
     svg.appendChild(g);
     const typed = geo as unknown as typeof ONE_WAY_FLOW_DEFAULT_GEOMETRY;
     const { bottomY, topY, portX } = drawOneWayFlowControlValveBody(g, typed);
     createPort(g, 'IN', portX, bottomY, 'V');
     createPort(g, 'OUT', portX, topY, 'V');
-    return { w: typed.localW + 16, h: typed.localH + 16 };
+    return { w: typed.localW + 14, h: typed.localH + 14 };
   },
 };
 

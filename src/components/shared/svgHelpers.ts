@@ -74,7 +74,18 @@ export function buildComponentShell(
   svg.style.display = 'block';
   el.appendChild(svg);
 
-  const box = innerBounds ?? { x: 0, y: 0, w: svgW, h: svgH };
+  // Inset a couple px from whatever the component itself considers its own drawn edge - both
+  // the selection outline and getBounds() (obstacle avoidance, marquee hit-testing) read `box`,
+  // so without this the selection rectangle would land flush against the artwork's own outline
+  // (or a port dot right at the edge), reading as clipped rather than as a selection around it.
+  const rawBox = innerBounds ?? { x: 0, y: 0, w: svgW, h: svgH };
+  const BOUNDS_INSET = 2;
+  const box = {
+    x: rawBox.x + BOUNDS_INSET,
+    y: rawBox.y + BOUNDS_INSET,
+    w: Math.max(0, rawBox.w - BOUNDS_INSET * 2),
+    h: Math.max(0, rawBox.h - BOUNDS_INSET * 2),
+  };
 
   // Selection is highlighted on this box, not the outer .comp div - the div always spans the
   // full padded canvas (ports, labels, pilot stubs and all), so outlining it directly would
