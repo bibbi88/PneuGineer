@@ -121,9 +121,16 @@ renderComponentLibrary(
 resetCylinderLetters();
 
 renderToolbar(toolbarButtons);
-const projectBar = renderProjectBar(projectBarEl, factoryCtx, viewport, connLayer);
+const projectBar = renderProjectBar(
+  projectBarEl,
+  factoryCtx,
+  viewport,
+  connLayer,
+  frameLayer,
+  workspaceEl,
+);
 renderInspector(inspectorEl, viewport, projectBar);
-initPageFrame(frameLayer, projectBar);
+initPageFrame(frameLayer, projectBar, viewport, workspaceEl);
 startSimLoop();
 
 appState.onChange(() => {

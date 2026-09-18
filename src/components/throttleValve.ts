@@ -4,19 +4,21 @@ import { buildComponentShell, createPort, createSvgEl } from './shared/svgHelper
 
 export const THROTTLE_VALVE_TYPE = 'throttleValve';
 
-// A plain adjustable restrictor, equally throttled both ways - the one-way flow control valve
-// (oneWayFlowControlValve.ts) minus its check-valve path and branch jog: one straight line
-// between the two ports with the same throttle glyph (circle + chevron, reused verbatim from that
-// component's decorative group so the two read as a matching pair) centered on it, instead of
-// offset to one side to clear a parallel check-valve line that no longer exists here.
+// A plain adjustable restrictor, equally throttled both ways - one straight line between the two
+// ports with a flow-restriction glyph (the ball-and-seat lens plus its directional arrow, reused
+// verbatim from the one-way flow control valve's own check-valve path - see
+// oneWayFlowControlValve.ts's decor group) centered on it. Matches a user-supplied reference
+// symbol for a plain throttle valve; the arrow marks the drawn/rated flow direction the way a
+// real adjustable flow control valve is often labeled, even though the restriction itself (and
+// this component's own flowMultiplier) applies equally in both directions.
 export interface ThrottleValveGeometry {
   localW: number;
   localH: number;
-  /** x of the single line between IN and OUT (and the throttle glyph centered on it). */
+  /** x of the single line between IN and OUT (and the glyph centered on it). */
   portX: number;
   /** Margin from the top/bottom edge of localH to the IN/OUT ports (symmetric). */
   portMargin: number;
-  /** Uniform scale applied to the shared throttle glyph (circle + chevron). */
+  /** Uniform scale applied to the shared lens+arrow glyph. */
   decorScale: number;
   decorOffsetX: number;
   decorOffsetY: number;
@@ -33,15 +35,15 @@ export const THROTTLE_VALVE_DEFAULT_GEOMETRY: ThrottleValveGeometry = {
   portX: 27,
   portMargin: 10,
   decorScale: 1.7,
-  decorOffsetX: -47.8,
-  decorOffsetY: -29.7,
+  decorOffsetX: -2.75,
+  decorOffsetY: -34.8,
 };
 
 const OX = 7;
 const OY = 7;
 const DEFAULT_FLOW_PCT = 50;
 
-/** Draws the body (the single line + throttle glyph) into `g`, and returns the port positions
+/** Draws the body (the single line + restriction glyph) into `g`, and returns the port positions
  * that resulted so the caller can place ports/labels there. Pure with respect to `g`'s own
  * contents - safe to call repeatedly against a cleared `g` for a live preview. */
 export function drawThrottleValveBody(
@@ -51,16 +53,12 @@ export function drawThrottleValveBody(
   bottomY: number;
   topY: number;
   portX: number;
-  throttleCircle: SVGEllipseElement;
   /** The single IN<->OUT path - live whenever air is actually crossing this valve, in either
    * direction (it throttles both the same, so there's nothing to distinguish here). */
   flowPath: SVGLineElement;
 } {
   const bottomY = geo.localH - geo.portMargin;
   const topY = geo.portMargin;
-  const circleLocalCx = 44;
-  const circleLocalCy = 41;
-  const circleLocalR = 4;
 
   const flowPath = createSvgEl('line', {
     x1: geo.portX,
@@ -73,35 +71,31 @@ export function drawThrottleValveBody(
   flowPath.classList.add('owfvFlowPath');
   g.appendChild(flowPath);
 
-  // The throttle glyph, lifted verbatim from the one-way flow control valve's own decor group
-  // (just the circle-with-chevron half of it, not the check-valve lens/arrow) - same scale/shape
-  // so the two components' throttle symbols match exactly.
+  // The restriction glyph - lens/arc "ball-and-seat" shape plus its directional arrow, lifted
+  // verbatim from the one-way flow control valve's own check-valve path (see
+  // oneWayFlowControlValve.ts's decor group and drawOneWayFlowControlValveBody's own doc) so the
+  // two components' line glyphs match exactly.
   const decorTransform = `matrix(${geo.decorScale},0,0,${geo.decorScale},${geo.decorOffsetX},${geo.decorOffsetY})`;
   const decor = createSvgEl('g', { transform: decorTransform });
-  const throttleCircle = createSvgEl('ellipse', {
-    class: 'flowThrottleCircle',
-    cx: circleLocalCx,
-    cy: circleLocalCy,
-    rx: circleLocalR,
-    ry: circleLocalR,
-    // Opaque (not "none") so it actually covers the line behind it wherever it currently sits,
-    // rather than needing a gap cut into that line to match.
-    fill: '#fff',
-    stroke: '#111',
-    'stroke-width': 1,
-  });
   decor.append(
-    throttleCircle,
     createSvgEl('path', {
-      d: 'M36,40l8,8l8-8',
+      d: 'M8,32c5.02,7.21,5.02,16.79,0,24',
       fill: 'none',
       stroke: '#111',
       'stroke-width': 1,
     }),
+    createSvgEl('path', {
+      d: 'M24,56c-5.02,-7.21,-5.02,-16.79,0,-24',
+      fill: 'none',
+      stroke: '#111',
+      'stroke-width': 1,
+    }),
+    createSvgEl('line', { x1: 4, y1: 48, x2: 25, y2: 39.8, stroke: '#111', 'stroke-width': 1 }),
+    createSvgEl('polygon', { points: '31,37.4 24.5,37.56 26.1,41.34', fill: '#111' }),
   );
   g.appendChild(decor);
 
-  return { bottomY, topY, portX: geo.portX, throttleCircle, flowPath };
+  return { bottomY, topY, portX: geo.portX, flowPath };
 }
 
 /** A plain restrictor: throttles flow by the same `flowPct` regardless of which port it enters
@@ -123,7 +117,7 @@ export function createThrottleValve(compLayer: HTMLElement, x: number, y: number
   );
 
   const g = createSvgEl('g', { transform: `translate(${OX},${OY})` });
-  const { bottomY, topY, portX, throttleCircle, flowPath } = drawThrottleValveBody(g, geo);
+  const { bottomY, topY, portX, flowPath } = drawThrottleValveBody(g, geo);
   shell.svg.appendChild(g);
 
   const ports = {
@@ -166,7 +160,6 @@ export function createThrottleValve(compLayer: HTMLElement, x: number, y: number
     updateFlowVisual(ctx: FlowVisualContext): void {
       const exhausting = ctx.isExhausting('IN') || ctx.isExhausting('OUT');
       const pressurized = !exhausting && (ctx.isPressurized('IN') || ctx.isPressurized('OUT'));
-      throttleCircle.classList.toggle('flowing', pressurized || exhausting);
       flowPath.classList.toggle('owfvFlowPath--pressurized', pressurized);
       flowPath.classList.toggle('owfvFlowPath--exhausting', exhausting);
     },
@@ -181,7 +174,6 @@ export function createThrottleValve(compLayer: HTMLElement, x: number, y: number
       updateLabel();
     },
     reset(): void {
-      throttleCircle.classList.remove('flowing');
       flowPath.classList.remove('owfvFlowPath--pressurized');
       flowPath.classList.remove('owfvFlowPath--exhausting');
     },

@@ -62,18 +62,34 @@ export async function loadProjectFromPicker(
 ): Promise<string | undefined> {
   const showOpenFilePicker = getShowOpenFilePicker();
   if (showOpenFilePicker) {
+    let handle: FileSystemFileHandleLike | undefined;
     try {
-      const [handle] = await showOpenFilePicker({
+      [handle] = await showOpenFilePicker({
         types: [
           { description: 'PneuGineer project', accept: { 'application/json': ['.pgcl', '.json'] } },
         ],
       });
-      if (!handle) return undefined;
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return undefined;
+      // The picker itself never handed back a file handle here, so nothing's been read yet - a
+      // silent fallback to the plain <input type=file> picker is safe (same "API present but
+      // blocked" case persistence/save.ts's own picker falls back for).
+      return loadViaFileInput(ctx, viewport, onBeforeApply);
+    }
+    if (!handle) return undefined;
+
+    try {
       const file = await handle.getFile();
       return applyLoadedText(await file.text(), ctx, viewport, onBeforeApply);
     } catch (err) {
-      if (err instanceof DOMException && err.name === 'AbortError') return undefined;
-      // fall through to the file-input fallback on any other error
+      // A file *was* picked here - reading it, parsing its JSON, or applying it then failed for
+      // some other reason (not valid JSON, a project this build doesn't understand, etc).
+      // Silently reopening a second, unrelated picker used to look like "nothing happened, try
+      // again" with zero explanation - including "it looks like it didn't open the file the
+      // first time." Surface the actual reason instead of retrying blind.
+      const detail = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+      window.alert(`Couldn't open that file (${detail}).`);
+      return undefined;
     }
   }
 

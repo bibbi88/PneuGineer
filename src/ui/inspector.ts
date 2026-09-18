@@ -73,11 +73,14 @@ interface SensorListField {
   step?: number;
 }
 
-/** Push-button vs limit-switch is a choice between two whole component types (see
- * interaction/valveActuatorSwap.ts), not a scalar snapshot field - shown as a dropdown that
- * replaces the component in place when changed. */
+/** A choice between whole component types (see interaction/valveActuatorSwap.ts's own doc for
+ * why, e.g. push-button vs limit-switch vs air-piloted, or a 5/2 valve's bistable vs monostable
+ * pilot), not a scalar snapshot field - shown as a dropdown that replaces the component in place
+ * when changed, reconnecting every wire whose port exists on both. */
 interface ActuatorModeField {
   kind: 'actuatorMode';
+  label: string;
+  options: Array<{ type: string; label: string }>;
 }
 
 /** A component's own identifying label (currently just a cylinder's letter), renamed through
@@ -124,6 +127,11 @@ const ACTUATOR_MODES: Array<{ type: string; label: string }> = [
   { type: AIR_VALVE_32_TYPE, label: 'Air-piloted' },
 ];
 
+const VALVE_52_MODES: Array<{ type: string; label: string }> = [
+  { type: VALVE_52_TYPE, label: 'Bistable (double pilot)' },
+  { type: VALVE_52_MONO_TYPE, label: 'Monostable (spring return)' },
+];
+
 const INSPECTOR_FIELDS: Record<string, InspectorField[]> = {
   [RESTRICTOR_TYPE]: [
     { kind: 'number', key: 'flowPct', label: 'Flow %', min: 0, max: 100, step: 5 },
@@ -142,23 +150,25 @@ const INSPECTOR_FIELDS: Record<string, InspectorField[]> = {
     { kind: 'silencer', key: 'silencer3', port: '3', label: 'Port 3 silencer' },
   ],
   [PUSH_BUTTON_32_TYPE]: [
-    { kind: 'actuatorMode' },
+    { kind: 'actuatorMode', label: 'Control mode', options: ACTUATOR_MODES },
     { kind: 'silencer', key: 'silencer3', port: '3', label: 'Port 3 silencer' },
   ],
   [LIMIT_VALVE_32_TYPE]: [
-    { kind: 'actuatorMode' },
+    { kind: 'actuatorMode', label: 'Control mode', options: ACTUATOR_MODES },
     { kind: 'sensorKeySelect', key: 'sensorKey', label: 'Sensor key' },
     { kind: 'silencer', key: 'silencer3', port: '3', label: 'Port 3 silencer' },
   ],
   [AIR_VALVE_32_TYPE]: [
-    { kind: 'actuatorMode' },
+    { kind: 'actuatorMode', label: 'Control mode', options: ACTUATOR_MODES },
     { kind: 'silencer', key: 'silencer3', port: '3', label: 'Port 3 silencer' },
   ],
   [VALVE_52_TYPE]: [
+    { kind: 'actuatorMode', label: 'Pilot', options: VALVE_52_MODES },
     { kind: 'silencer', key: 'silencer3', port: '3', label: 'Port 3 silencer' },
     { kind: 'silencer', key: 'silencer5', port: '5', label: 'Port 5 silencer' },
   ],
   [VALVE_52_MONO_TYPE]: [
+    { kind: 'actuatorMode', label: 'Pilot', options: VALVE_52_MODES },
     { kind: 'silencer', key: 'silencer3', port: '3', label: 'Port 3 silencer' },
     { kind: 'silencer', key: 'silencer5', port: '5', label: 'Port 5 silencer' },
   ],
@@ -248,15 +258,19 @@ function renderCheckboxField(
   container.appendChild(row);
 }
 
-function renderActuatorModeField(container: HTMLElement, comp: Component): void {
+function renderActuatorModeField(
+  container: HTMLElement,
+  comp: Component,
+  field: ActuatorModeField,
+): void {
   const row = document.createElement('label');
   row.className = 'inspectorRow';
 
   const span = document.createElement('span');
-  span.textContent = 'Control mode';
+  span.textContent = field.label;
 
   const select = document.createElement('select');
-  for (const mode of ACTUATOR_MODES) {
+  for (const mode of field.options) {
     const option = document.createElement('option');
     option.value = mode.type;
     option.textContent = mode.label;
@@ -707,13 +721,18 @@ function renderProjectInfoSection(container: HTMLElement, projectBar: ProjectBar
   heading.textContent = 'Project info';
   container.appendChild(heading);
 
-  function textRow(label: string, value: string, onCommit: (v: string) => void): void {
+  function fieldRow(
+    label: string,
+    type: 'text' | 'date',
+    value: string,
+    onCommit: (v: string) => void,
+  ): void {
     const row = document.createElement('label');
     row.className = 'inspectorRow';
     const span = document.createElement('span');
     span.textContent = label;
     const input = document.createElement('input');
-    input.type = 'text';
+    input.type = type;
     input.className = 'inspectorCustomNameInput';
     input.value = value;
     input.addEventListener('change', () => {
@@ -724,14 +743,17 @@ function renderProjectInfoSection(container: HTMLElement, projectBar: ProjectBar
     container.appendChild(row);
   }
 
-  textRow('Project name', projectBar.getName(), (v) => projectBar.setName(v));
-  textRow('Author', appState.projectAuthor, (v) => {
+  fieldRow('Project name', 'text', projectBar.getName(), (v) => projectBar.setName(v));
+  fieldRow('Date', 'date', appState.projectDate, (v) => {
+    appState.projectDate = v;
+  });
+  fieldRow('Author', 'text', appState.projectAuthor, (v) => {
     appState.projectAuthor = v;
   });
-  textRow('Checked by', appState.projectCheckedBy, (v) => {
+  fieldRow('Checked by', 'text', appState.projectCheckedBy, (v) => {
     appState.projectCheckedBy = v;
   });
-  textRow('Company', appState.projectCompany, (v) => {
+  fieldRow('Company', 'text', appState.projectCompany, (v) => {
     appState.projectCompany = v;
   });
 
@@ -756,7 +778,7 @@ function renderProjectInfoSection(container: HTMLElement, projectBar: ProjectBar
   const frameHint = document.createElement('p');
   frameHint.className = 'inspectorHint';
   frameHint.textContent =
-    'Draws a dashed sheet outline with the fields above as a title block - a visual guide only, ' +
+    'Draws a sheet outline with the fields above as a title block - a visual guide only, ' +
     'centered on the current diagram when picked.';
   container.appendChild(frameHint);
 }
@@ -833,7 +855,7 @@ export function renderInspector(
 
     for (const field of fields) {
       if (field.kind === 'sensorList') renderSensorListField(container, comp, field, snap, refresh);
-      else if (field.kind === 'actuatorMode') renderActuatorModeField(container, comp);
+      else if (field.kind === 'actuatorMode') renderActuatorModeField(container, comp, field);
       else if (field.kind === 'sensorKeySelect')
         renderSensorKeySelectField(container, comp, field, snap, refresh);
       else if (field.kind === 'relabel') renderRelabelField(container, comp, field, refresh);

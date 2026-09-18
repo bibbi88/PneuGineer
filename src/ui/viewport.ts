@@ -14,7 +14,10 @@ export interface ViewportAdapter {
   setGridVisible(visible: boolean): void;
 }
 
-const MIN_SCALE = 0.2;
+// 0.1 (not the original 0.2) so setTransform (see zoomToFit/page-frame fitting) can still zoom
+// out far enough to show a whole A3 sheet on a modest window instead of clamping the fit short
+// and leaving part of it off-screen.
+const MIN_SCALE = 0.1;
 const MAX_SCALE = 4.0;
 
 export function initViewport(

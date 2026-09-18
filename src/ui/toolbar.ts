@@ -3,6 +3,7 @@ import { Modes } from '../app/modes';
 import { requestSingleStep } from '../sim/loop';
 import { undo, redo, canUndo, canRedo, onHistoryChange } from '../history/historyStore';
 import { redrawAllConnections } from '../wires/connection';
+import { openTipsDialog } from './tipsDialog';
 
 export function renderToolbar(container: HTMLElement): void {
   const playStopBtn = document.createElement('button');
@@ -10,8 +11,9 @@ export function renderToolbar(container: HTMLElement): void {
   const stepBtn = document.createElement('button');
   const undoBtn = document.createElement('button');
   const redoBtn = document.createElement('button');
+  const tipsBtn = document.createElement('button');
 
-  for (const btn of [playStopBtn, pauseBtn, stepBtn, undoBtn, redoBtn]) {
+  for (const btn of [playStopBtn, pauseBtn, stepBtn, undoBtn, redoBtn, tipsBtn]) {
     btn.className = 'btn';
   }
 
@@ -19,6 +21,8 @@ export function renderToolbar(container: HTMLElement): void {
   stepBtn.textContent = '⏭ Step';
   undoBtn.textContent = '↶ Undo';
   redoBtn.textContent = '↷ Redo';
+  tipsBtn.textContent = '💡 Tips';
+  tipsBtn.addEventListener('click', () => openTipsDialog());
 
   function updatePlayStopButton(): void {
     playStopBtn.textContent = appState.mode === Modes.PLAY ? '⏹ Stop' : '▶ Play';
@@ -57,5 +61,5 @@ export function renderToolbar(container: HTMLElement): void {
   onHistoryChange(updateUndoRedoButtons);
   updateUndoRedoButtons();
 
-  container.append(playStopBtn, pauseBtn, stepBtn, undoBtn, redoBtn);
+  container.append(playStopBtn, pauseBtn, stepBtn, undoBtn, redoBtn, tipsBtn);
 }

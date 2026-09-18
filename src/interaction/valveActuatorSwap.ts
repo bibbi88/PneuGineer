@@ -23,14 +23,15 @@ export function initValveActuatorSwap(
 
 /**
  * Replaces `comp` with a fresh component of `newType` at the same position, reconnecting every
- * wire that touched it. Used to "convert" a 3/2 valve between push-button, limit-switch and
- * air-piloted actuation - they differ enough in behavior and artwork to stay separate component
- * types rather than one togglable mode, but all three come from `buildSlidingValve32Body` and so
- * share the same '1'/'2'/'3' port keys, which is what makes reconnecting most wires by port key
- * valid across the swap. The air-piloted variant also has a pilot port ('14') the other two
- * don't - a wire on that port is dropped rather than reconnected to a port that won't exist on
- * the new component, instead of silently becoming an invisible, un-removable connection with
- * nowhere valid to land.
+ * wire that touched it. Used to "convert" between component types that differ enough in behavior
+ * and artwork to stay separate types rather than one togglable mode, but share enough port keys
+ * for most wires to carry over: a 3/2 valve between push-button, limit-switch and air-piloted
+ * actuation (all three from `buildSlidingValve32Body`, sharing '1'/'2'/'3' - the air-piloted
+ * variant's extra pilot port, '14', isn't on the other two), and a 5/2 valve between bistable
+ * (valve52.ts) and monostable/spring-return (valve52Mono.ts) - they share '1' through '5' and
+ * '14', but only the bistable one has a second pilot port, '12'. Either way, a wire on a port
+ * that doesn't exist on the new component is dropped rather than reconnected somewhere invalid,
+ * instead of silently becoming an invisible, un-removable connection with nowhere to land.
  */
 export function swapComponentType(comp: Component, newType: string): void {
   if (!ctxRef || !viewportRef) return;

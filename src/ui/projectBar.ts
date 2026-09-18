@@ -1,10 +1,9 @@
 import { saveProjectToFile } from '../persistence/save';
 import { loadProjectFromPicker } from '../persistence/load';
-import { exportProjectAsSvg, exportProjectAsPng } from '../persistence/exportImage';
 import type { ComponentFactoryContext } from '../components/registry';
 import type { ViewportAdapter } from './viewport';
 import { resetHistory } from '../history/historyStore';
-import { showContextMenu } from '../interaction/contextMenu';
+import { openExportDialog } from './exportDialog';
 
 export interface ProjectBarRefs {
   getName(): string;
@@ -16,6 +15,8 @@ export function renderProjectBar(
   ctx: ComponentFactoryContext,
   viewport: ViewportAdapter,
   connLayer: SVGSVGElement,
+  frameLayer: SVGSVGElement,
+  workspaceEl: HTMLElement,
 ): ProjectBarRefs {
   const nameInput = document.createElement('input');
   nameInput.type = 'text';
@@ -46,24 +47,12 @@ export function renderProjectBar(
   saveLoadRow.className = 'btnRow';
   saveLoadRow.append(saveBtn, loadBtn);
 
-  // A single Export control instead of one full-width button per format - the format picker
-  // reuses the same small menu component as a component's right-click menu.
   const exportBtn = document.createElement('button');
   exportBtn.className = 'btn';
-  exportBtn.textContent = '⬇ Export ▾';
+  exportBtn.textContent = '⬇ Export…';
   exportBtn.addEventListener('click', (e) => {
     e.stopPropagation();
-    const rect = exportBtn.getBoundingClientRect();
-    showContextMenu(rect.left, rect.bottom + 4, [
-      {
-        label: 'as SVG',
-        onClick: () => exportProjectAsSvg(nameInput.value || 'project', connLayer),
-      },
-      {
-        label: 'as PNG',
-        onClick: () => void exportProjectAsPng(nameInput.value || 'project', connLayer),
-      },
-    ]);
+    openExportDialog(nameInput.value || 'project', connLayer, frameLayer, viewport, workspaceEl);
   });
 
   container.append(nameInput, saveLoadRow, exportBtn);

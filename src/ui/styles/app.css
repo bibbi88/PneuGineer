@@ -261,10 +261,11 @@ body {
 }
 
 /* A separate, untransformed layer rather than a background on #viewport itself: #viewport gets
-   panned/scaled and is capped to a large-but-finite size, so a background painted on it would
-   run out at that boundary. This one stays pinned to the always-visible workspace box and has
-   its background-size/position recalculated on every pan/zoom (see viewport.ts) to look like
-   the same infinite world-aligned grid no matter how far you pan or zoom. */
+   panned/scaled, so a background painted directly on it would pan/scale (and visibly tile) along
+   with it instead of looking like one continuous grid. This one stays pinned to the
+   always-visible workspace box and has its background-size/position recalculated on every
+   pan/zoom (see viewport.ts) to look like the same infinite world-aligned grid no matter how far
+   you pan or zoom. */
 #gridLayer {
   position: absolute;
   inset: 0;
@@ -275,13 +276,16 @@ body {
     linear-gradient(to bottom, rgba(0, 0, 0, 0.04) 1px, transparent 1px);
 }
 
+/* No overflow: hidden here (and no oversized width/height to compensate for it, both removed) -
+   .workspace above is what actually clips to the visible screen area. #viewport's own box is
+   only ever as big as .workspace itself; overflow: hidden on *this* element clipped to that
+   local, untransformed box regardless of pan/zoom, silently hiding any component placed at a
+   negative world x/y (or past whatever fixed width/height this had) instead of panning into
+   view like it should - the workspace-level clip is the correct (and sufficient) one. */
 #viewport {
   position: absolute;
   inset: 0;
-  overflow: hidden;
   transform-origin: 0 0;
-  width: max(100%, 2400px);
-  height: max(100%, 1600px);
 }
 
 .layer {
@@ -289,6 +293,13 @@ body {
   inset: 0;
   width: 100%;
   height: 100%;
+  /* #connLayer/#frameLayer/#handleLayer are each their own <svg>, which by default clips its
+     content to its own box - the same 100%-of-workspace size as this rule, in *local*,
+     untransformed coordinates - regardless of #viewport's own pan/zoom transform (see that
+     .workspace/#viewport comment above). World-space content well outside that local box (wires
+     to a far-off component, or the page frame's own sheet, which is often bigger than the
+     workspace itself) would otherwise get silently clipped there even after .workspace's fix. */
+  overflow: visible;
 }
 
 #connLayer {
@@ -307,7 +318,6 @@ body {
   fill: var(--frame-fill);
   stroke: var(--frame);
   stroke-width: 2;
-  stroke-dasharray: 10 7;
 }
 
 .pageFrameLabel {
@@ -321,6 +331,13 @@ body {
   fill: var(--bg);
   stroke: var(--frame);
   stroke-width: 1.5;
+}
+
+/* Row/column dividers inside the title block, separating each field into its own cell - lighter
+   than the block's own outer border so the grid reads as internal structure, not another frame. */
+.pageFrameGridLine {
+  stroke: var(--line);
+  stroke-width: 1;
 }
 
 .pageFrameTitleLabel {
@@ -880,4 +897,146 @@ rect.wireHandle.wireStubHandle {
   border: 1px solid #ddd;
   border-radius: 6px;
   z-index: 3;
+}
+
+/* ---------- Export dialog ---------- */
+
+.modalBackdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(17, 17, 17, 0.35);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.exportDialog {
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.25);
+  width: 480px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  padding: 16px;
+}
+
+.exportDialogHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.exportDialogHeader h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.exportDialogClose {
+  border: none;
+  background: none;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--muted);
+  padding: 4px;
+}
+
+.exportDialogClose:hover {
+  color: var(--ink);
+}
+
+.exportRegionRow {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.exportRegionBtn {
+  flex: 1;
+  padding: 7px 8px;
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 6px;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.exportRegionBtn:hover:not(:disabled) {
+  background: #f8f8ff;
+}
+
+.exportRegionBtn.selected {
+  border-color: var(--port);
+  background: #eaf2ff;
+  color: var(--port);
+  font-weight: 600;
+}
+
+.exportRegionBtn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.exportDialogHint {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.exportPreviewBox {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 220px;
+  background: var(--panel);
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 14px;
+}
+
+.exportPreviewSvg {
+  max-width: 100%;
+  max-height: 260px;
+  width: auto;
+  height: auto;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+}
+
+.exportPreviewEmpty {
+  color: var(--faint);
+  font-size: 13px;
+}
+
+.exportDialogButtons {
+  display: flex;
+  gap: 8px;
+}
+
+.exportDialogButtons .btn {
+  margin: 0;
+  text-align: center;
+}
+
+.tipsDialog {
+  width: 520px;
+}
+
+.tipsDialog .inspectorSectionHeading:first-of-type {
+  margin-top: 0;
+}
+
+.tipsList {
+  margin: 0 0 14px;
+  padding-left: 18px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--ink);
+}
+
+.tipsList li {
+  margin-bottom: 4px;
 }

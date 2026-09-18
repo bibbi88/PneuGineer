@@ -14,12 +14,24 @@ class AppState {
   projectAuthor = '';
   projectCheckedBy = '';
   projectCompany = '';
+  /** ISO yyyy-mm-dd, or '' - whatever an `<input type="date">` gives back. */
+  projectDate = '';
   /** The optional print-sheet guide (see ui/pageFrame.ts and persistence/schema.ts's PageFrame
    * doc) - 'none' draws nothing. x/y are its world-space center, meaningless while size is
    * 'none'. */
   pageFrameSize: 'none' | 'a4' | 'a3' = 'none';
   pageFrameX = 0;
   pageFrameY = 0;
+  /** A random per-browser ID (see app/deviceId.ts) - null until the project's first save, then
+   * frozen from then on regardless of which browser saves it later (see persistence/project.ts's
+   * own serializeProject doc for exactly where that "only ever set once" happens). Not shown
+   * anywhere in the app's own UI - just carried in the saved file itself (plain JSON, so still
+   * readable by anyone who opens it). */
+  projectOriginDeviceId: string | null = null;
+  /** Same idea, but for the *most recent* save - overwritten every time (see serializeProject).
+   * Comparing this to the origin id above is a weak trace for flagging a redistributed file, not
+   * real access control. */
+  projectLastSavedDeviceId: string | null = null;
   /** Bumped whenever components/connections are added or removed, so cached graphs know to rebuild. */
   topologyVersion = 0;
 

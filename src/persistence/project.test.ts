@@ -78,18 +78,21 @@ describe('project title-block metadata round-trip', () => {
     appState.projectAuthor = '';
     appState.projectCheckedBy = '';
     appState.projectCompany = '';
+    appState.projectDate = '';
   });
 
-  it('serializeProject captures author/checkedBy/company from appState', () => {
+  it('serializeProject captures author/checkedBy/company/date from appState', () => {
     appState.projectAuthor = 'Jane';
     appState.projectCheckedBy = 'Alex';
     appState.projectCompany = 'Acme Pneumatics';
+    appState.projectDate = '2026-09-18';
 
     const file = serializeProject('test');
     expect(file.meta).toEqual({
       author: 'Jane',
       checkedBy: 'Alex',
       company: 'Acme Pneumatics',
+      date: '2026-09-18',
     });
   });
 
@@ -97,7 +100,12 @@ describe('project title-block metadata round-trip', () => {
     const file = {
       schemaVersion: 1 as const,
       name: 'test',
-      meta: { author: 'Jane', checkedBy: 'Alex', company: 'Acme Pneumatics' },
+      meta: {
+        author: 'Jane',
+        checkedBy: 'Alex',
+        company: 'Acme Pneumatics',
+        date: '2026-09-18',
+      },
       comps: [],
       conns: [],
     };
@@ -107,10 +115,12 @@ describe('project title-block metadata round-trip', () => {
     expect(appState.projectAuthor).toBe('Jane');
     expect(appState.projectCheckedBy).toBe('Alex');
     expect(appState.projectCompany).toBe('Acme Pneumatics');
+    expect(appState.projectDate).toBe('2026-09-18');
   });
 
   it('loadProject treats a missing meta as blank, for files saved before this field existed', () => {
     appState.projectAuthor = 'stale value from a previous project';
+    appState.projectDate = '2026-01-01';
     const file = { schemaVersion: 1 as const, name: 'test', comps: [], conns: [] };
 
     loadProject(file, ctx, viewport);
@@ -118,6 +128,7 @@ describe('project title-block metadata round-trip', () => {
     expect(appState.projectAuthor).toBe('');
     expect(appState.projectCheckedBy).toBe('');
     expect(appState.projectCompany).toBe('');
+    expect(appState.projectDate).toBe('');
   });
 });
 
@@ -164,5 +175,59 @@ describe('project page-frame round-trip', () => {
     expect(appState.pageFrameSize).toBe('none');
     expect(appState.pageFrameX).toBe(0);
     expect(appState.pageFrameY).toBe(0);
+  });
+});
+
+describe('project origin/last-saved device id (not shown in the UI, only carried in the file)', () => {
+  beforeEach(() => {
+    appState.components = [];
+    appState.connections = [];
+    appState.projectOriginDeviceId = null;
+    appState.projectLastSavedDeviceId = null;
+    localStorage.clear();
+  });
+
+  it('stamps this browser’s id into both origin and lastSaved on the first save', () => {
+    const file = serializeProject('test');
+
+    expect(file.origin).toBe(appState.projectOriginDeviceId);
+    expect(file.lastSaved).toBe(appState.projectLastSavedDeviceId);
+    expect(file.origin).toBe(file.lastSaved);
+  });
+
+  it('keeps origin frozen but updates lastSaved on a later save', () => {
+    const first = serializeProject('test');
+    const second = serializeProject('test');
+
+    expect(second.origin).toBe(first.origin);
+    expect(second.lastSaved).toBe(first.lastSaved);
+  });
+
+  it('loading a file from "another browser" keeps its origin, but this browser becomes lastSaved on resave', () => {
+    const file = {
+      schemaVersion: 1 as const,
+      name: 'test',
+      origin: 'device-from-a-different-browser',
+      lastSaved: 'device-from-a-different-browser',
+      comps: [],
+      conns: [],
+    };
+    loadProject(file, ctx, viewport);
+
+    const resaved = serializeProject('test');
+
+    expect(resaved.origin).toBe('device-from-a-different-browser');
+    expect(resaved.lastSaved).not.toBe('device-from-a-different-browser');
+  });
+
+  it('loadProject treats missing origin/lastSaved as unset, for files saved before this field existed', () => {
+    appState.projectOriginDeviceId = 'stale-id-from-a-previous-project';
+    appState.projectLastSavedDeviceId = 'stale-id-from-a-previous-project';
+    const file = { schemaVersion: 1 as const, name: 'test', comps: [], conns: [] };
+
+    loadProject(file, ctx, viewport);
+
+    expect(appState.projectOriginDeviceId).toBeNull();
+    expect(appState.projectLastSavedDeviceId).toBeNull();
   });
 });

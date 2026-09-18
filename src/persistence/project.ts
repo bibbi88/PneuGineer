@@ -7,16 +7,29 @@ import { createConnection, redrawAllConnections } from '../wires/connection';
 import { clearSelection } from '../interaction/selection';
 import { resetCylinderLetters } from '../components/shared/letters';
 import { renderPageFrame } from '../ui/pageFrame';
+import { getDeviceId } from '../app/deviceId';
 import { CURRENT_SCHEMA_VERSION, type ProjectFileV1 } from './schema';
 
 export function serializeProject(name: string): ProjectFileV1 {
+  // origin is only ever set once per project - a fresh one (never loaded from/saved to a file
+  // before) gets stamped with *this* browser's id here, on its first save; a project that
+  // already has one (loaded from an existing file) keeps that value no matter which browser
+  // saves it from here on, so it stays a trace of the original. lastSaved, in contrast, is
+  // overwritten on every single save - comparing the two is what actually flags a redistributed
+  // file (a different id in lastSaved than in origin).
+  if (!appState.projectOriginDeviceId) appState.projectOriginDeviceId = getDeviceId();
+  appState.projectLastSavedDeviceId = getDeviceId();
+
   return {
     schemaVersion: CURRENT_SCHEMA_VERSION,
     name,
+    origin: appState.projectOriginDeviceId,
+    lastSaved: appState.projectLastSavedDeviceId,
     meta: {
       author: appState.projectAuthor,
       checkedBy: appState.projectCheckedBy,
       company: appState.projectCompany,
+      date: appState.projectDate,
     },
     pageFrame: {
       size: appState.pageFrameSize,
@@ -66,9 +79,12 @@ export function loadProject(
     appState.projectAuthor = file.meta?.author ?? '';
     appState.projectCheckedBy = file.meta?.checkedBy ?? '';
     appState.projectCompany = file.meta?.company ?? '';
+    appState.projectDate = file.meta?.date ?? '';
     appState.pageFrameSize = file.pageFrame?.size ?? 'none';
     appState.pageFrameX = file.pageFrame?.x ?? 0;
     appState.pageFrameY = file.pageFrame?.y ?? 0;
+    appState.projectOriginDeviceId = file.origin ?? null;
+    appState.projectLastSavedDeviceId = file.lastSaved ?? null;
 
     const idMap = new Map<number, number>();
     for (const snap of file.comps) {

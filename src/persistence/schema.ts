@@ -30,6 +30,8 @@ export interface ProjectMeta {
   author?: string;
   checkedBy?: string;
   company?: string;
+  /** ISO yyyy-mm-dd, or omitted. */
+  date?: string;
 }
 
 /** The optional print-sheet guide (see ui/pageFrame.ts) - `x`/`y` are the world-space center of
@@ -47,6 +49,14 @@ export interface ProjectFileV1 {
   name: string;
   meta?: ProjectMeta;
   pageFrame?: PageFrame;
+  /** A random per-browser ID (see app/deviceId.ts) - not shown anywhere in the app's own UI, just
+   * carried in the saved file itself. `origin` is stamped on this project's very first save and
+   * frozen from then on; `lastSaved` is overwritten on every save. Comparing the two is a weak
+   * trace for flagging a redistributed file (a different id in `lastSaved` than in `origin`
+   * means some other browser has since resaved it), not real access control - and since this is
+   * plain JSON, anyone who opens the file can read it. */
+  origin?: string;
+  lastSaved?: string;
   comps: ComponentSnapshot[];
   conns: ConnectionSnapshot[];
 }
