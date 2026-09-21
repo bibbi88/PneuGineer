@@ -5,6 +5,8 @@ import { showContextMenu } from './contextMenu';
 import { redrawAllConnections, removeComponentAndConnections } from '../wires/connection';
 import { selectOnly, getSelectedComponents } from './selection';
 import { copySelection } from './clipboard';
+import { CYLINDER_SINGLE_TYPE } from '../components/cylinderSingle';
+import { CYLINDER_DOUBLE_TYPE } from '../components/cylinderDouble';
 
 export function getComponentRotation(comp: Component): number {
   return Number(comp.el.dataset.rot ?? '0');
@@ -18,6 +20,23 @@ export function setComponentRotation(comp: Component, deg: number): void {
   comp.el.dataset.rot = String(next);
   comp.el.style.transform = `translate(-50%, -50%) rotate(${next}deg)`;
 }
+
+export function isComponentMirrored(comp: Component): boolean {
+  return comp.el.dataset.mirror === '1';
+}
+
+/** Flips the component's artwork left-right (about its own center), independent of rotation.
+ * Applied to the inner svg rather than `comp.el` so the name label and other HTML children stay
+ * readable; port positions follow automatically since wires measure them from the live DOM. */
+export function setComponentMirrored(comp: Component, mirrored: boolean): void {
+  const svg = comp.el.querySelector<SVGSVGElement>('svg.compSvg');
+  if (!svg) return;
+  if (mirrored) comp.el.dataset.mirror = '1';
+  else delete comp.el.dataset.mirror;
+  svg.style.transform = mirrored ? 'scaleX(-1)' : '';
+}
+
+const MIRRORABLE_TYPES = new Set<string>([CYLINDER_SINGLE_TYPE, CYLINDER_DOUBLE_TYPE]);
 
 function rotateComponent(comp: Component, deltaDeg: number): void {
   setComponentRotation(comp, getComponentRotation(comp) + deltaDeg);
@@ -38,6 +57,18 @@ export function wireUpComponentContextMenu(comp: Component): void {
     showContextMenu(e.clientX, e.clientY, [
       { label: 'Rotate ↻ Clockwise', onClick: () => rotateComponent(comp, 90) },
       { label: 'Rotate ↺ Counter-clockwise', onClick: () => rotateComponent(comp, -90) },
+      ...(MIRRORABLE_TYPES.has(comp.type)
+        ? [
+            {
+              label: 'Mirror ⇋',
+              onClick: () => {
+                setComponentMirrored(comp, !isComponentMirrored(comp));
+                redrawAllConnections();
+                appState.markDirty();
+              },
+            },
+          ]
+        : []),
       {
         label: selectionSize > 1 ? `Copy (${selectionSize})` : 'Copy',
         onClick: () => copySelection(),

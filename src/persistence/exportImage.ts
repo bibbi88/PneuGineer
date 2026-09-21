@@ -97,7 +97,16 @@ export function buildExportSvg(
     const inner = c.el.querySelector('svg');
     if (!inner) continue;
     const g = document.createElementNS(SVG_NS, 'g');
-    g.setAttribute('transform', `translate(${c.getBounds().x}, ${c.getBounds().y})`);
+    // Same placement the live DOM uses: the svg canvas is centered on (c.x, c.y), then the whole
+    // component is rotated about that center; mirroring flips the artwork itself (see
+    // setComponentMirrored). Using getBounds() here instead would land on the inset inner-bounds
+    // box and ignore rotation, shifting every symbol off its wires.
+    const rot = Number(c.el.dataset.rot ?? '0');
+    const flip = c.el.dataset.mirror === '1' ? ' scale(-1, 1)' : '';
+    g.setAttribute(
+      'transform',
+      `translate(${c.x}, ${c.y}) rotate(${rot})${flip} translate(${-c.svgW / 2}, ${-c.svgH / 2})`,
+    );
     for (const child of Array.from(inner.children)) {
       const clone = child.cloneNode(true) as Element;
       clone.classList.remove('pressurized');

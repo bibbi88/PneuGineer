@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { appState } from '../app/AppState';
 import { serializeProject, loadProject } from './project';
-import { setComponentRotation } from '../interaction/componentContextMenu';
+import { setComponentMirrored, setComponentRotation } from '../interaction/componentContextMenu';
 import { createSource, SOURCE_TYPE } from '../components/source';
 import type { ComponentFactoryContext } from '../components/registry';
 import type { ViewportAdapter } from '../ui/viewport';
@@ -32,6 +32,22 @@ describe('project rotation round-trip', () => {
 
     const file = serializeProject('test');
     expect(file.comps[0]?.rot).toBe(90);
+  });
+
+  it('mirroring round-trips through save and load', () => {
+    const comp = createSource(compLayer(), 0, 0);
+    appState.addComponent(comp);
+    setComponentMirrored(comp, true);
+
+    const file = serializeProject('test');
+    expect(file.comps[0]?.mirror).toBe(true);
+
+    loadProject(file, ctx, viewport);
+    const loaded = appState.components[0];
+    expect(loaded?.el.dataset.mirror).toBe('1');
+    expect(loaded?.el.querySelector<SVGSVGElement>('svg.compSvg')?.style.transform).toBe(
+      'scaleX(-1)',
+    );
   });
 
   it('serializeProject omits rotation as 0 for an unrotated component', () => {

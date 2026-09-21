@@ -12,6 +12,7 @@ export interface ComponentSnapshot {
    * optional/omitted for the common unrotated case, and for anything saved before this field
    * existed (loadProject treats a missing value as 0). */
   rot?: number;
+  mirror?: boolean;
   data: Record<string, unknown>;
 }
 

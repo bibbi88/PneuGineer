@@ -2,7 +2,12 @@ import type { ComponentFactoryContext } from '../components/registry';
 import type { ViewportAdapter } from '../ui/viewport';
 import { appState } from '../app/AppState';
 import { spawnComponent } from '../interaction/spawn';
-import { getComponentRotation, setComponentRotation } from '../interaction/componentContextMenu';
+import {
+  getComponentRotation,
+  isComponentMirrored,
+  setComponentMirrored,
+  setComponentRotation,
+} from '../interaction/componentContextMenu';
 import { createConnection, redrawAllConnections } from '../wires/connection';
 import { clearSelection } from '../interaction/selection';
 import { resetCylinderLetters } from '../components/shared/letters';
@@ -42,6 +47,7 @@ export function serializeProject(name: string): ProjectFileV1 {
       x: c.x,
       y: c.y,
       rot: getComponentRotation(c),
+      ...(isComponentMirrored(c) ? { mirror: true } : {}),
       data: c.snapshot(),
     })),
     conns: appState.connections.map((c) => ({
@@ -91,6 +97,7 @@ export function loadProject(
       const comp = spawnComponent(snap.type, ctx, viewport, snap.x, snap.y);
       comp.restore(snap.data);
       if (snap.rot) setComponentRotation(comp, snap.rot);
+      if (snap.mirror) setComponentMirrored(comp, true);
       idMap.set(snap.id, comp.id);
     }
 
