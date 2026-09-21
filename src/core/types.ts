@@ -9,6 +9,23 @@ export interface PortDef {
   entryOrientation: 'H' | 'V';
   isPilot?: boolean;
   pilotDir?: 1 | -1;
+  /** An electrical terminal rather than a pneumatic port - only ever wired to other electrical
+   * terminals (see interaction/linking.ts), and solved by sim/electrical.ts instead of the
+   * pressure graph. */
+  electrical?: boolean;
+}
+
+/** How a component takes part in the electrical circuit solved by sim/electrical.ts. */
+export interface ElectricalBehavior {
+  /** A supply rail: every port named `port` is held at +24 V ('plus') or 0 V ('zero'). */
+  role?: { kind: 'plus' | 'zero'; port: PortKey };
+  /** Currently-closed contacts: each pair of ports is a wire while it's listed. */
+  closedEdges?(): PortConnection[];
+  /** A load (relay/solenoid coil, lamp) between two terminals: energized when one is live and
+   * the other is connected to 0 V. A non-empty `key` is published on the signal bus while
+   * energized, which is how contacts and solenoid valves bound to that key react. */
+  load?: { a: PortKey; b: PortKey; key: string };
+  setEnergized?(energized: boolean): void;
 }
 
 export interface PortConnection {
@@ -81,6 +98,7 @@ export interface Component<TSnapshot = Record<string, unknown>> {
   gx: number;
   gy: number;
   ports: Record<PortKey, PortDef>;
+  electrical?: ElectricalBehavior;
 
   conductivityRule(ctx: ConductivityContext): PortConnection[];
   flowMultiplier?(fromPort: PortKey, toPort: PortKey): number;

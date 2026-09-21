@@ -147,9 +147,14 @@ export function createPort(
   cx: number,
   cy: number,
   entryOrientation: 'H' | 'V',
-  opts: { isPilot?: boolean; pilotDir?: 1 | -1; radius?: number } = {},
+  opts: { isPilot?: boolean; pilotDir?: 1 | -1; radius?: number; electrical?: boolean } = {},
 ): PortDef {
-  const circle = createSvgEl('circle', { class: 'port', cx, cy, r: opts.radius ?? 6 });
+  const circle = createSvgEl('circle', {
+    class: opts.electrical ? 'port portElectrical' : 'port',
+    cx,
+    cy,
+    r: opts.radius ?? 6,
+  });
   circle.dataset.port = key;
   svg.appendChild(circle);
   return {
@@ -160,6 +165,7 @@ export function createPort(
     entryOrientation,
     isPilot: opts.isPilot,
     pilotDir: opts.pilotDir,
+    electrical: opts.electrical,
   };
 }
 

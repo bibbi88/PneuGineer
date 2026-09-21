@@ -10,8 +10,12 @@ import {
   type FrameGraph,
 } from './pressure';
 import { getSignal, setSignal } from './signals';
+import { solveElectrical } from './electrical';
 
 export function stepSimulation(dt: number): FrameGraph {
+  // First, so solenoid valves/contacts see this frame's coil states when pneumatics is computed.
+  solveElectrical();
+
   for (const c of appState.components) c.recompute?.();
 
   let graph = computeFrameGraph(

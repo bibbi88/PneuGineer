@@ -1,6 +1,7 @@
 import { appState } from '../app/AppState';
 import { portKey, type FrameGraph } from './pressure';
 import { SOURCE_PRESSURE } from './constants';
+import { isElectricallyLive } from './electrical';
 
 export function applyToDom(graph: FrameGraph): void {
   for (const c of appState.components) {
@@ -17,6 +18,8 @@ export function applyToDom(graph: FrameGraph): void {
   for (const conn of appState.connections) {
     const fromKey = portKey(conn.from.id, conn.from.port);
     const toKey = portKey(conn.to.id, conn.to.port);
+
+    conn.pathEl.classList.toggle('live', isElectricallyLive(fromKey) && isElectricallyLive(toKey));
 
     const active = graph.pressurized.has(fromKey) && graph.pressurized.has(toKey);
     conn.pathEl.classList.toggle('active', active);

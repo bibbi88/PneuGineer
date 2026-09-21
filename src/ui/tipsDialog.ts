@@ -32,6 +32,18 @@ const TIP_SECTIONS: TipSection[] = [
     ],
   },
   {
+    heading: 'Electro-pneumatics',
+    tips: [
+      'The Electrical group holds a +24 V and a 0 V supply, contacts, a push button, coils and ' +
+        'a lamp. Electrical terminals (dark blue) only connect to other electrical terminals.',
+      'A coil publishes its name (e.g. Y1, K1) while energized. A solenoid valve with the same ' +
+        'name shifts, and a contact whose "Signal" is that name (a relay contact) closes.',
+      'Set a contact’s Signal to a cylinder sensor label (e.g. A1) to use it as a position sensor.',
+      'Wires that are connected to +24 V during a run turn amber. Hold the mouse on an ' +
+        'electric push button to press it (Ctrl+click latches).',
+    ],
+  },
+  {
     heading: 'Project info & the page frame',
     tips: [
       'Project name, date, author, checked by, and company live in the inspector’s "Project ' +

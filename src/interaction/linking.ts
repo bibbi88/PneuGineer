@@ -2,6 +2,7 @@ import type { Component, ComponentId, PortKey } from '../core/types';
 import type { ViewportAdapter } from '../ui/viewport';
 import { appState } from '../app/AppState';
 import { createConnection } from '../wires/connection';
+import { JUNCTION_TYPE } from '../components/junction';
 import { createSvgEl } from '../components/shared/svgHelpers';
 import { pathFromPoints } from '../geometry/routing';
 import { PORT_HOVER_RADIUS } from '../sim/constants';
@@ -74,6 +75,15 @@ function updateHover(clientX: number, clientY: number): void {
   hoveredPortEl = nearest;
 }
 
+/** Electrical terminals only wire to electrical terminals (and pneumatic to pneumatic) - a
+ * junction is domain-neutral, so either kind can run into one. */
+function portDomainsCompatible(aId: number, aPort: string, bId: number, bPort: string): boolean {
+  const a = appState.findComponent(aId);
+  const b = appState.findComponent(bId);
+  if (!a || !b || a.type === JUNCTION_TYPE || b.type === JUNCTION_TYPE) return true;
+  return (a.ports[aPort]?.electrical ?? false) === (b.ports[bPort]?.electrical ?? false);
+}
+
 function updatePreview(clientX: number, clientY: number): void {
   if (!previewPath) return;
   if (!pendingPort || !viewportRef) {
@@ -101,7 +111,11 @@ function onDrop(clientX: number, clientY: number): void {
   const portEl = targetEl?.closest('.port');
   if (portEl) {
     const owner = findPortOwner(portEl);
-    if (owner && (owner.compId !== from.compId || owner.port !== from.port)) {
+    if (
+      owner &&
+      (owner.compId !== from.compId || owner.port !== from.port) &&
+      portDomainsCompatible(from.compId, from.port, owner.compId, owner.port)
+    ) {
       createConnection(
         { id: from.compId, port: from.port },
         { id: owner.compId, port: owner.port },

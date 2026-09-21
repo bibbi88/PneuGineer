@@ -28,6 +28,15 @@ import {
 } from '../components/shared/sensorPositions';
 import { swapComponentType } from '../interaction/valveActuatorSwap';
 import { JUNCTION_TYPE } from '../components/junction';
+import {
+  ELEC_CONTACT_TYPE,
+  ELEC_COIL_TYPE,
+  ELEC_PUSH_BUTTON_TYPE,
+} from '../components/electrical';
+import {
+  VALVE_52_SOLENOID_TYPE,
+  VALVE_52_SOLENOID_DOUBLE_TYPE,
+} from '../components/solenoidValves';
 import { TEXT_ANNOTATION_TYPE } from '../components/textAnnotation';
 
 type FieldLabel = string | ((comp: Component) => string);
@@ -127,9 +136,16 @@ const ACTUATOR_MODES: Array<{ type: string; label: string }> = [
   { type: AIR_VALVE_32_TYPE, label: 'Air-piloted' },
 ];
 
+const ELEC_CONTACT_MODES: Array<{ type: string; label: string }> = [
+  { type: ELEC_CONTACT_TYPE, label: 'Contact (relay / sensor)' },
+  { type: ELEC_PUSH_BUTTON_TYPE, label: 'Push button' },
+];
+
 const VALVE_52_MODES: Array<{ type: string; label: string }> = [
-  { type: VALVE_52_TYPE, label: 'Bistable (double pilot)' },
-  { type: VALVE_52_MONO_TYPE, label: 'Monostable (spring return)' },
+  { type: VALVE_52_TYPE, label: 'Pneumatic, bistable (double pilot)' },
+  { type: VALVE_52_MONO_TYPE, label: 'Pneumatic, monostable (spring return)' },
+  { type: VALVE_52_SOLENOID_TYPE, label: 'Electric, single solenoid (spring return)' },
+  { type: VALVE_52_SOLENOID_DOUBLE_TYPE, label: 'Electric, double solenoid' },
 ];
 
 const INSPECTOR_FIELDS: Record<string, InspectorField[]> = {
@@ -163,12 +179,12 @@ const INSPECTOR_FIELDS: Record<string, InspectorField[]> = {
     { kind: 'silencer', key: 'silencer3', port: '3', label: 'Port 3 silencer' },
   ],
   [VALVE_52_TYPE]: [
-    { kind: 'actuatorMode', label: 'Pilot', options: VALVE_52_MODES },
+    { kind: 'actuatorMode', label: 'Operation', options: VALVE_52_MODES },
     { kind: 'silencer', key: 'silencer3', port: '3', label: 'Port 3 silencer' },
     { kind: 'silencer', key: 'silencer5', port: '5', label: 'Port 5 silencer' },
   ],
   [VALVE_52_MONO_TYPE]: [
-    { kind: 'actuatorMode', label: 'Pilot', options: VALVE_52_MODES },
+    { kind: 'actuatorMode', label: 'Operation', options: VALVE_52_MODES },
     { kind: 'silencer', key: 'silencer3', port: '3', label: 'Port 3 silencer' },
     { kind: 'silencer', key: 'silencer5', port: '5', label: 'Port 5 silencer' },
   ],
@@ -188,6 +204,29 @@ const INSPECTOR_FIELDS: Record<string, InspectorField[]> = {
     { kind: 'sensorList', arrayKey: 'sensors', min: 0, max: 100, step: 1 },
   ],
   [TEXT_ANNOTATION_TYPE]: [{ kind: 'text', key: 'text', label: 'Text' }],
+  [ELEC_CONTACT_TYPE]: [
+    { kind: 'actuatorMode', label: 'Type', options: ELEC_CONTACT_MODES },
+    { kind: 'text', key: 'key', label: 'Signal (relay coil or sensor, e.g. K1, A1)' },
+    { kind: 'checkbox', key: 'normallyClosed', label: 'Normally closed (NC)' },
+  ],
+  [ELEC_PUSH_BUTTON_TYPE]: [
+    { kind: 'actuatorMode', label: 'Type', options: ELEC_CONTACT_MODES },
+    { kind: 'checkbox', key: 'normallyClosed', label: 'Normally closed (NC)' },
+  ],
+  [ELEC_COIL_TYPE]: [{ kind: 'text', key: 'key', label: 'Name (e.g. Y1, K1)' }],
+  [VALVE_52_SOLENOID_TYPE]: [
+    { kind: 'actuatorMode', label: 'Operation', options: VALVE_52_MODES },
+    { kind: 'text', key: 'key', label: 'Solenoid coil name' },
+    { kind: 'silencer', key: 'silencer3', port: '3', label: 'Port 3 silencer' },
+    { kind: 'silencer', key: 'silencer5', port: '5', label: 'Port 5 silencer' },
+  ],
+  [VALVE_52_SOLENOID_DOUBLE_TYPE]: [
+    { kind: 'actuatorMode', label: 'Operation', options: VALVE_52_MODES },
+    { kind: 'text', key: 'key14', label: 'Left solenoid coil name' },
+    { kind: 'text', key: 'key12', label: 'Right solenoid coil name' },
+    { kind: 'silencer', key: 'silencer3', port: '3', label: 'Port 3 silencer' },
+    { kind: 'silencer', key: 'silencer5', port: '5', label: 'Port 5 silencer' },
+  ],
 };
 
 function resolveLabel(label: FieldLabel, comp: Component): string {

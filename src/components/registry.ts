@@ -19,6 +19,26 @@ import {
   ONE_WAY_FLOW_CONTROL_VALVE_TYPE,
 } from './oneWayFlowControlValve';
 import { createThrottleValve, THROTTLE_VALVE_TYPE } from './throttleValve';
+import {
+  createElecRailPlus,
+  createElecRailZero,
+  createElecContact,
+  createElecPushButton,
+  createElecCoil,
+  createElecLamp,
+  ELEC_RAIL_PLUS_TYPE,
+  ELEC_RAIL_ZERO_TYPE,
+  ELEC_CONTACT_TYPE,
+  ELEC_PUSH_BUTTON_TYPE,
+  ELEC_COIL_TYPE,
+  ELEC_LAMP_TYPE,
+} from './electrical';
+import {
+  createValve52Solenoid,
+  createValve52SolenoidDouble,
+  VALVE_52_SOLENOID_TYPE,
+  VALVE_52_SOLENOID_DOUBLE_TYPE,
+} from './solenoidValves';
 import { createTextAnnotation, TEXT_ANNOTATION_TYPE } from './textAnnotation';
 
 export interface ComponentFactoryContext {
@@ -35,6 +55,7 @@ export const ComponentCategory = {
   LOGIC: 'Logic',
   FLOW: 'Flow control',
   ACTUATORS: 'Actuators',
+  ELECTRICAL: 'Electrical',
   ANNOTATIONS: 'Annotations',
 } as const;
 export type ComponentCategoryName = (typeof ComponentCategory)[keyof typeof ComponentCategory];
@@ -195,6 +216,108 @@ export const componentRegistry = new Map<string, RegistryEntry>([
     },
   ],
   [
+    ELEC_RAIL_PLUS_TYPE,
+    {
+      factory: (ctx, x, y) => createElecRailPlus(ctx.compLayer, x, y),
+      label: '+24 V supply',
+      placeable: true,
+      category: ComponentCategory.ELECTRICAL,
+    },
+  ],
+  [
+    ELEC_RAIL_ZERO_TYPE,
+    {
+      factory: (ctx, x, y) => createElecRailZero(ctx.compLayer, x, y),
+      label: '0 V supply',
+      placeable: true,
+      category: ComponentCategory.ELECTRICAL,
+    },
+  ],
+  [
+    ELEC_PUSH_BUTTON_TYPE,
+    {
+      factory: (ctx, x, y) => createElecPushButton(ctx.compLayer, x, y),
+      label: 'Push button NO',
+      placeable: true,
+      category: ComponentCategory.ELECTRICAL,
+    },
+  ],
+  [
+    ELEC_CONTACT_TYPE,
+    {
+      factory: (ctx, x, y) => createElecContact(ctx.compLayer, x, y),
+      label: 'Contact NO',
+      placeable: true,
+      category: ComponentCategory.ELECTRICAL,
+    },
+  ],
+  // Sidebar shortcuts for the normally-closed variants: same component types as the plain ones
+  // (saved projects, the inspector and swapping all key off comp.type, which stays
+  // 'elecContact' / 'elecPushButton'), just pre-set to NC - the registry key only has to be
+  // unique for the sidebar tile.
+  [
+    'elecContactNc',
+    {
+      factory: (ctx, x, y) => {
+        const c = createElecContact(ctx.compLayer, x, y);
+        c.restore({ ...c.snapshot(), normallyClosed: true });
+        return c;
+      },
+      label: 'Contact NC',
+      placeable: true,
+      category: ComponentCategory.ELECTRICAL,
+    },
+  ],
+  [
+    'elecPushButtonNc',
+    {
+      factory: (ctx, x, y) => {
+        const c = createElecPushButton(ctx.compLayer, x, y);
+        c.restore({ ...c.snapshot(), normallyClosed: true });
+        return c;
+      },
+      label: 'Push button NC',
+      placeable: true,
+      category: ComponentCategory.ELECTRICAL,
+    },
+  ],
+  [
+    ELEC_COIL_TYPE,
+    {
+      factory: (ctx, x, y) => createElecCoil(ctx.compLayer, x, y),
+      label: 'Coil (relay / solenoid)',
+      placeable: true,
+      category: ComponentCategory.ELECTRICAL,
+    },
+  ],
+  [
+    ELEC_LAMP_TYPE,
+    {
+      factory: (ctx, x, y) => createElecLamp(ctx.compLayer, x, y),
+      label: 'Lamp',
+      placeable: true,
+      category: ComponentCategory.ELECTRICAL,
+    },
+  ],
+  [
+    VALVE_52_SOLENOID_TYPE,
+    {
+      factory: (ctx, x, y) => createValve52Solenoid(ctx.compLayer, x, y),
+      label: '5/2 solenoid valve',
+      placeable: true,
+      category: ComponentCategory.DIRECTIONAL,
+    },
+  ],
+  [
+    VALVE_52_SOLENOID_DOUBLE_TYPE,
+    {
+      factory: (ctx, x, y) => createValve52SolenoidDouble(ctx.compLayer, x, y),
+      label: '5/2 double solenoid valve',
+      placeable: true,
+      category: ComponentCategory.DIRECTIONAL,
+    },
+  ],
+  [
     JUNCTION_TYPE,
     {
       factory: (ctx, x, y) => createJunction(ctx.compLayer, x, y),
@@ -230,6 +353,7 @@ const CATEGORY_ORDER: ComponentCategoryName[] = [
   ComponentCategory.LOGIC,
   ComponentCategory.FLOW,
   ComponentCategory.ACTUATORS,
+  ComponentCategory.ELECTRICAL,
   ComponentCategory.ANNOTATIONS,
 ];
 

@@ -3,6 +3,7 @@ import { Modes } from '../app/modes';
 import { stepSimulation } from './engine';
 import { applyToDom } from './render';
 import { emptyFrameGraph } from './pressure';
+import { clearElectrical } from './electrical';
 import { MAX_DT } from './constants';
 import { redrawAllConnections } from '../wires/connection';
 
@@ -28,6 +29,7 @@ function tick(now: number): void {
     redrawAllConnections();
     stepOnce = false;
   } else if (appState.mode === Modes.STOP) {
+    clearElectrical();
     applyToDom(emptyFrameGraph());
   }
 

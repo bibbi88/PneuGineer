@@ -81,7 +81,13 @@ export function updatePortConnectionVisual(compId: ComponentId, port: PortKey): 
 export function createConnection(from: ConnectionEndpoint, to: ConnectionEndpoint): Connection {
   if (!connLayerEl) throw new Error('initWires() must be called before creating connections');
 
-  const pathEl = createSvgEl('path', { class: 'wire', fill: 'none' });
+  const electrical =
+    appState.findComponent(from.id)?.ports[from.port]?.electrical === true ||
+    appState.findComponent(to.id)?.ports[to.port]?.electrical === true;
+  const pathEl = createSvgEl('path', {
+    class: electrical ? 'wire wireElectrical' : 'wire',
+    fill: 'none',
+  });
   const hitEl = createSvgEl('path', { class: 'wireHit', fill: 'none' });
   const labelEl = createSvgEl('text', { class: 'wireLabel', 'font-size': 10 });
   connLayerEl.append(pathEl, hitEl, labelEl);

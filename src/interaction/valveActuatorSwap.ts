@@ -36,6 +36,8 @@ export function initValveActuatorSwap(
 export function swapComponentType(comp: Component, newType: string): void {
   if (!ctxRef || !viewportRef) return;
   const { x, y } = comp;
+  // Contact <-> push button keeps its NO/NC choice; other swaps have no such field.
+  const normallyClosed = (comp.snapshot() as Record<string, unknown>).normallyClosed;
 
   const related = appState.connections
     .filter((c) => c.from.id === comp.id || c.to.id === comp.id)
@@ -50,6 +52,7 @@ export function swapComponentType(comp: Component, newType: string): void {
   appState.runSuppressed(() => {
     removeComponentAndConnections(comp.id);
     const next = spawnComponent(newType, ctxRef!, viewportRef!, x, y);
+    if (normallyClosed !== undefined) next.restore({ ...next.snapshot(), normallyClosed });
 
     for (const saved of related) {
       const fromMoved = saved.from.id === comp.id;

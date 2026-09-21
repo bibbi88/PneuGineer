@@ -1052,3 +1052,19 @@ rect.wireHandle.wireStubHandle {
 .tipsList li {
   margin-bottom: 4px;
 }
+
+/* Electrical circuit: terminals and wires are drawn apart from pneumatics (thin dark-blue
+   lines, square-ish look) and turn amber while connected to +24 V during a run. */
+.port.portElectrical {
+  stroke: #1d3b8b;
+}
+
+.wire.wireElectrical {
+  stroke: #1d3b8b;
+  stroke-width: 1.5;
+}
+
+.wire.wireElectrical.live {
+  stroke: #e6a800;
+  stroke-width: 2.5;
+}
