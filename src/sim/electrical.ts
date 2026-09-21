@@ -66,6 +66,7 @@ export function solveElectrical(): void {
       const e = c.electrical;
       if (!e) continue;
       if (e.role) (e.role.kind === 'plus' ? plus : zero).push(portKey(c.id, e.role.port));
+      for (const port of e.sources?.() ?? []) plus.push(portKey(c.id, port));
       for (const edge of e.closedEdges?.() ?? []) {
         link(portKey(c.id, edge.a), portKey(c.id, edge.b));
       }
@@ -85,6 +86,12 @@ export function solveElectrical(): void {
       c.electrical?.setEnergized?.(energized);
       if (load.key && getSignal(load.key) !== energized) {
         setSignal(load.key, energized);
+        changed = true;
+      }
+    }
+    for (const c of electrical) {
+      const scan = c.electrical?.scan;
+      if (scan?.call(c.electrical, (p) => live.has(portKey(c.id, p)), (p) => ground.has(portKey(c.id, p)))) {
         changed = true;
       }
     }

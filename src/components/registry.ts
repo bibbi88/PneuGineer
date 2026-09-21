@@ -39,6 +39,7 @@ import {
   VALVE_52_SOLENOID_TYPE,
   VALVE_52_SOLENOID_DOUBLE_TYPE,
 } from './solenoidValves';
+import { createPlc, PLC_TYPE } from './plc';
 import { createTextAnnotation, TEXT_ANNOTATION_TYPE } from './textAnnotation';
 
 export interface ComponentFactoryContext {
@@ -315,6 +316,15 @@ export const componentRegistry = new Map<string, RegistryEntry>([
       label: '5/2 double solenoid valve',
       placeable: true,
       category: ComponentCategory.DIRECTIONAL,
+    },
+  ],
+  [
+    PLC_TYPE,
+    {
+      factory: (ctx, x, y) => createPlc(ctx.compLayer, x, y),
+      label: 'PLC',
+      placeable: true,
+      category: ComponentCategory.ELECTRICAL,
     },
   ],
   [

@@ -1068,3 +1068,7 @@ rect.wireHandle.wireStubHandle {
   stroke: #e6a800;
   stroke-width: 2.5;
 }
+
+.port.portElectrical.portConnected {
+  stroke: transparent;
+}

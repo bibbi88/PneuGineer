@@ -18,6 +18,7 @@ const EXPORT_STYLE = `
   .wire.dashed { stroke-dasharray: 8 5; }
   .wire.wireElectrical { stroke: #1d3b8b; stroke-width: 1.5; }
   .port.portElectrical { stroke: #1d3b8b; }
+  .port.portElectrical.portConnected { stroke: transparent; }
   .port { fill: #fff; stroke: #0a74ff; stroke-width: 1.5; }
   .port.portConnected, .port.portSilenced { fill: transparent; stroke: transparent; }
   .pageFrameRect { fill: rgba(91, 107, 140, 0.045); stroke: #5b6b8c; stroke-width: 2; }

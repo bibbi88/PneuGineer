@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { appState } from '../app/AppState';
+import { Modes } from '../app/modes';
 import { initWires, createConnection } from '../wires/connection';
 import { solveElectrical } from './electrical';
 import { resetSignals, getSignal } from './signals';
@@ -10,6 +11,8 @@ import {
   createElecContact,
   createElecLamp,
 } from '../components/electrical';
+import { createPlc } from '../components/plc';
+import { createElecPushButton } from '../components/electrical';
 import { createValve52Solenoid } from '../components/solenoidValves';
 import type { Component } from '../core/types';
 import type { ViewportAdapter } from '../ui/viewport';
@@ -118,5 +121,47 @@ describe('solveElectrical', () => {
       { a: '1', b: '4' },
       { a: '2', b: '3' },
     ]);
+  });
+
+  it('a PLC runs a start/stop self-holding program driving a coil', () => {
+    const plus = add(createElecRailPlus(layer(), 0, 0));
+    const zero = add(createElecRailZero(layer(), 0, 900));
+    const plc = add(createPlc(layer(), 300, 400));
+    wire(plus, 'P', plc, 'L+');
+    wire(zero, 'P', plc, 'M');
+
+    const start = add(createElecPushButton(layer(), 100, 200)) as Component;
+    const stop = add(createElecPushButton(layer(), 100, 300)) as Component;
+    configure(stop, { normallyClosed: false });
+    wire(plus, 'P', start, 'A');
+    wire(start, 'B', plc, 'I0.0');
+    wire(plus, 'P', stop, 'A');
+    wire(stop, 'B', plc, 'I0.1');
+
+    const coil = add(createElecCoil(layer(), 600, 400));
+    wire(plc, 'Q0.0', coil, 'A');
+    wire(coil, 'B', zero, 'P');
+
+    appState.mode = Modes.PLAY; // push buttons ignore presses while stopped
+    const press = (btn: Component, down: boolean): void => {
+      btn.el.querySelector('svg')?.dispatchEvent(new MouseEvent(down ? 'mousedown' : 'mouseup'));
+      if (!down) window.dispatchEvent(new MouseEvent('mouseup'));
+    };
+
+    solveElectrical();
+    expect(getSignal('Y1')).toBe(false);
+
+    press(start, true);
+    solveElectrical();
+    expect(getSignal('Y1')).toBe(true);
+
+    press(start, false);
+    solveElectrical();
+    expect(getSignal('Y1')).toBe(true); // self-held
+
+    press(stop, true);
+    solveElectrical();
+    expect(getSignal('Y1')).toBe(false);
+    appState.mode = Modes.STOP;
   });
 });

@@ -39,6 +39,10 @@ const TIP_SECTIONS: TipSection[] = [
       'A coil publishes its name (e.g. Y1, K1) while energized. A solenoid valve with the same ' +
         'name shifts, and a contact whose "Signal" is that name (a relay contact) closes.',
       'Set a contact’s Signal to a cylinder sensor label (e.g. A1) to use it as a position sensor.',
+      'The PLC has inputs I0.0-I0.3 (true while wired to +24 V), outputs Q0.0-Q0.3 (drive their ' +
+        'terminal to +24 V when true) and L+/M supply terminals. Write its logic in the ' +
+        'inspector as equations, e.g. "Q0.0 = (I0.0 | Q0.0) & !I0.1" (start/stop with ' +
+        'self-hold). Use AND/OR/NOT/XOR or & | ! ^, and separate lines with ";".',
       'Wires that are connected to +24 V during a run turn amber. Hold the mouse on an ' +
         'electric push button to press it (Ctrl+click latches).',
     ],
