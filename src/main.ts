@@ -1,12 +1,18 @@
 import './ui/styles/app.css';
 import { initViewport } from './ui/viewport';
-import { renderComponentLibrary, COMPONENT_DRAG_MIME } from './ui/sidebar';
+import { renderComponentLibrary, COMPONENT_DRAG_MIME, getDraggedComponentType } from './ui/sidebar';
 import { renderToolbar } from './ui/toolbar';
 import { placeableComponentsByCategory, type ComponentFactoryContext } from './components/registry';
 import { initLinking } from './interaction/linking';
 import { initMarquee } from './interaction/marquee';
 import { initKeyboard } from './interaction/keyboard';
 import { initWireSplitting } from './interaction/wireSplitting';
+import {
+  trySpliceOntoWire,
+  findNearestWireHit,
+  setWireInsertHighlight,
+  isWireInsertableType,
+} from './interaction/wireInsertion';
 import { spawnComponent } from './interaction/spawn';
 import { initValveActuatorSwap } from './interaction/valveActuatorSwap';
 import { initClipboard } from './interaction/clipboard';
@@ -91,16 +97,41 @@ function addComponentAtViewCenter(type: string): void {
 // Dragging a library tile onto the canvas places it wherever it's dropped (like a click, snapped
 // to the grid) rather than always at the view center - an unsnapped drop would otherwise leave
 // every wire into/out of it with the same off-grid jog a click-insert used to.
+// While dragging a wire-insertable valve (check/throttle/one-way-flow) over the canvas, the
+// nearest wire within reach highlights (see .wireInsertTarget in app.css) so it's clear before
+// letting go that dropping here will splice it in rather than leave it unconnected. The dragged
+// type has to come from sidebar.ts's own tracked variable, not dataTransfer.getData() - browsers
+// withhold that payload until the actual 'drop' event.
 workspaceEl.addEventListener('dragover', (e) => {
   if (!e.dataTransfer?.types.includes(COMPONENT_DRAG_MIME)) return;
   e.preventDefault();
   e.dataTransfer.dropEffect = 'copy';
+
+  const draggedType = getDraggedComponentType();
+  if (draggedType && isWireInsertableType(draggedType)) {
+    const world = viewport.clientToWorld(e.clientX, e.clientY);
+    const hit = findNearestWireHit(viewport, workspaceEl, world);
+    setWireInsertHighlight(hit?.conn ?? null);
+  } else {
+    setWireInsertHighlight(null);
+  }
+});
+workspaceEl.addEventListener('dragleave', (e) => {
+  if (e.relatedTarget === null || !workspaceEl.contains(e.relatedTarget as Node)) {
+    setWireInsertHighlight(null);
+  }
 });
 workspaceEl.addEventListener('drop', (e) => {
   const type = e.dataTransfer?.getData(COMPONENT_DRAG_MIME);
+  setWireInsertHighlight(null);
   if (!type) return;
   e.preventDefault();
   const world = viewport.clientToWorld(e.clientX, e.clientY);
+  // Dropping a check/throttle/one-way-flow valve close enough to an existing wire splices it
+  // into that wire (two new connections either side of it) instead of landing unconnected on
+  // top of it - see interaction/wireInsertion.ts for which types support this and why.
+  const spliced = trySpliceOntoWire(type, factoryCtx, viewport, workspaceEl, world);
+  if (spliced) return;
   spawnComponent(type, factoryCtx, viewport, snap(world.x), snap(world.y));
 });
 

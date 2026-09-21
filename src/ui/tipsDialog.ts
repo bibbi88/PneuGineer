@@ -20,6 +20,9 @@ const TIP_SECTIONS: TipSection[] = [
     heading: 'Placing & editing',
     tips: [
       'Drag a component from the sidebar onto the canvas, or click it to add at the view center.',
+      'Drag a check valve, throttle valve, one-way flow control valve, or quick exhaust valve onto an existing wire ' +
+        '(it highlights green when close enough) to splice it in, instead of dropping it ' +
+        'unconnected on top.',
       'Right-click a component for Rotate, Copy, and Delete.',
       'Arrow keys nudge the selected component; hold Shift to move a full grid step further.',
       'Delete or Backspace removes the current selection.',

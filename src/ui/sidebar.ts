@@ -4,6 +4,18 @@ import { renderComponentIcon } from '../components/iconPreview';
  * the workspace's drop handler set up in main.ts. */
 export const COMPONENT_DRAG_MIME = 'application/x-pneugineer-component';
 
+// dataTransfer.getData() only actually returns its payload on the 'drop' event itself - browsers
+// withhold it during 'dragover'/'dragenter' (so a page can't snoop a cross-origin drag's contents
+// before the user commits to dropping there). main.ts's dragover handler needs to know which
+// component type is being dragged well before that, to preview whether it'd splice onto a wire -
+// so the type is tracked here instead, in a plain module variable set/cleared alongside the same
+// dragstart/dragend that already exists on each tile.
+let draggedType: string | null = null;
+
+export function getDraggedComponentType(): string | null {
+  return draggedType;
+}
+
 export interface SidebarItemSpec {
   type: string;
   label: string;
@@ -75,8 +87,12 @@ export function renderComponentLibrary(container: HTMLElement, groups: SidebarGr
         e.dataTransfer?.setData(COMPONENT_DRAG_MIME, item.type);
         if (e.dataTransfer) e.dataTransfer.effectAllowed = 'copy';
         tile.classList.add('dragging');
+        draggedType = item.type;
       });
-      tile.addEventListener('dragend', () => tile.classList.remove('dragging'));
+      tile.addEventListener('dragend', () => {
+        tile.classList.remove('dragging');
+        draggedType = null;
+      });
       grid.appendChild(tile);
       tiles.push({ el: tile, label: item.label });
     }

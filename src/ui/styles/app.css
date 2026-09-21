@@ -12,6 +12,7 @@
   --line-soft: #dcdce2;
   --frame: #5b6b8c;
   --frame-fill: rgba(91, 107, 140, 0.045);
+  --insert: #1a9c4a;
 }
 
 * {
@@ -497,6 +498,7 @@ rect.wireHandle.wireStubHandle {
   stroke: #000;
   stroke-width: 2;
   fill: none;
+  transition: stroke 0.12s ease, stroke-width 0.12s ease;
 }
 
 .wire.active {
@@ -562,6 +564,16 @@ rect.wireHandle.wireStubHandle {
   stroke: var(--accent);
   stroke-width: 3;
   stroke-dasharray: 4 4;
+}
+
+/* Previewed while dragging a check/throttle/one-way-flow valve over the canvas (see
+   interaction/wireInsertion.ts's setWireInsertHighlight) - the nearest wire within reach lights
+   up green so it's clear *before* letting go that dropping here splices the valve in rather than
+   leaving it unconnected. Comes after .selected in source order so it still reads clearly even
+   on a wire that happened to already be selected. */
+.wire.wireInsertTarget {
+  stroke: var(--insert);
+  stroke-width: 4;
 }
 
 .wireHit {
