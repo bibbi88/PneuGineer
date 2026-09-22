@@ -1,7 +1,10 @@
 import type { Component, PortConnection } from '../core/types';
 import { uid } from '../core/ids';
+import { appState } from '../app/AppState';
 import { compileProgram, runScan, type CompiledProgram, type FbState } from '../sim/plcProgram';
+import { cloneGraph, compileGraph, graphToText, type PlcGraph } from '../sim/plcGraph';
 import { buildComponentShell, createPort, createSvgEl } from './shared/svgHelpers';
+import { openPlcEditorDialog } from '../ui/plcEditorDialog';
 
 export const PLC_TYPE = 'plc';
 
@@ -13,6 +16,31 @@ const INPUTS = ['I0.0', 'I0.1', 'I0.2', 'I0.3'];
 const OUTPUTS = ['Q0.0', 'Q0.1', 'Q0.2', 'Q0.3'];
 
 const DEFAULT_PROGRAM = 'Q0.0 = (I0.0 | Q0.0) & !I0.1';
+
+/** A freshly-placed PLC's default self-holding-coil circuit, drawn out as a diagram instead of
+ * typed as `DEFAULT_PROGRAM` - kept behaviorally identical to it (see plcGraph.test.ts) so a new
+ * PLC's default behavior hasn't changed, just how it's authored. */
+function defaultGraph(): PlcGraph {
+  return {
+    nodes: [
+      { id: 'i0', kind: 'signal', ref: 'I0.0', x: 40, y: 40 },
+      { id: 'qfb', kind: 'signal', ref: 'Q0.0', x: 40, y: 120 },
+      { id: 'orGate', kind: 'gate', op: 'OR', x: 220, y: 80 },
+      { id: 'i1', kind: 'signal', ref: 'I0.1', x: 40, y: 200 },
+      { id: 'notGate', kind: 'not', x: 220, y: 200 },
+      { id: 'andGate', kind: 'gate', op: 'AND', x: 400, y: 140 },
+      { id: 'coil', kind: 'coil', target: 'Q0.0', x: 560, y: 140 },
+    ],
+    wires: [
+      { id: 'w1', from: { node: 'i0' }, to: { node: 'orGate', pin: 0 } },
+      { id: 'w2', from: { node: 'qfb' }, to: { node: 'orGate', pin: 1 } },
+      { id: 'w3', from: { node: 'i1' }, to: { node: 'notGate', pin: 0 } },
+      { id: 'w4', from: { node: 'orGate' }, to: { node: 'andGate', pin: 0 } },
+      { id: 'w5', from: { node: 'notGate' }, to: { node: 'andGate', pin: 1 } },
+      { id: 'w6', from: { node: 'andGate' }, to: { node: 'coil', pin: 0 } },
+    ],
+  };
+}
 
 /**
  * A minimal simulated PLC: four digital inputs (an input reads true while its terminal is
@@ -99,13 +127,25 @@ export function createPlc(compLayer: HTMLElement, x: number, y: number): Compone
   // Ports last so they paint (and take clicks) above the lead lines that end on them.
   for (const port of Object.values(ports)) svg.appendChild(port.el);
 
+  let graph: PlcGraph = defaultGraph();
+  // Set only when restoring a project saved before the graphical editor existed, whose only
+  // record of its program is hand-typed text with no diagram behind it - kept running exactly as
+  // saved (never auto-decompiled into a diagram, which risks silently changing behavior) until
+  // the user opens the editor and saves over it with a real graph.
+  let legacyProgramText: string | null = null;
   let programText = DEFAULT_PROGRAM;
   let program: CompiledProgram = compileProgram(programText);
   let outputs = new Map<string, boolean>(OUTPUTS.map((n) => [n, false]));
   let fbState = new Map<string, FbState>();
 
   function refreshProgram(): void {
-    program = compileProgram(programText);
+    if (legacyProgramText !== null) {
+      program = compileProgram(legacyProgramText);
+      programText = legacyProgramText;
+    } else {
+      program = compileGraph(graph);
+      programText = program.error ? '' : graphToText(graph);
+    }
     errorEl.textContent = program.error ? 'program error' : '';
   }
   function paintOutputs(): void {
@@ -117,6 +157,19 @@ export function createPlc(compLayer: HTMLElement, x: number, y: number): Compone
   }
   refreshProgram();
   paintOutputs();
+
+  svg.addEventListener('dblclick', (e) => {
+    e.stopPropagation();
+    openPlcEditorDialog({
+      graph: legacyProgramText === null ? cloneGraph(graph) : null,
+      onSave(nextGraph: PlcGraph) {
+        graph = nextGraph;
+        legacyProgramText = null;
+        refreshProgram();
+        appState.markDirty();
+      },
+    });
+  });
 
   const comp: Component = {
     id: uid(),
@@ -155,12 +208,21 @@ export function createPlc(compLayer: HTMLElement, x: number, y: number): Compone
     },
     conductivityRule: (): PortConnection[] => [],
     snapshot: () => ({
+      graph: legacyProgramText === null ? cloneGraph(graph) : null,
+      legacyProgram: legacyProgramText,
       program: programText,
       showName: shell.getNameVisible(),
       customName: shell.getCustomName(),
     }),
     restore(data: Record<string, unknown>): void {
-      programText = (data.program as string) ?? DEFAULT_PROGRAM;
+      const savedGraph = data.graph as PlcGraph | null | undefined;
+      if (savedGraph) {
+        graph = cloneGraph(savedGraph);
+        legacyProgramText = null;
+      } else {
+        legacyProgramText =
+          (data.legacyProgram as string | null) ?? (data.program as string) ?? DEFAULT_PROGRAM;
+      }
       shell.setNameVisible(Boolean(data.showName));
       shell.setCustomName((data.customName as string | null) ?? null);
       refreshProgram();

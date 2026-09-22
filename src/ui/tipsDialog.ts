@@ -33,6 +33,18 @@ const TIP_SECTIONS: TipSection[] = [
     ],
   },
   {
+    heading: 'Custom components',
+    tips: [
+      '"+ New custom component…" (bottom of the sidebar) lets you paste your own SVG artwork ' +
+        'and click on it to place ports - it appears in the Custom category afterward, ' +
+        'placeable and wireable like any built-in component.',
+      'A custom component has one behavior: every one of its ports conducts to every other ' +
+        "one. There's no way yet to give it its own one-way or switched logic.",
+      "Right-click a custom component's sidebar tile to Edit or Delete it. Saving a project " +
+        'that uses one embeds its definition, so the file still opens correctly elsewhere.',
+    ],
+  },
+  {
     heading: 'Electro-pneumatics',
     tips: [
       'The Electrical group holds a +24 V and a 0 V supply, contacts, a push button, coils and ' +
@@ -41,9 +53,13 @@ const TIP_SECTIONS: TipSection[] = [
         'name shifts, and a contact whose "Signal" is that name (a relay contact) closes.',
       'Set a contact’s Signal to a cylinder sensor label (e.g. A1) to use it as a position sensor.',
       'The PLC has inputs I0.0-I0.3 (true while wired to +24 V), outputs Q0.0-Q0.3 (drive their ' +
-        'terminal to +24 V when true) and L+/M supply terminals. Write its logic in the ' +
-        'inspector as equations, e.g. "Q0.0 = (I0.0 | Q0.0) & !I0.1" (start/stop with ' +
-        'self-hold). Use AND/OR/NOT/XOR or & | ! ^, and separate lines with ";".',
+        'terminal to +24 V when true) and L+/M supply terminals. Double-click the PLC to write ' +
+        'its logic as a function block diagram: place signal, AND/OR/XOR/NOT, timer/counter/' +
+        'latch and coil blocks, then drag from a block’s output dot to another’s input ' +
+        'dot to wire them.',
+      'The inspector’s "Program" field is a read-only preview of the diagram’s ' +
+        'generated logic (e.g. "Q0.0 = (I0.0 | Q0.0) & !I0.1" for a start/stop self-hold) - edit ' +
+        'it by double-clicking the PLC, not by typing there.',
       'Wires that are connected to +24 V during a run turn amber. Hold the mouse on an ' +
         'electric push button to press it (Ctrl+click latches).',
     ],

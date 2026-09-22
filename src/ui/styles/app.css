@@ -498,7 +498,9 @@ rect.wireHandle.wireStubHandle {
   stroke: #000;
   stroke-width: 2;
   fill: none;
-  transition: stroke 0.12s ease, stroke-width 0.12s ease;
+  transition:
+    stroke 0.12s ease,
+    stroke-width 0.12s ease;
 }
 
 .wire.active {
@@ -719,6 +721,26 @@ rect.wireHandle.wireStubHandle {
 .inspectorRow select {
   width: 130px;
   font-size: 12px;
+}
+
+/* A read-only field whose value is multi-line (the PLC's generated program preview) stacks its
+   label above the field instead of side by side - .inspectorRow's own flex row leaves no room for
+   a multi-line value next to a label. */
+.inspectorRowStacked {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.inspectorReadonlyText {
+  width: 100%;
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  padding: 5px 6px;
+  border: 1px solid #bbb;
+  border-radius: 4px;
+  resize: vertical;
+  background: var(--panel-2);
+  color: var(--muted);
 }
 
 .inspectorSectionHeading {
@@ -1071,4 +1093,226 @@ rect.wireHandle.wireStubHandle {
 
 .port.portElectrical.portConnected {
   stroke: transparent;
+}
+
+/* Custom component editor (ui/customComponentDialog.ts) - "New custom component…" in the
+   sidebar. Reuses .exportDialog's own chrome, just wider (there's a lot more to fit: a name
+   field, an SVG textarea, a live preview, and the port list). */
+.customCompDialog {
+  width: 640px;
+}
+
+.customCompSvgInput {
+  width: 100%;
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px;
+  resize: vertical;
+  margin-bottom: 6px;
+}
+
+.customCompError {
+  color: var(--accent);
+  min-height: 16px;
+}
+
+.customCompPreview {
+  min-height: 120px;
+}
+
+.customCompPortMarker {
+  fill: var(--insert);
+  stroke: #fff;
+  stroke-width: 1.5;
+  cursor: pointer;
+}
+
+.customCompPortList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.customCompPortRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.customCompPortKey {
+  flex: 1;
+  min-width: 0;
+}
+
+.customCompPortRow select {
+  flex: none;
+}
+
+.customCompPortRemove {
+  border: none;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 4px 6px;
+  font-size: 13px;
+}
+
+.customCompPortRemove:hover {
+  color: var(--accent);
+}
+
+/* PLC graphical program editor (ui/plcEditorDialog.ts) - reuses .exportDialog's own chrome,
+   wider still than the custom component editor since the canvas needs real room to lay out a
+   diagram in. */
+.plcEditorDialog {
+  width: 820px;
+}
+
+.plcPalette {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 10px;
+  padding: 8px;
+  background: var(--panel);
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+}
+
+.plcPaletteGroup {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.plcPaletteGroupLabel {
+  font-size: 11px;
+  color: var(--muted);
+  margin-right: 2px;
+}
+
+.plcPaletteBtn {
+  margin: 0;
+  padding: 5px 9px;
+  font-size: 12px;
+}
+
+.plcCanvasWrap {
+  position: relative;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  overflow: auto;
+  margin-bottom: 10px;
+  background: #fafafa;
+}
+
+.plcCanvas {
+  display: block;
+}
+
+.plcOverlayLayer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.plcOverlayBox {
+  position: absolute;
+  display: flex;
+  gap: 2px;
+  pointer-events: auto;
+}
+
+.plcOverlayName,
+.plcOverlayParam {
+  width: 100%;
+  min-width: 0;
+  font-size: 10px;
+  padding: 1px 3px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+}
+
+.plcOverlayParams {
+  display: flex;
+  gap: 3px;
+}
+
+.plcOverlayParams .plcOverlayParam {
+  flex: 1;
+}
+
+.plcNode rect {
+  fill: #fff;
+  stroke: #111;
+  stroke-width: 1.5;
+  cursor: grab;
+}
+
+.plcNode-signal rect {
+  fill: #eef6ff;
+}
+
+.plcNode-coil rect {
+  fill: #fff4e5;
+}
+
+.plcNode text {
+  pointer-events: none;
+  user-select: none;
+}
+
+.plcNodeRemove {
+  cursor: pointer;
+  fill: var(--muted);
+}
+
+.plcNodeRemove:hover {
+  fill: var(--accent);
+}
+
+.plcPin {
+  fill: var(--port);
+  stroke: #fff;
+  stroke-width: 1.2;
+  cursor: crosshair;
+}
+
+.plcWire {
+  stroke: #111;
+  stroke-width: 1.5;
+  pointer-events: none;
+}
+
+.plcWireSelected {
+  stroke: var(--accent);
+  stroke-width: 2.5;
+}
+
+.plcWireHit {
+  stroke: transparent;
+  stroke-width: 10;
+  cursor: pointer;
+}
+
+.plcWireGhost {
+  stroke: var(--port);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+  pointer-events: none;
+}
+
+.plcProgramPreview {
+  width: 100%;
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px;
+  resize: vertical;
+  background: var(--panel);
+  margin-bottom: 4px;
 }

@@ -45,8 +45,10 @@ export const FB_TYPES = ['TON', 'TOF', 'TP', 'CTU', 'CTD', 'SR', 'RS'] as const;
 export type FbType = (typeof FB_TYPES)[number];
 
 /** How many arguments each block takes, and which are boolean expressions vs. plain numeric
- * literals (by position) - drives both parsing and the step function below. */
-const FB_ARG_SHAPE: Record<FbType, Array<'bool' | 'num'>> = {
+ * literals (by position) - drives both parsing and the step function below, and (exported) lets
+ * the graphical editor (plcGraph.ts) know how many wire-able pins vs. literal-number fields a
+ * function block needs without duplicating this table. */
+export const FB_ARG_SHAPE: Record<FbType, Array<'bool' | 'num'>> = {
   TON: ['bool', 'num'],
   TOF: ['bool', 'num'],
   TP: ['bool', 'num'],
@@ -79,7 +81,7 @@ function freshFbState(): FbState {
   return { q: false, et: 0, cv: 0, running: false, prevIn: false };
 }
 
-const PORT_RE = /^[IQ]\d+\.\d+$/;
+export const PORT_RE = /^[IQ]\d+\.\d+$/;
 const MEMBER_RE = /^[A-Za-z]\w*\.[A-Za-z]\w*$/;
 const NUMBER_RE = /^\d+(?:\.\d+)?$/;
 
@@ -181,19 +183,23 @@ function parseFbArgs(fbType: FbType, tokens: string[]): Array<Expr | number> {
     }
     if (shape[argIdx] === 'num') {
       if (argTokens.length !== 1 || !NUMBER_RE.test(argTokens[0] as string)) {
-        throw new Error(`${fbType}'s ${argIdx + 1}${ordinalSuffix(argIdx + 1)} argument must be a plain number`);
+        throw new Error(
+          `${fbType}'s ${argIdx + 1}${ordinalSuffix(argIdx + 1)} argument must be a plain number`,
+        );
       }
       args.push(Number(argTokens[0]));
     } else {
       args.push(parseExpression(argTokens));
     }
     if (argIdx < shape.length - 1) {
-      if (tokens[i] !== ',') throw new Error(`${fbType} needs ${shape.length} arguments, got fewer`);
+      if (tokens[i] !== ',')
+        throw new Error(`${fbType} needs ${shape.length} arguments, got fewer`);
       i++;
     }
   }
   if (tokens[i] !== ')') throw new Error(`${fbType} takes exactly ${shape.length} argument(s)`);
-  if (i + 1 !== tokens.length) throw new Error(`Unexpected "${tokens[i + 1]}" after ${fbType}(...)`);
+  if (i + 1 !== tokens.length)
+    throw new Error(`Unexpected "${tokens[i + 1]}" after ${fbType}(...)`);
   return args;
 }
 
@@ -210,7 +216,9 @@ export function compileProgram(text: string): CompiledProgram {
       const target = tokens[0] ?? '';
       const targetU = target.toUpperCase();
       if (tokens[1] !== '=') {
-        throw new Error(`Each line must look like "Q0.0 = ..." or "NAME = TON(...)" (got "${raw.trim()}")`);
+        throw new Error(
+          `Each line must look like "Q0.0 = ..." or "NAME = TON(...)" (got "${raw.trim()}")`,
+        );
       }
       const rhsHead = tokens[2]?.toUpperCase();
       if (rhsHead && (FB_TYPES as readonly string[]).includes(rhsHead) && tokens[3] === '(') {

@@ -30,11 +30,7 @@ import { swapComponentType } from '../interaction/valveActuatorSwap';
 import { JUNCTION_TYPE } from '../components/junction';
 import { VALVE_53_MONO_TYPE } from '../components/valve53Mono';
 import { PLC_TYPE } from '../components/plc';
-import {
-  ELEC_CONTACT_TYPE,
-  ELEC_COIL_TYPE,
-  ELEC_PUSH_BUTTON_TYPE,
-} from '../components/electrical';
+import { ELEC_CONTACT_TYPE, ELEC_COIL_TYPE, ELEC_PUSH_BUTTON_TYPE } from '../components/electrical';
 import {
   VALVE_52_SOLENOID_TYPE,
   VALVE_52_SOLENOID_DOUBLE_TYPE,
@@ -54,6 +50,14 @@ interface NumberField {
 
 interface TextField {
   kind: 'text';
+  key: string;
+  label: FieldLabel;
+}
+
+/** A snapshot value shown for reference but not directly editable - e.g. the PLC's program text,
+ * which is now generated from its graphical editor (see plcEditorDialog.ts) rather than typed. */
+interface ReadonlyTextField {
+  kind: 'readonlyText';
   key: string;
   label: FieldLabel;
 }
@@ -124,6 +128,7 @@ interface SilencerField {
 type InspectorField =
   | NumberField
   | TextField
+  | ReadonlyTextField
   | CheckboxField
   | SensorListField
   | ActuatorModeField
@@ -221,9 +226,9 @@ const INSPECTOR_FIELDS: Record<string, InspectorField[]> = {
   ],
   [PLC_TYPE]: [
     {
-      kind: 'text',
+      kind: 'readonlyText',
       key: 'program',
-      label: 'Program (e.g. Q0.0=(I0.0|Q0.0)&!I0.1; T1=TON(I0.0,2.0) - see Tips)',
+      label: 'Program (double-click the PLC to edit)',
     },
   ],
   [ELEC_COIL_TYPE]: [{ kind: 'text', key: 'key', label: 'Name (e.g. Y1, K1)' }],
@@ -282,6 +287,32 @@ function renderNumberOrTextField(
     const value = field.kind === 'number' ? Number(input.value) : input.value;
     updateComponentField(comp, field.key, value);
   });
+
+  row.append(span, input);
+  container.appendChild(row);
+}
+
+function renderReadonlyTextField(
+  container: HTMLElement,
+  comp: Component,
+  field: ReadonlyTextField,
+  snap: Record<string, unknown>,
+): void {
+  const row = document.createElement('label');
+  row.className = 'inspectorRow inspectorRowStacked';
+
+  const span = document.createElement('span');
+  span.textContent = resolveLabel(field.label, comp);
+
+  // A <textarea>, not an <input> - a single-line input silently drops newlines on assignment
+  // (its own value-sanitization, not something this code controls), which would otherwise run
+  // a multi-statement program together into one unreadable line.
+  const value = String(snap[field.key] ?? '');
+  const input = document.createElement('textarea');
+  input.className = 'inspectorReadonlyText';
+  input.readOnly = true;
+  input.rows = Math.max(2, Math.min(6, value.split('\n').length));
+  input.value = value;
 
   row.append(span, input);
   container.appendChild(row);
@@ -914,10 +945,15 @@ export function renderInspector(
       else if (field.kind === 'cylinderMode') renderCylinderModeField(container, comp, refresh);
       else if (field.kind === 'silencer') renderSilencerField(container, comp, field, snap);
       else if (field.kind === 'checkbox') renderCheckboxField(container, comp, field, snap);
+      else if (field.kind === 'readonlyText') renderReadonlyTextField(container, comp, field, snap);
       else renderNumberOrTextField(container, comp, field, snap);
     }
   }
 
   onSelectionChange(refresh);
+  // Also catches edits that don't go through this panel's own fields, e.g. saving a PLC's
+  // program from its graphical editor dialog - that only calls appState.markDirty(), so its
+  // read-only program preview here needs the general change notification to pick it up.
+  appState.onChange(refresh);
   refresh();
 }
