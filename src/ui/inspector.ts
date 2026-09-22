@@ -28,6 +28,7 @@ import {
 } from '../components/shared/sensorPositions';
 import { swapComponentType } from '../interaction/valveActuatorSwap';
 import { JUNCTION_TYPE } from '../components/junction';
+import { VALVE_53_MONO_TYPE } from '../components/valve53Mono';
 import { PLC_TYPE } from '../components/plc';
 import {
   ELEC_CONTACT_TYPE,
@@ -189,6 +190,10 @@ const INSPECTOR_FIELDS: Record<string, InspectorField[]> = {
     { kind: 'silencer', key: 'silencer3', port: '3', label: 'Port 3 silencer' },
     { kind: 'silencer', key: 'silencer5', port: '5', label: 'Port 5 silencer' },
   ],
+  [VALVE_53_MONO_TYPE]: [
+    { kind: 'silencer', key: 'silencer3', port: '3', label: 'Port 3 silencer' },
+    { kind: 'silencer', key: 'silencer5', port: '5', label: 'Port 5 silencer' },
+  ],
   [CYLINDER_DOUBLE_TYPE]: [
     { kind: 'relabel', label: 'Cylinder letter' },
     { kind: 'number', key: 'boreDiameter', label: 'Bore diameter (mm)', min: 1, max: 500, step: 1 },
@@ -215,7 +220,11 @@ const INSPECTOR_FIELDS: Record<string, InspectorField[]> = {
     { kind: 'checkbox', key: 'normallyClosed', label: 'Normally closed (NC)' },
   ],
   [PLC_TYPE]: [
-    { kind: 'text', key: 'program', label: 'Program (e.g. Q0.0 = (I0.0 | Q0.0) & !I0.1)' },
+    {
+      kind: 'text',
+      key: 'program',
+      label: 'Program (e.g. Q0.0=(I0.0|Q0.0)&!I0.1; T1=TON(I0.0,2.0) - see Tips)',
+    },
   ],
   [ELEC_COIL_TYPE]: [{ kind: 'text', key: 'key', label: 'Name (e.g. Y1, K1)' }],
   [VALVE_52_SOLENOID_TYPE]: [

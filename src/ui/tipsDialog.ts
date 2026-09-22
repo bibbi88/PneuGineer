@@ -28,7 +28,8 @@ const TIP_SECTIONS: TipSection[] = [
       'Delete or Backspace removes the current selection.',
       'Ctrl+C / Ctrl+V copies and pastes the selection.',
       'Ctrl+Z undoes, Ctrl+R redoes.',
-      'Escape cancels a wire you’re in the middle of drawing.',
+      'Escape cancels a wire you’re in the middle of drawing, or clears the current selection ' +
+        'if nothing is being drawn.',
     ],
   },
   {

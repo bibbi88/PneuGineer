@@ -1,6 +1,6 @@
 import type { Component, PortConnection } from '../core/types';
 import { uid } from '../core/ids';
-import { compileProgram, runScan, type CompiledProgram } from '../sim/plcProgram';
+import { compileProgram, runScan, type CompiledProgram, type FbState } from '../sim/plcProgram';
 import { buildComponentShell, createPort, createSvgEl } from './shared/svgHelpers';
 
 export const PLC_TYPE = 'plc';
@@ -102,6 +102,7 @@ export function createPlc(compLayer: HTMLElement, x: number, y: number): Compone
   let programText = DEFAULT_PROGRAM;
   let program: CompiledProgram = compileProgram(programText);
   let outputs = new Map<string, boolean>(OUTPUTS.map((n) => [n, false]));
+  let fbState = new Map<string, FbState>();
 
   function refreshProgram(): void {
     program = compileProgram(programText);
@@ -130,12 +131,21 @@ export function createPlc(compLayer: HTMLElement, x: number, y: number): Compone
     ports,
     electrical: {
       sources: () => OUTPUTS.filter((n) => outputs.get(n) === true),
-      scan(isLive, isGround): boolean {
+      scan(dt, isLive, isGround): boolean {
         const powered = isLive('L+') && isGround('M');
         const inputs = new Map(INPUTS.map((n) => [n, isLive(n)]));
-        const next = powered
-          ? runScan(program, inputs, outputs)
-          : new Map(OUTPUTS.map((n) => [n, false]));
+        let next: Map<string, boolean>;
+        if (powered) {
+          const result = runScan(program, inputs, outputs, fbState, dt);
+          next = result.outputs;
+          fbState = result.fb;
+        } else {
+          // Unpowered (L+/M not both connected): outputs drop and every function block's own
+          // state (elapsed time, count, latch) resets, same as a real PLC losing power rather
+          // than just going idle.
+          next = new Map(OUTPUTS.map((n) => [n, false]));
+          fbState = new Map();
+        }
         let changed = false;
         for (const n of OUTPUTS) if (next.get(n) !== outputs.get(n)) changed = true;
         outputs = next;
@@ -157,6 +167,7 @@ export function createPlc(compLayer: HTMLElement, x: number, y: number): Compone
     },
     reset(): void {
       outputs = new Map(OUTPUTS.map((n) => [n, false]));
+      fbState = new Map();
       paintOutputs();
     },
     setPos(nx: number, ny: number): void {

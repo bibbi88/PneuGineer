@@ -1,9 +1,20 @@
 import { appState } from '../app/AppState';
 import { addToSelection, clearSelection } from './selection';
 
-export function initMarquee(backgroundEl: SVGSVGElement): void {
-  backgroundEl.addEventListener('mousedown', (e) => {
-    if (e.target !== backgroundEl) return;
+/**
+ * `connLayer` is a fixed-size box (the workspace's own on-screen size, before #viewport's
+ * pan/zoom transform is applied to it) - once panned further than about one viewport's worth
+ * from the origin, that box's own on-screen position drifts entirely outside the visible
+ * .workspace area, even though the diagram *content* inside it (positioned in world coordinates,
+ * with overflow: visible) still renders correctly wherever it's panned to. An "empty canvas"
+ * mousedown past that point never actually lands on connLayer any more - it falls through to
+ * workspaceEl itself - so both are accepted as valid places to start a marquee, not just
+ * connLayer alone (which is all that's ever hit near the origin, where connLayer's box still
+ * covers the full visible viewport).
+ */
+export function initMarquee(workspaceEl: HTMLElement, connLayer: SVGSVGElement): void {
+  workspaceEl.addEventListener('mousedown', (e) => {
+    if (e.target !== connLayer && e.target !== workspaceEl) return;
     if (e.button !== 0) return;
 
     const additive = e.shiftKey;

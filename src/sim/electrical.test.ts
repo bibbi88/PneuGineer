@@ -56,7 +56,7 @@ describe('solveElectrical', () => {
     wire(plus, 'P', coil, 'A');
     wire(coil, 'B', zero, 'P');
 
-    solveElectrical();
+    solveElectrical(0);
     expect(getSignal('Y1')).toBe(true);
   });
 
@@ -65,7 +65,7 @@ describe('solveElectrical', () => {
     const coil = add(createElecCoil(layer(), 0, 150));
     wire(plus, 'P', coil, 'A');
 
-    solveElectrical();
+    solveElectrical(0);
     expect(getSignal('Y1')).toBe(false);
   });
 
@@ -84,7 +84,7 @@ describe('solveElectrical', () => {
     wire(contact, 'B', lamp, 'A');
     wire(lamp, 'B', zero, 'P');
 
-    solveElectrical();
+    solveElectrical(0);
     expect(getSignal('K1')).toBe(true);
     const bulb = lamp.el.querySelector('circle:not(.port)');
     expect(bulb?.getAttribute('fill')).toBe('#ffe45c');
@@ -100,7 +100,7 @@ describe('solveElectrical', () => {
     wire(nc, 'B', coil, 'A');
     wire(coil, 'B', zero, 'P');
 
-    solveElectrical();
+    solveElectrical(0);
     expect(getSignal('Y1')).toBe(true);
   });
 
@@ -116,7 +116,7 @@ describe('solveElectrical', () => {
       { a: '1', b: '2' },
       { a: '4', b: '5' },
     ]);
-    solveElectrical();
+    solveElectrical(0);
     expect(valve.conductivityRule({ isPressurized: () => false })).toEqual([
       { a: '1', b: '4' },
       { a: '2', b: '3' },
@@ -148,19 +148,19 @@ describe('solveElectrical', () => {
       if (!down) window.dispatchEvent(new MouseEvent('mouseup'));
     };
 
-    solveElectrical();
+    solveElectrical(0);
     expect(getSignal('Y1')).toBe(false);
 
     press(start, true);
-    solveElectrical();
+    solveElectrical(0);
     expect(getSignal('Y1')).toBe(true);
 
     press(start, false);
-    solveElectrical();
+    solveElectrical(0);
     expect(getSignal('Y1')).toBe(true); // self-held
 
     press(stop, true);
-    solveElectrical();
+    solveElectrical(0);
     expect(getSignal('Y1')).toBe(false);
     appState.mode = Modes.STOP;
   });

@@ -31,7 +31,11 @@ export interface ElectricalBehavior {
   /** Runs the component's own logic against the solved circuit (a PLC scan): given which
    * terminals are connected to +24 V / 0 V, updates its outputs and returns whether any changed
    * (so the solver knows to settle again). */
-  scan?(isLive: (port: PortKey) => boolean, isGround: (port: PortKey) => boolean): boolean;
+  scan?(
+    dt: number,
+    isLive: (port: PortKey) => boolean,
+    isGround: (port: PortKey) => boolean,
+  ): boolean;
 }
 
 export interface PortConnection {

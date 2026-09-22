@@ -24,7 +24,30 @@ export function makeDraggable(comp: Component, viewport: ViewportAdapter): void 
     // margin free for whatever's actually there.
     const world = viewport.clientToWorld(e.clientX, e.clientY);
     const b = comp.getBounds();
-    if (world.x < b.x || world.x > b.x + b.w || world.y < b.y || world.y > b.y + b.h) return;
+    if (world.x < b.x || world.x > b.x + b.w || world.y < b.y || world.y > b.y + b.h) {
+      // This component's own div still spans its full padded canvas (room for pilot stubs,
+      // labels, a 5/2 valve's sliding travel, etc.) well beyond the tight box just checked, and -
+      // being an ordinary HTML element - captures every click across that whole rectangle
+      // regardless of how little of it is actually drawn on. A wire routed through that empty
+      // margin would otherwise sit permanently unclickable underneath it.
+      //
+      // Briefly stepping out of the way and re-checking with elementFromPoint (rather than just
+      // letting the browser's own mouseup/click go find a new target on its own) matters because
+      // a native click event's target isn't simply "wherever mouseup lands" when it differs from
+      // mousedown's target - it's constrained to their nearest common ancestor, which here would
+      // be nowhere near the wire. Manually dispatching a fresh click directly at whatever's
+      // actually underneath sidesteps that - the same forwarding trick wireSplitting.ts's own
+      // hand-off (via linking.ts's onDrop) already relies on for a wire's hitEl.
+      comp.el.style.pointerEvents = 'none';
+      const under = document.elementFromPoint(e.clientX, e.clientY);
+      comp.el.style.pointerEvents = '';
+      under
+        ?.closest('.wireHit')
+        ?.dispatchEvent(
+          new MouseEvent('click', { bubbles: true, clientX: e.clientX, clientY: e.clientY }),
+        );
+      return;
+    }
 
     if (!appState.selectedComponents.has(comp.id)) {
       selectOnly(comp.id);

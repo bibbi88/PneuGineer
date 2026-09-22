@@ -6,7 +6,7 @@ import {
   removeComponentAndConnections,
   redrawAllConnections,
 } from '../wires/connection';
-import { cancelLinking } from './linking';
+import { cancelLinking, isLinking } from './linking';
 import { copySelection, pasteClipboard } from './clipboard';
 import { undo, redo } from '../history/historyStore';
 import { GRID_SIZE } from '../core/grid';
@@ -38,12 +38,24 @@ function nudgeSelection(dx: number, dy: number): void {
   redrawAllConnections();
 }
 
+let activeListener: ((e: KeyboardEvent) => void) | null = null;
+
+/** Idempotent: a second call (e.g. a test re-initializing between cases) replaces the previous
+ * listener instead of stacking another one alongside it - two listeners both reacting to the
+ * same Escape press, for instance, would race each other's isLinking()/clearSelection() check
+ * against the first one's own side effect. */
 export function initKeyboard(): void {
-  window.addEventListener('keydown', (e) => {
+  if (activeListener) window.removeEventListener('keydown', activeListener);
+
+  activeListener = (e) => {
     if (isTypingTarget(document.activeElement)) return;
 
     if (e.key === 'Escape') {
-      cancelLinking();
+      // Cancels whichever's actually in progress, not both at once: a wire drag first (nothing
+      // else is usually selected while linking anyway), otherwise the current selection - so a
+      // second Escape, or one with nothing in flight, clears the selected component(s)/wire.
+      if (isLinking()) cancelLinking();
+      else clearSelection();
       return;
     }
 
@@ -84,5 +96,6 @@ export function initKeyboard(): void {
     else if (e.key === 'ArrowRight') nudgeSelection(step, 0);
     else if (e.key === 'ArrowUp') nudgeSelection(0, -step);
     else if (e.key === 'ArrowDown') nudgeSelection(0, step);
-  });
+  };
+  window.addEventListener('keydown', activeListener);
 }

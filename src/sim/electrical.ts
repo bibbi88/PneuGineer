@@ -39,7 +39,7 @@ function reachable(starts: string[], adjacency: Map<string, string[]>): Set<stri
  * use), which is what contacts and solenoid valves bound to that key read - so the whole thing
  * is repeated until no signal changes, letting relay chains settle within one frame.
  */
-export function solveElectrical(): void {
+export function solveElectrical(dt: number): void {
   const electrical = appState.components.filter((c) => c.electrical);
   if (electrical.length === 0) {
     if (liveNodes.size > 0) liveNodes = new Set();
@@ -47,6 +47,10 @@ export function solveElectrical(): void {
   }
 
   for (let pass = 0; pass < MAX_PASSES; pass++) {
+    // A function block's own elapsed time/count must only advance once per real frame, not
+    // once per settling pass within it - later passes here are purely re-evaluating logic
+    // against newly-settled contact/coil states, not the passage of more time.
+    const passDt = pass === 0 ? dt : 0;
     // Contacts and valves bound to a key read the signal bus here, so they reflect the coils
     // solved on the previous pass.
     for (const c of appState.components) c.recompute?.();
@@ -91,7 +95,14 @@ export function solveElectrical(): void {
     }
     for (const c of electrical) {
       const scan = c.electrical?.scan;
-      if (scan?.call(c.electrical, (p) => live.has(portKey(c.id, p)), (p) => ground.has(portKey(c.id, p)))) {
+      if (
+        scan?.call(
+          c.electrical,
+          passDt,
+          (p) => live.has(portKey(c.id, p)),
+          (p) => ground.has(portKey(c.id, p)),
+        )
+      ) {
         changed = true;
       }
     }

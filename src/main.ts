@@ -78,7 +78,7 @@ setGridEnabled(gridPreference);
 initWires(connLayer, viewport, workspaceEl);
 initWireHandles(handleLayer, viewport, workspaceEl);
 initLinking(connLayer, viewport, workspaceEl);
-initMarquee(connLayer);
+initMarquee(workspaceEl, connLayer);
 initKeyboard();
 initWireSplitting(compLayer, viewport, workspaceEl);
 initConfirmBeforeUnload();

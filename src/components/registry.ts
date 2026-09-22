@@ -2,6 +2,7 @@ import type { Component } from '../core/types';
 import { createSource, SOURCE_TYPE } from './source';
 import { createValve52, VALVE_52_TYPE } from './valve52';
 import { createValve52Mono, VALVE_52_MONO_TYPE } from './valve52Mono';
+import { createValve53Mono, VALVE_53_MONO_TYPE } from './valve53Mono';
 import { createAndValve, AND_VALVE_TYPE } from './andValve';
 import { createOrValve, OR_VALVE_TYPE } from './orValve';
 import { createCheckValve, CHECK_VALVE_TYPE } from './checkValve';
@@ -95,6 +96,15 @@ export const componentRegistry = new Map<string, RegistryEntry>([
     {
       factory: (ctx, x, y) => createValve52Mono(ctx.compLayer, x, y),
       label: '5/2 valve, monostable',
+      placeable: true,
+      category: ComponentCategory.DIRECTIONAL,
+    },
+  ],
+  [
+    VALVE_53_MONO_TYPE,
+    {
+      factory: (ctx, x, y) => createValve53Mono(ctx.compLayer, x, y),
+      label: '5/3 valve, monostable',
       placeable: true,
       category: ComponentCategory.DIRECTIONAL,
     },
