@@ -34,6 +34,7 @@ import { ELEC_CONTACT_TYPE, ELEC_COIL_TYPE, ELEC_PUSH_BUTTON_TYPE } from '../com
 import {
   VALVE_52_SOLENOID_TYPE,
   VALVE_52_SOLENOID_DOUBLE_TYPE,
+  VALVE_53_SOLENOID_TYPE,
 } from '../components/solenoidValves';
 import { TEXT_ANNOTATION_TYPE } from '../components/textAnnotation';
 
@@ -155,6 +156,13 @@ const VALVE_52_MODES: Array<{ type: string; label: string }> = [
   { type: VALVE_52_SOLENOID_DOUBLE_TYPE, label: 'Electric, double solenoid' },
 ];
 
+// Both 5/3 variants are closed-centre and spring-centred; only the actuator differs, and they
+// share '1' through '5', so a swap carries every wire but the pneumatic one's pilot lines.
+const VALVE_53_MODES: Array<{ type: string; label: string }> = [
+  { type: VALVE_53_MONO_TYPE, label: 'Pneumatic, double pilot (spring centred)' },
+  { type: VALVE_53_SOLENOID_TYPE, label: 'Electric, double solenoid (spring centred)' },
+];
+
 const INSPECTOR_FIELDS: Record<string, InspectorField[]> = {
   [RESTRICTOR_TYPE]: [
     { kind: 'number', key: 'flowPct', label: 'Flow %', min: 0, max: 100, step: 5 },
@@ -196,6 +204,7 @@ const INSPECTOR_FIELDS: Record<string, InspectorField[]> = {
     { kind: 'silencer', key: 'silencer5', port: '5', label: 'Port 5 silencer' },
   ],
   [VALVE_53_MONO_TYPE]: [
+    { kind: 'actuatorMode', label: 'Operation', options: VALVE_53_MODES },
     { kind: 'silencer', key: 'silencer3', port: '3', label: 'Port 3 silencer' },
     { kind: 'silencer', key: 'silencer5', port: '5', label: 'Port 5 silencer' },
   ],
@@ -240,6 +249,13 @@ const INSPECTOR_FIELDS: Record<string, InspectorField[]> = {
   ],
   [VALVE_52_SOLENOID_DOUBLE_TYPE]: [
     { kind: 'actuatorMode', label: 'Operation', options: VALVE_52_MODES },
+    { kind: 'text', key: 'key14', label: 'Left solenoid coil name' },
+    { kind: 'text', key: 'key12', label: 'Right solenoid coil name' },
+    { kind: 'silencer', key: 'silencer3', port: '3', label: 'Port 3 silencer' },
+    { kind: 'silencer', key: 'silencer5', port: '5', label: 'Port 5 silencer' },
+  ],
+  [VALVE_53_SOLENOID_TYPE]: [
+    { kind: 'actuatorMode', label: 'Operation', options: VALVE_53_MODES },
     { kind: 'text', key: 'key14', label: 'Left solenoid coil name' },
     { kind: 'text', key: 'key12', label: 'Right solenoid coil name' },
     { kind: 'silencer', key: 'silencer3', port: '3', label: 'Port 3 silencer' },

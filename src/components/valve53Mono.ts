@@ -9,14 +9,15 @@ import {
   addDoubleArrowMarker,
 } from './shared/svgHelpers';
 import { createSilencerSymbol, setSilencerState, type SilencerOption } from './shared/silencer';
+import { addSpringZigzag } from './shared/spring';
 
 export const VALVE_53_MONO_TYPE = 'valve53Mono';
 
 // Three cells (left/center/right): closed center (every port dead-ends, drawn as a short stub
 // with a small perpendicular cap rather than connecting to anything), single-headed flow arrows
 // in the two side cells (each also dead-ending its own unused third port the same way the center
-// cell does) - both matching a user-supplied reference symbol - and a spring-loaded pneumatic
-// pilot (triangle + port) on *each* end. "Monostable" here means the same thing it does for the
+// cell does) - both matching a user-supplied reference symbol - and, on *each* end face, a
+// return spring stacked above a pneumatic pilot (triangle + port). "Monostable" here means the same thing it does for the
 // 5/2 family: exactly one stable rest position (center) - releasing either pilot always returns
 // it there, never to the other pilot's position.
 export interface Valve53MonoGeometry {
@@ -36,15 +37,17 @@ export interface Valve53MonoGeometry {
   /** Dead-end stub: how far it reaches in from the cell wall, and the half-width of its cap. */
   deadEndLen: number;
   deadEndCapHalf: number;
-  /** Actuator (per side): gap from the body edge to the spring, the spring's own span, then how
-   * far below the spring's own centerline the pilot triangle + port row sits, the triangle's
-   * height/width ratios, and the lead from the triangle's back to the port itself. */
-  actuatorGap: number;
+  /** Actuator (per side): how far above/below the body centerline the spring and the pilot sit
+   * on the end face, the spring's own span, the triangle's height/width ratios, and the lead
+   * from the triangle's back to the port itself. The spring and the pilot both act on the same
+   * end of the spool, so per ISO 1219-1 they are stacked on that one end face (spring above,
+   * pilot below) and each butts straight against the body - they are not chained in series
+   * along the spool axis, which would read as one pushing through the other. */
+  actuatorSplitY: number;
   springSpan: number;
   springSegLen: number;
   springZigW: number;
   springZigH: number;
-  portDropY: number;
   triHRatio: number;
   triWRatio: number;
   portLead: number;
@@ -66,18 +69,19 @@ export const VALVE_53_MONO_DEFAULT_GEOMETRY: Valve53MonoGeometry = {
   tightLabelDy: 4,
   deadEndLen: 10,
   deadEndCapHalf: 8,
-  actuatorGap: 8,
+  // A multiple of GRID_SIZE (10), like every other offset here: it becomes the pilot port's own
+  // y-offset from the canvas center once drawn, so it has to land on the grid too - see
+  // src/core/grid.ts. 10 also splits the 60-tall end face into even thirds.
+  actuatorSplitY: 10,
   springSpan: 24,
   springSegLen: 4,
   springZigW: 5,
   springZigH: 5,
-  // A multiple of GRID_SIZE (10), same reasoning as every other offset here - this becomes the
-  // pilot port's own y-offset from the canvas center once drawn, so it has to land on the grid
-  // too, see src/core/grid.ts.
-  portDropY: 20,
   triHRatio: 0.25,
   triWRatio: 1.2,
-  portLead: 0,
+  // 2 rather than the "natural" 0: the triangle is 18 wide (triH 15 x triWRatio 1.2), so a bare
+  // 2px lead past its back face is what lands the pilot port on the 10px grid.
+  portLead: 2,
 };
 
 function line(x1: number, y1: number, x2: number, y2: number, stroke: number): SVGLineElement {
@@ -122,41 +126,18 @@ function addDeadEndStub(
   const wallY = fromTop ? 0 : geo.h0;
   const capY = fromTop ? geo.deadEndLen : geo.h0 - geo.deadEndLen;
   parent.appendChild(line(x, wallY, x, capY, geo.stroke));
-  parent.appendChild(
-    line(x - geo.deadEndCapHalf, capY, x + geo.deadEndCapHalf, capY, geo.stroke),
-  );
-}
-
-/** A compact zigzag between two x-coordinates at a fixed y, representing a return spring. */
-function addSpringZigzag(
-  parent: SVGElement,
-  x1: number,
-  x2: number,
-  y: number,
-  stroke: number,
-  geo: Valve53MonoGeometry,
-): void {
-  const dir = x2 >= x1 ? 1 : -1;
-  const s = geo.springSegLen;
-  const zw = geo.springZigW * dir;
-  const zh = geo.springZigH;
-  parent.appendChild(
-    createSvgEl('path', {
-      d: `M ${x1} ${y} l ${s * dir} 0 l ${zw} ${-zh} l ${zw} ${zh * 2} l ${zw} ${-zh * 2} L ${x2} ${y}`,
-      fill: 'none',
-      stroke: '#111',
-      'stroke-width': stroke,
-    }),
-  );
+  parent.appendChild(line(x - geo.deadEndCapHalf, capY, x + geo.deadEndCapHalf, capY, geo.stroke));
 }
 
 /** Stem + spring + pilot triangle + port, hanging off `bodyEdgeX` on `side`, drawn fresh into
- * `group` (cleared first). The spring continues straight out from the body at `cy`; the
- * triangle and port then sit in their own row `geo.portDropY` below that, connected by a short
- * vertical drop - keeps the port (and its wire) clear of the spring's own zigzag instead of
- * running straight through it. Returns the port (already parented into `group` directly, unlike
- * valve52.ts's own pilot ports, which have to be created against `svg` and reparented after -
- * here `group` already *is* the pilot's final position, so there's nothing to move). */
+ * `group` (cleared first). Both act on the same end of the spool, so ISO 1219-1 stacks them on
+ * that one end face rather than chaining them in series along the axis: the return spring runs
+ * out `geo.actuatorSplitY` above the centerline `cy` and the pilot (triangle, apex against the
+ * wall in the direction it pushes, then its port) the same distance below, each starting hard
+ * against `bodyEdgeX` with no connecting stem. Returns the port (already parented into `group`
+ * directly, unlike valve52.ts's own pilot ports, which have to be created against `svg` and
+ * reparented after - here `group` already *is* the pilot's final position, so there's nothing
+ * to move). */
 function drawPilotActuator(
   group: SVGElement,
   side: 'left' | 'right',
@@ -167,23 +148,20 @@ function drawPilotActuator(
 ): PortDef {
   while (group.firstChild) group.removeChild(group.firstChild);
   const dir = side === 'left' ? -1 : 1;
-  const springStart = bodyEdgeX + dir * geo.actuatorGap;
-  const springEnd = springStart + dir * geo.springSpan;
-  const rowY = cy + geo.portDropY;
+  const springY = cy - geo.actuatorSplitY;
+  const pilotY = cy + geo.actuatorSplitY;
   const triH = geo.h0 * geo.triHRatio;
   const triW = triH * geo.triWRatio;
-  const triTipX = springEnd;
+  const triTipX = bodyEdgeX;
   const triBaseX = triTipX + dir * triW;
   const portX = triBaseX + dir * geo.portLead;
 
-  group.appendChild(line(bodyEdgeX, cy, springStart, cy, geo.stroke));
-  addSpringZigzag(group, springStart, springEnd, cy, geo.stroke, geo);
-  group.appendChild(line(springEnd, cy, springEnd, rowY, geo.stroke));
+  addSpringZigzag(group, bodyEdgeX, bodyEdgeX + dir * geo.springSpan, springY, geo.stroke, geo);
 
   const points = [
-    [triTipX, rowY],
-    [triBaseX, rowY - triH / 2],
-    [triBaseX, rowY + triH / 2],
+    [triTipX, pilotY],
+    [triBaseX, pilotY - triH / 2],
+    [triBaseX, pilotY + triH / 2],
   ];
   group.appendChild(
     createSvgEl('polygon', {
@@ -193,13 +171,18 @@ function drawPilotActuator(
       'stroke-width': geo.stroke,
     }),
   );
-  group.appendChild(line(triBaseX, rowY, portX, rowY, geo.stroke));
+  group.appendChild(line(triBaseX, pilotY, portX, pilotY, geo.stroke));
 
-  const port = createPort(group, key, portX, rowY, 'H', { isPilot: true, pilotDir: dir as 1 | -1 });
+  const port = createPort(group, key, portX, pilotY, 'H', {
+    isPilot: true,
+    pilotDir: dir as 1 | -1,
+  });
   port.el.setAttribute('r', '6');
+  // Below the port, not above it like the 5/2 family's own pilot label: above would put the
+  // text straight through the spring now sharing this end face.
   const label = createSvgEl('text', {
     x: portX,
-    y: rowY - 10,
+    y: pilotY + 18,
     'text-anchor': 'middle',
     'font-size': geo.font,
   });
@@ -384,12 +367,21 @@ export function createValve53Mono(compLayer: HTMLElement, x: number, y: number):
   // resets) to the center position, spring-centered - same reasoning as valve52.ts's own
   // getBounds() doc for why the tight box matches that one state's footprint rather than every
   // state's combined extent.
-  const shell = buildComponentShell(compLayer, VALVE_53_MONO_TYPE, x, y, svgW, svgH, '5/3 valve, monostable', {
-    x: geo.gx0 - geo.w0,
-    y: geo.gy0,
-    w: geo.w0 * 2,
-    h: geo.h0,
-  });
+  const shell = buildComponentShell(
+    compLayer,
+    VALVE_53_MONO_TYPE,
+    x,
+    y,
+    svgW,
+    svgH,
+    '5/3 valve, monostable',
+    {
+      x: geo.gx0 - geo.w0,
+      y: geo.gy0,
+      w: geo.w0 * 2,
+      h: geo.h0,
+    },
+  );
   const svg = shell.svg;
   svg.style.overflow = 'visible';
 

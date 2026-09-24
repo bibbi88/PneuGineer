@@ -37,8 +37,10 @@ import {
 import {
   createValve52Solenoid,
   createValve52SolenoidDouble,
+  createValve53Solenoid,
   VALVE_52_SOLENOID_TYPE,
   VALVE_52_SOLENOID_DOUBLE_TYPE,
+  VALVE_53_SOLENOID_TYPE,
 } from './solenoidValves';
 import { createPlc, PLC_TYPE } from './plc';
 import { createTextAnnotation, TEXT_ANNOTATION_TYPE } from './textAnnotation';
@@ -324,6 +326,15 @@ export const componentRegistry = new Map<string, RegistryEntry>([
     {
       factory: (ctx, x, y) => createValve52SolenoidDouble(ctx.compLayer, x, y),
       label: '5/2 double solenoid valve',
+      placeable: true,
+      category: ComponentCategory.DIRECTIONAL,
+    },
+  ],
+  [
+    VALVE_53_SOLENOID_TYPE,
+    {
+      factory: (ctx, x, y) => createValve53Solenoid(ctx.compLayer, x, y),
+      label: '5/3 solenoid valve',
       placeable: true,
       category: ComponentCategory.DIRECTIONAL,
     },

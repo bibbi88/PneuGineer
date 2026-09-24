@@ -9,6 +9,7 @@ import {
   addDoubleArrowMarker,
 } from './shared/svgHelpers';
 import { createSilencerSymbol, setSilencerState, type SilencerOption } from './shared/silencer';
+import { addSpringZigzag, SPRING_DEFAULT_GEOMETRY } from './shared/spring';
 
 export const VALVE_52_MONO_TYPE = 'valve52Mono';
 
@@ -36,6 +37,9 @@ export interface Valve52MonoGeometry {
   fixedPortLead: number;
   tightLabelDx: number;
   tightLabelDy: number;
+  /** Return spring - see SPRING_DEFAULT_GEOMETRY in shared/spring.ts, which every
+   * valve's spring is drawn from so the symbol set shares one design. */
+  springSpan: number;
   springSegLen: number;
   springZigW: number;
   springZigH: number;
@@ -65,9 +69,10 @@ export const VALVE_52_MONO_DEFAULT_GEOMETRY: Valve52MonoGeometry = {
   fixedPortLead: 10,
   tightLabelDx: -8,
   tightLabelDy: 4,
-  springSegLen: 20,
-  springZigW: 10,
-  springZigH: 10,
+  springSpan: SPRING_DEFAULT_GEOMETRY.springSpan,
+  springSegLen: SPRING_DEFAULT_GEOMETRY.springSegLen,
+  springZigW: SPRING_DEFAULT_GEOMETRY.springZigW,
+  springZigH: SPRING_DEFAULT_GEOMETRY.springZigH,
 };
 
 function addDoubleArrow(
@@ -162,25 +167,7 @@ export function drawValve52MonoBody(
   // the second pilot used to be, sliding with the two-cell picture just like theirs slides with
   // the mover - representing the spring compressing/extending as the valve shifts.
   const spring = createSvgEl('g', { transform: `translate(${BODY_W},${PILOT_CY})` });
-  spring.appendChild(
-    createSvgEl('path', {
-      d: `M 0 0 L ${geo.springSegLen} 0`,
-      fill: 'none',
-      stroke: '#111',
-      'stroke-width': geo.stroke,
-    }),
-  );
-  const s = geo.springSegLen;
-  const zw = geo.springZigW;
-  const zh = geo.springZigH;
-  spring.appendChild(
-    createSvgEl('path', {
-      d: `M ${s} 0 l ${zw} ${-zh} l ${zw} ${zh * 2} l ${zw} ${-zh * 2}`,
-      fill: 'none',
-      stroke: '#111',
-      'stroke-width': geo.stroke,
-    }),
-  );
+  addSpringZigzag(spring, 0, geo.springSpan, 0, geo.stroke, geo);
 
   gSlide.append(cell0, cell1, spring);
 

@@ -609,8 +609,12 @@ const PUSH_BUTTON_32_ENTRY: SymbolLabEntry = {
       min: 0,
       max: 30,
     }),
+    field('springSpan', 'Spring span', PUSH_BUTTON_32_DEFAULT_GEOMETRY.springSpan, {
+      min: 10,
+      max: 60,
+    }),
     field('springSegLen', 'Spring segment length', PUSH_BUTTON_32_DEFAULT_GEOMETRY.springSegLen, {
-      min: 5,
+      min: 1,
       max: 40,
     }),
     field('springZigW', 'Spring zigzag width', PUSH_BUTTON_32_DEFAULT_GEOMETRY.springZigW, {
@@ -650,8 +654,12 @@ const AIR_VALVE_32_ENTRY: SymbolLabEntry = {
         max: 25,
       },
     ),
+    field('springSpan', 'Spring span', AIR_VALVE_32_DEFAULT_GEOMETRY.springSpan, {
+      min: 10,
+      max: 60,
+    }),
     field('springSegLen', 'Spring segment length', AIR_VALVE_32_DEFAULT_GEOMETRY.springSegLen, {
-      min: 5,
+      min: 1,
       max: 40,
     }),
     field('springZigW', 'Spring zigzag width', AIR_VALVE_32_DEFAULT_GEOMETRY.springZigW, {
@@ -705,8 +713,12 @@ const LIMIT_VALVE_32_ENTRY: SymbolLabEntry = {
       min: -40,
       max: 0,
     }),
+    field('springSpan', 'Spring span', LIMIT_VALVE_32_DEFAULT_GEOMETRY.springSpan, {
+      min: 10,
+      max: 60,
+    }),
     field('springSegLen', 'Spring segment length', LIMIT_VALVE_32_DEFAULT_GEOMETRY.springSegLen, {
-      min: 5,
+      min: 1,
       max: 40,
     }),
     field('springZigW', 'Spring zigzag width', LIMIT_VALVE_32_DEFAULT_GEOMETRY.springZigW, {
@@ -775,8 +787,12 @@ const TIME_DELAY_VALVE_ENTRY: SymbolLabEntry = {
       TIME_DELAY_VALVE_DEFAULT_GEOMETRY.delayLabelYOffset,
       { min: -40, max: 0 },
     ),
+    field('springSpan', 'Spring span', TIME_DELAY_VALVE_DEFAULT_GEOMETRY.springSpan, {
+      min: 10,
+      max: 60,
+    }),
     field('springSegLen', 'Spring segment length', TIME_DELAY_VALVE_DEFAULT_GEOMETRY.springSegLen, {
-      min: 5,
+      min: 1,
       max: 40,
     }),
     field('springZigW', 'Spring zigzag width', TIME_DELAY_VALVE_DEFAULT_GEOMETRY.springZigW, {
@@ -934,8 +950,12 @@ const VALVE_52_MONO_ENTRY: SymbolLabEntry = {
       min: -10,
       max: 15,
     }),
+    field('springSpan', 'Spring span', VALVE_52_MONO_DEFAULT_GEOMETRY.springSpan, {
+      min: 10,
+      max: 60,
+    }),
     field('springSegLen', 'Spring segment length', VALVE_52_MONO_DEFAULT_GEOMETRY.springSegLen, {
-      min: 5,
+      min: 1,
       max: 40,
     }),
     field('springZigW', 'Spring zigzag width', VALVE_52_MONO_DEFAULT_GEOMETRY.springZigW, {

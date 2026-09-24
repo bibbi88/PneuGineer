@@ -8,6 +8,7 @@ import {
   SLIDING_VALVE_OFFSET_X,
   SLIDING_VALVE_OFFSET_Y,
 } from './shared/slidingValve32';
+import { addSpringZigzag, SPRING_DEFAULT_GEOMETRY } from './shared/spring';
 
 export const AIR_VALVE_32_TYPE = 'airValve32';
 
@@ -25,6 +26,9 @@ export interface AirValve32Geometry {
   /** x of the pilot wall triangle's tip, and the inner link's inner end. */
   pilotTipX: number;
   pilotHalfHeight: number;
+  /** Return spring - see SPRING_DEFAULT_GEOMETRY in shared/spring.ts, which every
+   * valve's spring is drawn from so the symbol set shares one design. */
+  springSpan: number;
   springSegLen: number;
   springZigW: number;
   springZigH: number;
@@ -37,9 +41,10 @@ export const AIR_VALVE_32_DEFAULT_GEOMETRY: AirValve32Geometry = {
   pilotBaseX: -26,
   pilotTipX: -6,
   pilotHalfHeight: 8,
-  springSegLen: 20,
-  springZigW: 10,
-  springZigH: 10,
+  springSpan: SPRING_DEFAULT_GEOMETRY.springSpan,
+  springSegLen: SPRING_DEFAULT_GEOMETRY.springSegLen,
+  springZigW: SPRING_DEFAULT_GEOMETRY.springZigW,
+  springZigH: SPRING_DEFAULT_GEOMETRY.springZigH,
 };
 
 /** Draws the pilot wall (inward triangle) + link + spring into the mover, matching the original
@@ -52,25 +57,7 @@ export function drawAirValve32Actuator(
 ): { port14: ReturnType<typeof createPort> } {
   const cy = SLIDING_VALVE_H / 2;
   const spring = createSvgEl('g', { transform: `translate(${SLIDING_VALVE_W}, ${cy})` });
-  spring.appendChild(
-    createSvgEl('path', {
-      d: `M 0 0 L ${geo.springSegLen} 0`,
-      fill: 'none',
-      stroke: '#111',
-      'stroke-width': 2,
-    }),
-  );
-  const s = geo.springSegLen;
-  const zw = geo.springZigW;
-  const zh = geo.springZigH;
-  spring.appendChild(
-    createSvgEl('path', {
-      d: `M ${s} 0 l ${zw} ${-zh} l ${zw} ${zh * 2} l ${zw} ${-zh * 2}`,
-      fill: 'none',
-      stroke: '#111',
-      'stroke-width': 2,
-    }),
-  );
+  addSpringZigzag(spring, 0, geo.springSpan, 0, 2, geo);
 
   const pilotTriangle = createSvgEl('path', {
     d: `M ${geo.pilotBaseX} ${cy + geo.pilotHalfHeight} L ${geo.pilotTipX} ${cy} L ${geo.pilotBaseX} ${cy - geo.pilotHalfHeight} Z`,

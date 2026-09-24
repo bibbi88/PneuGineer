@@ -10,6 +10,7 @@ import {
   SLIDING_VALVE_OFFSET_X,
   SLIDING_VALVE_OFFSET_Y,
 } from './shared/slidingValve32';
+import { addSpringZigzag, SPRING_DEFAULT_GEOMETRY } from './shared/spring';
 
 export const PUSH_BUTTON_32_TYPE = 'pushButton32';
 
@@ -27,6 +28,9 @@ export interface PushButton32Geometry {
   actuatorBottomInset: number;
   /** y of each fork bar, from the frame's top/bottom edge. */
   forkYInset: number;
+  /** Return spring - see SPRING_DEFAULT_GEOMETRY in shared/spring.ts, which every
+   * valve's spring is drawn from so the symbol set shares one design. */
+  springSpan: number;
   springSegLen: number;
   springZigW: number;
   springZigH: number;
@@ -37,9 +41,10 @@ export const PUSH_BUTTON_32_DEFAULT_GEOMETRY: PushButton32Geometry = {
   actuatorTopInset: 10,
   actuatorBottomInset: 10,
   forkYInset: 20,
-  springSegLen: 20,
-  springZigW: 10,
-  springZigH: 10,
+  springSpan: SPRING_DEFAULT_GEOMETRY.springSpan,
+  springSegLen: SPRING_DEFAULT_GEOMETRY.springSegLen,
+  springZigW: SPRING_DEFAULT_GEOMETRY.springZigW,
+  springZigH: SPRING_DEFAULT_GEOMETRY.springZigH,
 };
 
 /** Draws the button's own actuator (rod + fork + spring) into the mover, matching the original
@@ -68,25 +73,7 @@ export function drawPushButton32Actuator(mover: SVGGElement, geo: PushButton32Ge
   const spring = createSvgEl('g', {
     transform: `translate(${SLIDING_VALVE_W}, ${SLIDING_VALVE_H / 2})`,
   });
-  spring.appendChild(
-    createSvgEl('path', {
-      d: `M 0 0 L ${geo.springSegLen} 0`,
-      fill: 'none',
-      stroke: '#111',
-      'stroke-width': 2,
-    }),
-  );
-  const s = geo.springSegLen;
-  const zw = geo.springZigW;
-  const zh = geo.springZigH;
-  spring.appendChild(
-    createSvgEl('path', {
-      d: `M ${s} 0 l ${zw} ${-zh} l ${zw} ${zh * 2} l ${zw} ${-zh * 2}`,
-      fill: 'none',
-      stroke: '#111',
-      'stroke-width': 2,
-    }),
-  );
+  addSpringZigzag(spring, 0, geo.springSpan, 0, 2, geo);
   mover.append(forkTop, forkBot, actuator, spring);
 }
 

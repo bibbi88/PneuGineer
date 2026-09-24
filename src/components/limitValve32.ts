@@ -11,6 +11,7 @@ import {
 import { getSignal } from '../sim/signals';
 import { appState } from '../app/AppState';
 import { isSensorKeyBoundElsewhere } from './shared/sensorPositions';
+import { addSpringZigzag, SPRING_DEFAULT_GEOMETRY } from './shared/spring';
 
 export const LIMIT_VALVE_32_TYPE = 'limitValve32';
 
@@ -30,6 +31,9 @@ export interface LimitValve32Geometry {
   rollerInnerR: number;
   rollerCenterX: number;
   labelYOffset: number;
+  /** Return spring - see SPRING_DEFAULT_GEOMETRY in shared/spring.ts, which every
+   * valve's spring is drawn from so the symbol set shares one design. */
+  springSpan: number;
   springSegLen: number;
   springZigW: number;
   springZigH: number;
@@ -44,9 +48,10 @@ export const LIMIT_VALVE_32_DEFAULT_GEOMETRY: LimitValve32Geometry = {
   rollerInnerR: 6,
   rollerCenterX: 4,
   labelYOffset: -18,
-  springSegLen: 20,
-  springZigW: 10,
-  springZigH: 10,
+  springSpan: SPRING_DEFAULT_GEOMETRY.springSpan,
+  springSegLen: SPRING_DEFAULT_GEOMETRY.springSegLen,
+  springZigW: SPRING_DEFAULT_GEOMETRY.springZigW,
+  springZigH: SPRING_DEFAULT_GEOMETRY.springZigH,
 };
 
 /** Draws the roller lever + arms + spring into the mover, matching the original app's
@@ -105,25 +110,7 @@ export function drawLimitValve32Actuator(
   const spring = createSvgEl('g', {
     transform: `translate(${SLIDING_VALVE_W}, ${SLIDING_VALVE_H / 2})`,
   });
-  spring.appendChild(
-    createSvgEl('path', {
-      d: `M 0 0 L ${geo.springSegLen} 0`,
-      fill: 'none',
-      stroke: '#111',
-      'stroke-width': 2,
-    }),
-  );
-  const s = geo.springSegLen;
-  const zw = geo.springZigW;
-  const zh = geo.springZigH;
-  spring.appendChild(
-    createSvgEl('path', {
-      d: `M ${s} 0 l ${zw} ${-zh} l ${zw} ${zh * 2} l ${zw} ${-zh * 2} l ${zw} ${zh * 2} l ${zw} ${-zh * 2} l ${zw} ${zh * 2}`,
-      fill: 'none',
-      stroke: '#111',
-      'stroke-width': 2,
-    }),
-  );
+  addSpringZigzag(spring, 0, geo.springSpan, 0, 2, geo);
 
   mover.append(rollerGroup, spring);
   return { sensorLabel };

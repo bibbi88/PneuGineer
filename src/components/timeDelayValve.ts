@@ -8,6 +8,7 @@ import {
   SLIDING_VALVE_OFFSET_X,
   SLIDING_VALVE_OFFSET_Y,
 } from './shared/slidingValve32';
+import { addSpringZigzag, SPRING_DEFAULT_GEOMETRY } from './shared/spring';
 
 export const TIME_DELAY_VALVE_TYPE = 'timeDelayValve';
 
@@ -30,6 +31,9 @@ export interface TimeDelayValveGeometry {
   clockMinuteDy: number;
   /** y offset (above the frame) of the delay-seconds label - in canvas coordinates, not the mover's. */
   delayLabelYOffset: number;
+  /** Return spring - see SPRING_DEFAULT_GEOMETRY in shared/spring.ts, which every
+   * valve's spring is drawn from so the symbol set shares one design. */
+  springSpan: number;
   springSegLen: number;
   springZigW: number;
   springZigH: number;
@@ -46,9 +50,10 @@ export const TIME_DELAY_VALVE_DEFAULT_GEOMETRY: TimeDelayValveGeometry = {
   clockMinuteDx: 5,
   clockMinuteDy: 2,
   delayLabelYOffset: -18,
-  springSegLen: 20,
-  springZigW: 10,
-  springZigH: 10,
+  springSpan: SPRING_DEFAULT_GEOMETRY.springSpan,
+  springSegLen: SPRING_DEFAULT_GEOMETRY.springSegLen,
+  springZigW: SPRING_DEFAULT_GEOMETRY.springZigW,
+  springZigH: SPRING_DEFAULT_GEOMETRY.springZigH,
 };
 
 /**
@@ -65,25 +70,7 @@ export function drawTimeDelayValveActuator(
   const cy = SLIDING_VALVE_H / 2;
 
   const spring = createSvgEl('g', { transform: `translate(${SLIDING_VALVE_W}, ${cy})` });
-  spring.appendChild(
-    createSvgEl('path', {
-      d: `M 0 0 L ${geo.springSegLen} 0`,
-      fill: 'none',
-      stroke: '#111',
-      'stroke-width': 2,
-    }),
-  );
-  const s = geo.springSegLen;
-  const zw = geo.springZigW;
-  const zh = geo.springZigH;
-  spring.appendChild(
-    createSvgEl('path', {
-      d: `M ${s} 0 l ${zw} ${-zh} l ${zw} ${zh * 2} l ${zw} ${-zh * 2}`,
-      fill: 'none',
-      stroke: '#111',
-      'stroke-width': 2,
-    }),
-  );
+  addSpringZigzag(spring, 0, geo.springSpan, 0, 2, geo);
 
   const clock = createSvgEl('g', { transform: `translate(${geo.clockX}, ${cy})` });
   clock.appendChild(
