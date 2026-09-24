@@ -57,6 +57,11 @@ export interface SlidingValve32Body {
   ports: { '1': PortDef; '2': PortDef; '3': PortDef };
   /** true = left cell (2->1, 3 blocked) sits under the ports; false = right cell (2->3, 1 blocked). */
   setActive(active: boolean): void;
+  /** Swaps which half of the frame each cell's artwork occupies, turning a normally-closed
+   * valve into a normally-open one and back. Only the two cells move; the frame, the ports and
+   * whatever actuator the variant drew into `mover` all stay exactly where they are, so a wire
+   * already attached to a port is untouched and the button/roller doesn't jump. */
+  setSwapped(swapped: boolean): void;
   /** Port 3 is this valve family's exhaust - the one a silencer would actually be fitted to. */
   setSilencer(option: SilencerOption): void;
   getSilencer(): SilencerOption;
@@ -140,35 +145,51 @@ export function buildSlidingValve32Body(
     'stroke-width': 1.6,
   });
 
-  const gLeft = createSvgEl('g');
-  gLeft.appendChild(
-    createSvgEl('path', {
-      d: `M ${L1.cx} ${L1.cy - geo.arrowEdgeGap} L ${L2.cx} ${L2.cy + geo.arrowEdgeGap}`,
-      fill: 'none',
-      stroke: '#111',
-      'stroke-width': 2,
-      'marker-end': `url(#${arrowId})`,
-    }),
-  );
-  gLeft.appendChild(
-    tBlock(L3.cx, H - geo.tBlockBottomGap, L3.cy - geo.tBlockStemGap, geo.tBlockBarHalfWidth),
-  );
+  // Both cells are drawn against a cell origin of x = 0 and then translated into whichever half
+  // of the frame they currently occupy (see setSwapped), rather than being drawn at fixed
+  // left/right coordinates - that's what lets the pair trade places at runtime.
+  //
+  // The flow cell passes 1 straight up to 2 and blocks 3; the exhaust cell dumps 2 across to 3
+  // and blocks 1. Which one sits under the fixed ports at rest is the whole difference between
+  // a normally-closed and a normally-open valve.
+  function gFlowCell(): SVGGElement {
+    const g = createSvgEl('g', { class: 'valveCell valveCell--flow' });
+    g.appendChild(
+      createSvgEl('path', {
+        d: `M ${L1.cx} ${L1.cy - geo.arrowEdgeGap} L ${L2.cx} ${L2.cy + geo.arrowEdgeGap}`,
+        fill: 'none',
+        stroke: '#111',
+        'stroke-width': 2,
+        'marker-end': `url(#${arrowId})`,
+      }),
+    );
+    g.appendChild(
+      tBlock(L3.cx, H - geo.tBlockBottomGap, L3.cy - geo.tBlockStemGap, geo.tBlockBarHalfWidth),
+    );
+    return g;
+  }
 
-  const gRight = createSvgEl('g');
-  gRight.appendChild(
-    createSvgEl('path', {
-      d: `M ${P2.cx} ${P2.cy + geo.arrowEdgeGap} L ${P3.cx} ${P3.cy - geo.arrowEdgeGap}`,
-      fill: 'none',
-      stroke: '#111',
-      'stroke-width': 2,
-      'marker-end': `url(#${arrowId})`,
-    }),
-  );
-  gRight.appendChild(
-    tBlock(P1.cx, H - geo.tBlockBottomGap, P1.cy - geo.tBlockStemGap, geo.tBlockBarHalfWidth),
-  );
+  function gExhaustCell(): SVGGElement {
+    const g = createSvgEl('g', { class: 'valveCell valveCell--exhaust' });
+    g.appendChild(
+      createSvgEl('path', {
+        d: `M ${L2.cx} ${L2.cy + geo.arrowEdgeGap} L ${L3.cx} ${L3.cy - geo.arrowEdgeGap}`,
+        fill: 'none',
+        stroke: '#111',
+        'stroke-width': 2,
+        'marker-end': `url(#${arrowId})`,
+      }),
+    );
+    g.appendChild(
+      tBlock(L1.cx, H - geo.tBlockBottomGap, L1.cy - geo.tBlockStemGap, geo.tBlockBarHalfWidth),
+    );
+    return g;
+  }
 
-  mover.append(body, boxLeft, boxRight, gLeft, gRight);
+  const flowCell = gFlowCell();
+  const exhaustCell = gExhaustCell();
+
+  mover.append(body, boxLeft, boxRight, flowCell, exhaustCell);
   svg.appendChild(mover);
 
   const ox = geo.offsetX;
@@ -229,10 +250,18 @@ export function buildSlidingValve32Body(
     mover.setAttribute('transform', `translate(${ox + (active ? midX : 0)}, ${oy})`);
   }
 
+  // Unswapped is the normally-closed layout the whole family started with: flow on the left,
+  // exhaust on the right, so the right cell is the one under the ports while the mover is at 0.
+  function setSwapped(swapped: boolean): void {
+    flowCell.setAttribute('transform', `translate(${swapped ? midX : 0},0)`);
+    exhaustCell.setAttribute('transform', `translate(${swapped ? 0 : midX},0)`);
+  }
+  setSwapped(false);
+
   function setSilencer(option: SilencerOption): void {
     silencer3 = option;
     setSilencerState(ports['3'], silencer3El, silencer3);
   }
 
-  return { mover, ports, setActive, setSilencer, getSilencer: () => silencer3 };
+  return { mover, ports, setActive, setSwapped, setSilencer, getSilencer: () => silencer3 };
 }

@@ -1,4 +1,5 @@
 import type { Component, ComponentId, Connection, PortKey } from '../core/types';
+import { SOURCE_PRESSURE } from './constants';
 
 export type PortKeyStr = string;
 
@@ -18,6 +19,12 @@ export interface FrameGraph {
    * exposes edges leaving a port, never ones arriving at it. */
   reverseAdjacency: Map<PortKeyStr, Set<PortKeyStr>>;
   sourceKeys: Set<PortKeyStr>;
+  /** Pressure (bar) available at each port that has any - see `computePressures`. A port absent
+   * from the map has none: either it isn't pressurized, or no live supply reaches it. */
+  pressure: Map<PortKeyStr, number>;
+  /** Per-edge pressure ceilings, mirroring `adjacency`'s own shape. Only edges that actually cap
+   * something appear here, which in practice means pressure-reducing valves. */
+  pressureCaps: Map<PortKeyStr, Map<PortKeyStr, number>>;
   /** Ports carrying live exhaust flow this frame (populated by `markExhaustFlow`, after step()
    * has run and components can report what they're currently venting) - purely a
    * visualization signal, not consulted anywhere in the pressure/conductivity simulation. */
@@ -33,6 +40,8 @@ export function emptyFrameGraph(): FrameGraph {
     adjacency: new Map(),
     reverseAdjacency: new Map(),
     sourceKeys: new Set(),
+    pressure: new Map(),
+    pressureCaps: new Map(),
     exhausting: new Set(),
     exhaustDepth: new Map(),
   };
@@ -104,11 +113,65 @@ function addDirEdge(
   a: PortKeyStr,
   b: PortKeyStr,
   multiplier: number,
+  pressureCaps?: Map<PortKeyStr, Map<PortKeyStr, number>>,
+  pressureCap?: number | null,
 ): void {
   if (!adjacency.has(a)) adjacency.set(a, new Map());
   adjacency.get(a)?.set(b, multiplier);
   if (!reverseAdjacency.has(b)) reverseAdjacency.set(b, new Set());
   reverseAdjacency.get(b)?.add(a);
+
+  if (pressureCaps && pressureCap != null && Number.isFinite(pressureCap)) {
+    if (!pressureCaps.has(a)) pressureCaps.set(a, new Map());
+    pressureCaps.get(a)?.set(b, Math.max(0, pressureCap));
+  }
+}
+
+/**
+ * Pressure available at every reachable port: each live supply port starts at SOURCE_PRESSURE,
+ * and crossing an edge yields `min(pressure behind it, that edge's ceiling)`.
+ *
+ * Each port keeps the *highest* pressure any path can deliver to it, which is what makes a line
+ * fed from both a regulator and the raw supply behave the way the real circuit does - the
+ * unregulated path wins, rather than a regulator quietly limiting a line it isn't actually in
+ * series with. That makes this a widest-path relaxation rather than a plain flood: a port is
+ * re-examined whenever a better path to it turns up. It terminates because a port's value only
+ * ever increases and is bounded above by SOURCE_PRESSURE.
+ */
+function computePressures(
+  adjacency: Map<PortKeyStr, Map<PortKeyStr, number>>,
+  pressureCaps: Map<PortKeyStr, Map<PortKeyStr, number>>,
+  pressurized: Set<PortKeyStr>,
+  sourceKeys: Set<PortKeyStr>,
+): Map<PortKeyStr, number> {
+  const pressure = new Map<PortKeyStr, number>();
+  const queue: PortKeyStr[] = [];
+  for (const key of sourceKeys) {
+    if (!pressurized.has(key)) continue;
+    pressure.set(key, SOURCE_PRESSURE);
+    queue.push(key);
+  }
+
+  while (queue.length > 0) {
+    const cur = queue.shift() as PortKeyStr;
+    const curPressure = pressure.get(cur) ?? 0;
+    const caps = pressureCaps.get(cur);
+    for (const next of adjacency.get(cur)?.keys() ?? []) {
+      const cap = caps?.get(next);
+      const candidate = cap == null ? curPressure : Math.min(curPressure, cap);
+      if (candidate > (pressure.get(next) ?? 0)) {
+        pressure.set(next, candidate);
+        queue.push(next);
+      }
+    }
+  }
+
+  return pressure;
+}
+
+/** Pressure (bar) at `key` - 0 if it has none. */
+export function pressureAt(graph: FrameGraph, key: PortKeyStr): number {
+  return graph.pressure.get(key) ?? 0;
 }
 
 function flood(
@@ -144,6 +207,7 @@ export function computeFrameGraph(
 
   const adjacency = new Map<PortKeyStr, Map<PortKeyStr, number>>();
   const reverseAdjacency = new Map<PortKeyStr, Set<PortKeyStr>>();
+  const pressureCaps = new Map<PortKeyStr, Map<PortKeyStr, number>>();
   for (const [a, neighbors] of wireAdjacency) {
     for (const b of neighbors) addDirEdge(adjacency, reverseAdjacency, a, b, 1);
   }
@@ -171,9 +235,25 @@ export function computeFrameGraph(
         // control valve conducts both ways on one undirected edge but throttles only one of
         // them, so reusing a single (edge.a, edge.b) multiplier for both directions would
         // silently apply the free-flow rate to the throttled direction too.
-        addDirEdge(adjacency, reverseAdjacency, a, b, c.flowMultiplier?.(edge.a, edge.b) ?? 1);
+        addDirEdge(
+          adjacency,
+          reverseAdjacency,
+          a,
+          b,
+          c.flowMultiplier?.(edge.a, edge.b) ?? 1,
+          pressureCaps,
+          c.pressureLimit?.(edge.a, edge.b),
+        );
         if (!edge.directed) {
-          addDirEdge(adjacency, reverseAdjacency, b, a, c.flowMultiplier?.(edge.b, edge.a) ?? 1);
+          addDirEdge(
+            adjacency,
+            reverseAdjacency,
+            b,
+            a,
+            c.flowMultiplier?.(edge.b, edge.a) ?? 1,
+            pressureCaps,
+            c.pressureLimit?.(edge.b, edge.a),
+          );
         }
       }
     }
@@ -186,6 +266,8 @@ export function computeFrameGraph(
     adjacency,
     reverseAdjacency,
     sourceKeys,
+    pressure: computePressures(adjacency, pressureCaps, pressurized, sourceKeys),
+    pressureCaps,
     exhausting: new Set(),
     exhaustDepth: new Map(),
   };

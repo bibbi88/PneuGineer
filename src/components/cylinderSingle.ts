@@ -268,10 +268,13 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
       // port has moved to the rod end, so it only ever pushes against the smaller annular area.
       // The spring return stroke has no air force to report - it's not modeled with a rate.
       if (showForce) {
+        // What port A is actually seeing, not the supply pressure - a regulator upstream lowers
+        // the force this cylinder can develop.
+        const drivePressure = ctx.pressureAt('A');
         const force = pressurizedA
           ? mode === 'push'
-            ? forceFromArea(boreAreaMm2(boreDiameter))
-            : forceFromArea(annularAreaMm2(boreDiameter, rodDiameter))
+            ? forceFromArea(boreAreaMm2(boreDiameter), drivePressure)
+            : forceFromArea(annularAreaMm2(boreDiameter, rodDiameter), drivePressure)
           : 0;
         forceLabelEl.textContent = `${force.toFixed(0)} N`;
         forceLabelEl.style.display = '';

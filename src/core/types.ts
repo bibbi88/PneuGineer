@@ -56,6 +56,10 @@ export interface SimStepContext {
    * how restricted the path out to open atmosphere is, so a flow control valve throttling a
    * cylinder's exhaust actually slows it down instead of only supply-side throttling counting. */
   flowMultiplierToOpenExhaust(port: PortKey): number;
+  /** Pressure (bar) actually available at `port` this frame: the supply pressure, less any
+   * reduction imposed by a pressure-reducing valve between it and the supply. 0 when the port
+   * isn't pressurized at all. What a cylinder computes its force from. */
+  pressureAt(port: PortKey): number;
   emitSignal(key: string, value: boolean): void;
   readSignal(key: string): boolean;
 }
@@ -112,6 +116,12 @@ export interface Component<TSnapshot = Record<string, unknown>> {
 
   conductivityRule(ctx: ConductivityContext): PortConnection[];
   flowMultiplier?(fromPort: PortKey, toPort: PortKey): number;
+  /** Ceiling, in bar, this component imposes on air crossing from `fromPort` to `toPort` - a
+   * pressure-reducing valve's set pressure. null (or omitted) means it imposes none, which is
+   * what every other component does. Direction matters: a regulator only reduces downstream, so
+   * it caps IN -> OUT and leaves OUT -> IN alone. See sim/pressure.ts, which propagates the
+   * resulting pressure outward from the supply. */
+  pressureLimit?(fromPort: PortKey, toPort: PortKey): number | null;
   /** Ports that inject pressure into the system (e.g. a pressure source's outlet). */
   sourcePorts?(): PortKey[];
   /** Ports this component is actively venting air out through as of the most recent step() -

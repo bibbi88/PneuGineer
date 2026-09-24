@@ -6,7 +6,6 @@ import { createValve53Mono, VALVE_53_MONO_TYPE } from './valve53Mono';
 import { createAndValve, AND_VALVE_TYPE } from './andValve';
 import { createOrValve, OR_VALVE_TYPE } from './orValve';
 import { createCheckValve, CHECK_VALVE_TYPE } from './checkValve';
-import { createRestrictor, RESTRICTOR_TYPE } from './restrictor';
 import { createLimitValve32, LIMIT_VALVE_32_TYPE } from './limitValve32';
 import { createPushButton32, PUSH_BUTTON_32_TYPE } from './pushButton32';
 import { createAirValve32, AIR_VALVE_32_TYPE } from './airValve32';
@@ -20,6 +19,7 @@ import {
   ONE_WAY_FLOW_CONTROL_VALVE_TYPE,
 } from './oneWayFlowControlValve';
 import { createThrottleValve, THROTTLE_VALVE_TYPE } from './throttleValve';
+import { createPressureReducingValve, PRESSURE_REDUCING_VALVE_TYPE } from './pressureReducingValve';
 import {
   createElecRailPlus,
   createElecRailZero,
@@ -55,7 +55,11 @@ export type ComponentFactory = (ctx: ComponentFactoryContext, x: number, y: numb
  * alphabetical dump. */
 export const ComponentCategory = {
   SOURCES: 'Sources',
-  DIRECTIONAL: 'Directional valves',
+  // Directional valves are split by what actuates them, since that is what you pick between
+  // when building a circuit - the port count (3/2, 5/2, 5/3) is already in each tile's label.
+  DIRECTIONAL_MANUAL: 'Mechanical/Manual',
+  DIRECTIONAL_AIR: 'Air operated',
+  DIRECTIONAL_SOLENOID: 'Solenoid operated',
   LOGIC: 'Logic',
   FLOW: 'Flow control',
   ACTUATORS: 'Actuators',
@@ -90,7 +94,7 @@ export const componentRegistry = new Map<string, RegistryEntry>([
       factory: (ctx, x, y) => createValve52(ctx.compLayer, x, y),
       label: '5/2 valve',
       placeable: true,
-      category: ComponentCategory.DIRECTIONAL,
+      category: ComponentCategory.DIRECTIONAL_AIR,
     },
   ],
   [
@@ -99,7 +103,7 @@ export const componentRegistry = new Map<string, RegistryEntry>([
       factory: (ctx, x, y) => createValve52Mono(ctx.compLayer, x, y),
       label: '5/2 valve, monostable',
       placeable: true,
-      category: ComponentCategory.DIRECTIONAL,
+      category: ComponentCategory.DIRECTIONAL_AIR,
     },
   ],
   [
@@ -108,7 +112,7 @@ export const componentRegistry = new Map<string, RegistryEntry>([
       factory: (ctx, x, y) => createValve53Mono(ctx.compLayer, x, y),
       label: '5/3 valve, monostable',
       placeable: true,
-      category: ComponentCategory.DIRECTIONAL,
+      category: ComponentCategory.DIRECTIONAL_AIR,
     },
   ],
   [
@@ -117,7 +121,7 @@ export const componentRegistry = new Map<string, RegistryEntry>([
       factory: (ctx, x, y) => createLimitValve32(ctx.compLayer, x, y),
       label: '3/2 limit valve',
       placeable: true,
-      category: ComponentCategory.DIRECTIONAL,
+      category: ComponentCategory.DIRECTIONAL_MANUAL,
     },
   ],
   [
@@ -126,7 +130,7 @@ export const componentRegistry = new Map<string, RegistryEntry>([
       factory: (ctx, x, y) => createPushButton32(ctx.compLayer, x, y),
       label: '3/2 push button',
       placeable: true,
-      category: ComponentCategory.DIRECTIONAL,
+      category: ComponentCategory.DIRECTIONAL_MANUAL,
     },
   ],
   [
@@ -135,7 +139,7 @@ export const componentRegistry = new Map<string, RegistryEntry>([
       factory: (ctx, x, y) => createAirValve32(ctx.compLayer, x, y),
       label: '3/2 air-piloted',
       placeable: true,
-      category: ComponentCategory.DIRECTIONAL,
+      category: ComponentCategory.DIRECTIONAL_AIR,
     },
   ],
   [
@@ -166,15 +170,6 @@ export const componentRegistry = new Map<string, RegistryEntry>([
     },
   ],
   [
-    RESTRICTOR_TYPE,
-    {
-      factory: (ctx, x, y) => createRestrictor(ctx.compLayer, x, y),
-      label: 'Restrictor',
-      placeable: true,
-      category: ComponentCategory.FLOW,
-    },
-  ],
-  [
     ONE_WAY_FLOW_CONTROL_VALVE_TYPE,
     {
       factory: (ctx, x, y) => createOneWayFlowControlValve(ctx.compLayer, x, y),
@@ -188,6 +183,15 @@ export const componentRegistry = new Map<string, RegistryEntry>([
     {
       factory: (ctx, x, y) => createThrottleValve(ctx.compLayer, x, y),
       label: 'Throttle valve',
+      placeable: true,
+      category: ComponentCategory.FLOW,
+    },
+  ],
+  [
+    PRESSURE_REDUCING_VALVE_TYPE,
+    {
+      factory: (ctx, x, y) => createPressureReducingValve(ctx.compLayer, x, y),
+      label: 'Pressure reducing valve',
       placeable: true,
       category: ComponentCategory.FLOW,
     },
@@ -318,7 +322,7 @@ export const componentRegistry = new Map<string, RegistryEntry>([
       factory: (ctx, x, y) => createValve52Solenoid(ctx.compLayer, x, y),
       label: '5/2 solenoid valve',
       placeable: true,
-      category: ComponentCategory.DIRECTIONAL,
+      category: ComponentCategory.DIRECTIONAL_SOLENOID,
     },
   ],
   [
@@ -327,7 +331,7 @@ export const componentRegistry = new Map<string, RegistryEntry>([
       factory: (ctx, x, y) => createValve52SolenoidDouble(ctx.compLayer, x, y),
       label: '5/2 double solenoid valve',
       placeable: true,
-      category: ComponentCategory.DIRECTIONAL,
+      category: ComponentCategory.DIRECTIONAL_SOLENOID,
     },
   ],
   [
@@ -336,7 +340,7 @@ export const componentRegistry = new Map<string, RegistryEntry>([
       factory: (ctx, x, y) => createValve53Solenoid(ctx.compLayer, x, y),
       label: '5/3 solenoid valve',
       placeable: true,
-      category: ComponentCategory.DIRECTIONAL,
+      category: ComponentCategory.DIRECTIONAL_SOLENOID,
     },
   ],
   [
@@ -380,7 +384,9 @@ export function createComponent(
 
 const CATEGORY_ORDER: ComponentCategoryName[] = [
   ComponentCategory.SOURCES,
-  ComponentCategory.DIRECTIONAL,
+  ComponentCategory.DIRECTIONAL_MANUAL,
+  ComponentCategory.DIRECTIONAL_AIR,
+  ComponentCategory.DIRECTIONAL_SOLENOID,
   ComponentCategory.LOGIC,
   ComponentCategory.FLOW,
   ComponentCategory.ACTUATORS,

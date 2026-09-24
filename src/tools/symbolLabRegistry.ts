@@ -5,7 +5,6 @@ import {
 } from '../components/oneWayFlowControlValve';
 import { JUNCTION_DEFAULT_GEOMETRY, drawJunctionBody } from '../components/junction';
 import { SOURCE_DEFAULT_GEOMETRY, drawSourceBody } from '../components/source';
-import { RESTRICTOR_DEFAULT_GEOMETRY, drawRestrictorBody } from '../components/restrictor';
 import { CHECK_VALVE_DEFAULT_GEOMETRY, drawCheckValveBody } from '../components/checkValve';
 import { AND_VALVE_DEFAULT_GEOMETRY, drawAndValveBody } from '../components/andValve';
 import { OR_VALVE_DEFAULT_GEOMETRY, drawOrValveBody } from '../components/orValve';
@@ -159,38 +158,6 @@ const SOURCE_ENTRY: SymbolLabEntry = {
     svg.appendChild(g);
     const { cx, portY } = drawSourceBody(g, typed);
     createPort(g, 'OUT', cx, portY, 'V');
-    return { w: typed.svgW, h: typed.svgH };
-  },
-};
-
-const RESTRICTOR_ENTRY: SymbolLabEntry = {
-  id: 'restrictor',
-  label: 'Restrictor',
-  group: 'Flow',
-  sourceFile: 'src/components/restrictor.ts',
-  exportName: 'RESTRICTOR_DEFAULT_GEOMETRY',
-  fields: [
-    field('svgW', 'Canvas width', RESTRICTOR_DEFAULT_GEOMETRY.svgW),
-    field('svgH', 'Canvas height', RESTRICTOR_DEFAULT_GEOMETRY.svgH),
-    field('gx', 'Group offset X', RESTRICTOR_DEFAULT_GEOMETRY.gx),
-    field('gy', 'Group offset Y', RESTRICTOR_DEFAULT_GEOMETRY.gy),
-    field('husX', 'Housing X', RESTRICTOR_DEFAULT_GEOMETRY.husX),
-    field('husY', 'Housing Y', RESTRICTOR_DEFAULT_GEOMETRY.husY),
-    field('husW', 'Housing width', RESTRICTOR_DEFAULT_GEOMETRY.husW),
-    field('husH', 'Housing height', RESTRICTOR_DEFAULT_GEOMETRY.husH),
-    field('portLead', 'Port lead length', RESTRICTOR_DEFAULT_GEOMETRY.portLead, {
-      min: 0,
-      max: 40,
-    }),
-  ],
-  createDefaultGeometry: () => ({ ...RESTRICTOR_DEFAULT_GEOMETRY }),
-  renderPreview(svg, geo) {
-    const typed = geo as unknown as typeof RESTRICTOR_DEFAULT_GEOMETRY;
-    const g = createSvgEl('g', { transform: `translate(${typed.gx},${typed.gy})` });
-    svg.appendChild(g);
-    const { in: IN, out: OUT } = drawRestrictorBody(g, typed);
-    createLabeledPort(g, 'IN', IN.cx, IN.cy, 'V', 'below');
-    createLabeledPort(g, 'OUT', OUT.cx, OUT.cy, 'V', 'above');
     return { w: typed.svgW, h: typed.svgH };
   },
 };
@@ -980,7 +947,6 @@ const VALVE_52_MONO_ENTRY: SymbolLabEntry = {
 export const SYMBOL_LAB_ENTRIES: SymbolLabEntry[] = [
   JUNCTION_ENTRY,
   SOURCE_ENTRY,
-  RESTRICTOR_ENTRY,
   CHECK_VALVE_ENTRY,
   ONE_WAY_FLOW_CONTROL_VALVE_ENTRY,
   QUICK_EXHAUST_VALVE_ENTRY,

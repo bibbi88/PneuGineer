@@ -79,9 +79,12 @@ export const VALVE_53_MONO_DEFAULT_GEOMETRY: Valve53MonoGeometry = {
   springZigH: 5,
   triHRatio: 0.25,
   triWRatio: 1.2,
-  // 2 rather than the "natural" 0: the triangle is 18 wide (triH 15 x triWRatio 1.2), so a bare
-  // 2px lead past its back face is what lands the pilot port on the 10px grid.
-  portLead: 2,
+  // Leaves a visible link line between the triangle's back face and the pilot port, the way the
+  // 5/2 family draws its own pilot (valve52Mono.ts) rather than parking the port straight on the
+  // triangle. 22 puts the port 40 out from the body edge - the triangle is 18 wide (triH 15 x
+  // triWRatio 1.2) - which is both the 5/2's own pilot port distance and a multiple of
+  // GRID_SIZE (10), so the port still lands on the grid; see src/core/grid.ts.
+  portLead: 22,
 };
 
 function line(x1: number, y1: number, x2: number, y2: number, stroke: number): SVGLineElement {
@@ -366,7 +369,9 @@ export function createValve53Mono(compLayer: HTMLElement, x: number, y: number):
   // The three-cell sliding assembly is always fully drawn (no clipping window) and defaults (and
   // resets) to the center position, spring-centered - same reasoning as valve52.ts's own
   // getBounds() doc for why the tight box matches that one state's footprint rather than every
-  // state's combined extent.
+  // state's combined extent. In that rest state gInner sits one cell left of gx0, so the body
+  // starts at gx0 - w0 and runs the full three cells from there; w0 * 2 would be the two-cell
+  // 5/2's width and would leave this valve's right-hand cell outside its own bounds.
   const shell = buildComponentShell(
     compLayer,
     VALVE_53_MONO_TYPE,
@@ -378,7 +383,7 @@ export function createValve53Mono(compLayer: HTMLElement, x: number, y: number):
     {
       x: geo.gx0 - geo.w0,
       y: geo.gy0,
-      w: geo.w0 * 2,
+      w: geo.w0 * 3,
       h: geo.h0,
     },
   );

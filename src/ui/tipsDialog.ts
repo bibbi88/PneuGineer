@@ -8,21 +8,40 @@ interface TipSection {
 // componentContextMenu.ts's right-click menu) that aren't shown anywhere in the app itself.
 const TIP_SECTIONS: TipSection[] = [
   {
+    heading: 'The toolbar',
+    tips: [
+      'The toolbar across the top is grouped: the project (name, save, load, export), the ' +
+        'simulation (play/stop, pause, step, undo, redo), the view (zoom out/in, fit to window, ' +
+        'zoom to selection) and arranging the selection (rotate, flip).',
+      'Fit to window frames the whole drawing - the components plus the page frame, when one is ' +
+        'switched on.',
+      'Zoom to selection frames just what you have selected. The percentage between the two ' +
+        'magnifiers is a button too: it resets the zoom to 100%.',
+      'The grid button toggles the grid and snap-to-grid together, and stays lit while they ' +
+        'are on. It is a personal preference, remembered across projects rather than saved ' +
+        'into one.',
+      'Rotate and flip apply to everything currently selected. Flip is offered for cylinders ' +
+        'only - mirroring any other symbol would print its port labels backwards.',
+    ],
+  },
+  {
     heading: 'Canvas navigation',
     tips: [
       'Scroll to zoom in/out.',
       'Middle-click drag (or Alt + right-click drag) to pan.',
-      'Right-click empty canvas → Zoom to fit, to frame every component on screen.',
+      'Right-click empty canvas → Zoom to fit, the same as the toolbar button.',
       'Right-click empty canvas → Paste, to drop a copy exactly where you clicked.',
     ],
   },
   {
     heading: 'Placing & editing',
     tips: [
-      'Drag a component from the sidebar onto the canvas, or click it to add at the view center.',
-      'Drag a check valve, throttle valve, one-way flow control valve, or quick exhaust valve onto an existing wire ' +
-        '(it highlights green when close enough) to splice it in, instead of dropping it ' +
-        'unconnected on top.',
+      'Drag a component from the sidebar onto the canvas, or click it to add at the view center. ' +
+        'Placing is an edit, so the library greys out while the simulation is running - stop it ' +
+        'first.',
+      'Drag a check valve, throttle valve, one-way flow control valve, quick exhaust valve or ' +
+        'pressure reducing valve onto an existing wire (it highlights green when close enough) ' +
+        'to splice it in, instead of dropping it unconnected on top.',
       'Right-click a component for Rotate, Copy, and Delete.',
       'Arrow keys nudge the selected component; hold Shift to move a full grid step further.',
       'Delete or Backspace removes the current selection.',
@@ -33,15 +52,21 @@ const TIP_SECTIONS: TipSection[] = [
     ],
   },
   {
-    heading: 'Custom components',
+    heading: 'Valves & flow control',
     tips: [
-      '"+ New custom component…" (bottom of the sidebar) lets you paste your own SVG artwork ' +
-        'and click on it to place ports - it appears in the Custom category afterward, ' +
-        'placeable and wireable like any built-in component.',
-      'A custom component has one behavior: every one of its ports conducts to every other ' +
-        "one. There's no way yet to give it its own one-way or switched logic.",
-      "Right-click a custom component's sidebar tile to Edit or Delete it. Saving a project " +
-        'that uses one embeds its definition, so the file still opens correctly elsewhere.',
+      'Every 3/2 valve - push button, limit switch, air-piloted and time delay - can be ' +
+        'switched between normally closed and normally open in the inspector. The two cells ' +
+        'trade places, so at rest it either blocks the supply or passes 1 → 2; the actuator ' +
+        'itself still works the same way round.',
+      'A 3/2 valve can be converted between push button, limit switch and air-piloted ' +
+        'actuation, and a 5/2 or 5/3 between pneumatic and solenoid, from the inspector’s ' +
+        'Control mode / Operation dropdown. Wires on ports the new variant also has carry over; ' +
+        'a wire on a port it doesn’t have is dropped.',
+      'Exhaust ports come with a silencer fitted by default - the inspector can take it off.',
+      'The pressure reducing valve caps everything downstream of it at its set pressure: port ' +
+        'and wire readouts show the reduced figure, and a cylinder behind one develops ' +
+        'proportionally less force. It only reduces - set it at or above supply and the line ' +
+        'stays at supply pressure.',
     ],
   },
   {
@@ -67,8 +92,9 @@ const TIP_SECTIONS: TipSection[] = [
   {
     heading: 'Project info & the page frame',
     tips: [
-      'Project name, date, author, checked by, and company live in the inspector’s "Project ' +
-        'info" section (visible with nothing selected) and appear on the sheet’s title block.',
+      'The project name sits in the toolbar. Date, author, checked by and company live in the ' +
+        'inspector’s "Project info" section (visible with nothing selected), and all of them ' +
+        'appear on the sheet’s title block.',
       'The page frame (None/A4/A3) draws a sheet outline with that title block, centered on the ' +
         'current diagram when picked - a visual guide only, not a hard boundary.',
     ],
@@ -76,8 +102,8 @@ const TIP_SECTIONS: TipSection[] = [
   {
     heading: 'Exporting',
     tips: [
-      'Export… opens a dialog with a live preview and a choice of what to crop to: ' +
-        'Everything, the page frame, or whatever’s currently in view.',
+      'Export (the toolbar’s download icon) opens a dialog with a live preview and a choice of ' +
+        'what to crop to: Everything, the page frame, or whatever’s currently in view.',
       'To export just part of a diagram, pan/zoom to that region first, then pick "Current view".',
     ],
   },

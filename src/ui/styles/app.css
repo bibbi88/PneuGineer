@@ -33,8 +33,111 @@ body {
 
 .app {
   display: grid;
+  /* The toolbar spans all three columns as its own row above them, so it reads as belonging to
+     the whole window rather than to any one panel. */
   grid-template-columns: 244px 1fr 260px;
+  grid-template-rows: auto 1fr;
   height: 100vh;
+}
+
+/* ---------- Top toolbar ---------- */
+
+.topbar {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  /* A narrow window scrolls the toolbar rather than wrapping or squeezing the groups, which
+     would move every button somewhere different depending on the window width. */
+  overflow-x: auto;
+}
+
+/* Each group of related controls, separated from the next by a divider rather than by spacing
+   alone, so the grouping survives the toolbar being crowded or scrolled. */
+.topbarSection {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px;
+  border-right: 1px solid var(--line);
+}
+
+.topbarSection:first-child {
+  padding-left: 0;
+}
+
+.topbarSection:last-child {
+  border-right: none;
+}
+
+.iconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.iconBtn:hover:not(:disabled) {
+  background: #fff;
+  border-color: var(--line);
+}
+
+.iconBtn:active:not(:disabled) {
+  background: var(--panel-2);
+}
+
+.iconBtn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* Stop is the one transport control that interrupts something, so it's the one given color. */
+.iconBtn--danger {
+  color: var(--accent);
+}
+
+/* A toggle that is currently on (the grid button), as opposed to a button you merely hover -
+   it has to stay visibly lit once the pointer leaves, which a :hover style alone would not do. */
+.iconBtn--active {
+  background: var(--panel-2);
+  border-color: var(--line);
+  color: var(--ink);
+}
+
+.iconBtn--active:hover:not(:disabled) {
+  background: var(--panel-2);
+}
+
+.zoomReadout {
+  min-width: 52px;
+  padding: 6px 4px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  /* Tabular figures so the toolbar doesn't shuffle sideways as the percentage changes width. */
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  cursor: pointer;
+}
+
+.zoomReadout:hover {
+  background: #fff;
+  border-color: var(--line);
+  color: var(--ink);
 }
 
 .sidebar {
@@ -49,6 +152,16 @@ body {
   border-left: 1px solid #ccc;
   padding: 10px;
   overflow: auto;
+  /* A column so #inspector can fill the leftover height, which is what lets the Tips section
+     inside it sit on the bottom edge instead of directly under the last field. */
+  display: flex;
+  flex-direction: column;
+}
+
+#inspector {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
 }
 
 .inspectorPanel h2 {
@@ -62,6 +175,15 @@ body {
 }
 
 /* ---------- Component library ---------- */
+
+/* Placing a component is an edit, and edits are only allowed while stopped (see app/modes.ts's
+   canEdit, which every other editing path checks too). Dimmed and inert rather than hidden, so
+   the palette doesn't jump around each time the simulation starts or stops. The JS guard in
+   interaction/spawn.ts is what actually enforces it - this is the visible half. */
+.libraryDisabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
 
 .libFilter {
   display: block;
@@ -242,18 +364,18 @@ body {
   background: #fff;
 }
 
-/* Save/Load side by side instead of each taking a full-width row. */
-.btnRow {
-  display: flex;
-  gap: 6px;
-  margin: 6px 0;
+/* Pushed to the bottom of the panel rather than just following the content above it, so Tips
+   sits on the bottom edge whether the panel above is full or nearly empty. */
+.inspectorTips {
+  margin-top: auto;
+  padding-top: 12px;
 }
 
-.btnRow .btn {
-  flex: 1;
-  width: auto;
-  margin: 0;
-  text-align: center;
+.inspectorTipsBtn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
 }
 
 .workspace {
@@ -885,12 +1007,15 @@ rect.wireHandle.wireStubHandle {
 }
 
 .projectName {
-  display: block;
-  width: 100%;
-  margin: 6px 0;
+  /* Sized for the toolbar rather than stretched to a panel width: wide enough for a typical
+     project name, and allowed to shrink before the icon buttons beside it do. */
+  flex: 0 1 180px;
+  min-width: 90px;
   padding: 6px 8px;
   border: 1px solid #bbb;
   border-radius: 6px;
+  background: #fff;
+  font: inherit;
   font-size: 13px;
 }
 
@@ -1095,78 +1220,8 @@ rect.wireHandle.wireStubHandle {
   stroke: transparent;
 }
 
-/* Custom component editor (ui/customComponentDialog.ts) - "New custom component…" in the
-   sidebar. Reuses .exportDialog's own chrome, just wider (there's a lot more to fit: a name
-   field, an SVG textarea, a live preview, and the port list). */
-.customCompDialog {
-  width: 640px;
-}
-
-.customCompSvgInput {
-  width: 100%;
-  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-  font-size: 12px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 8px;
-  resize: vertical;
-  margin-bottom: 6px;
-}
-
-.customCompError {
-  color: var(--accent);
-  min-height: 16px;
-}
-
-.customCompPreview {
-  min-height: 120px;
-}
-
-.customCompPortMarker {
-  fill: var(--insert);
-  stroke: #fff;
-  stroke-width: 1.5;
-  cursor: pointer;
-}
-
-.customCompPortList {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-bottom: 14px;
-}
-
-.customCompPortRow {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.customCompPortKey {
-  flex: 1;
-  min-width: 0;
-}
-
-.customCompPortRow select {
-  flex: none;
-}
-
-.customCompPortRemove {
-  border: none;
-  background: none;
-  color: var(--muted);
-  cursor: pointer;
-  padding: 4px 6px;
-  font-size: 13px;
-}
-
-.customCompPortRemove:hover {
-  color: var(--accent);
-}
-
 /* PLC graphical program editor (ui/plcEditorDialog.ts) - reuses .exportDialog's own chrome,
-   wider still than the custom component editor since the canvas needs real room to lay out a
-   diagram in. */
+   but much wider, since the canvas needs real room to lay out a diagram in. */
 .plcEditorDialog {
   width: 820px;
 }
@@ -1260,12 +1315,19 @@ rect.wireHandle.wireStubHandle {
   fill: #fff4e5;
 }
 
+/* Labels inside a node must not swallow the drag that moves it - a mousedown anywhere on the
+   node body should grab it, including on the text sitting over that body. */
 .plcNode text {
   pointer-events: none;
   user-select: none;
 }
 
+/* ...except the remove button, which is itself a <text> and so needs its events handed back,
+   or its mousedown (and its hover feedback, and its cursor) never fire at all. Same
+   none-on-the-parent / auto-on-the-interactive-child pattern as .plcWire vs .plcWireHit
+   below. */
 .plcNodeRemove {
+  pointer-events: auto;
   cursor: pointer;
   fill: var(--muted);
 }

@@ -6,6 +6,7 @@ import {
   flowMultiplierToOpenExhaust,
   markExhaustFlow,
   portKey,
+  pressureAt,
   sourceDistance,
   type FrameGraph,
 } from './pressure';
@@ -50,6 +51,7 @@ export function stepSimulation(dt: number): FrameGraph {
       isPressurized: (p) => graph.pressurized.has(portKey(c.id, p)),
       flowMultiplierToNearestSource: (p) => flowMultiplierToNearestSource(graph, portKey(c.id, p)),
       flowMultiplierToOpenExhaust: (p) => flowMultiplierToOpenExhaust(graph, portKey(c.id, p)),
+      pressureAt: (p) => pressureAt(graph, portKey(c.id, p)),
       emitSignal: setSignal,
       readSignal: getSignal,
     };

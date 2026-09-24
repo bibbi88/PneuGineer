@@ -98,6 +98,16 @@ export function createPushButton32(compLayer: HTMLElement, x: number, y: number)
   drawPushButton32Actuator(valve.mover, geo);
 
   let active = false;
+  // Swaps the two cells so the valve passes 1 -> 2 at rest and vents 2 -> 3 when pressed, the
+  // reverse of the default. Only the artwork and the conductivity rule change - pressing still
+  // slides the mover the same way, so the button and its spring animate identically either way.
+  let normallyOpen = false;
+
+  /** True while 1 is connected through to 2, whichever combination of pressed and
+   * normally-open produced it - both the symbol and the rule follow this one value. */
+  function flowing(): boolean {
+    return active !== normallyOpen;
+  }
   // True while the button is held active by a CTRL-click latch rather than the mouse being
   // physically down - lets one button stay pressed while the user operates another with plain
   // clicks, matching a real "detent" pushbutton.
@@ -116,7 +126,7 @@ export function createPushButton32(compLayer: HTMLElement, x: number, y: number)
     ports: valve.ports,
 
     conductivityRule(): PortConnection[] {
-      return active ? [{ a: '2', b: '1' }] : [{ a: '2', b: '3' }];
+      return flowing() ? [{ a: '2', b: '1' }] : [{ a: '2', b: '3' }];
     },
 
     recompute(): void {
@@ -126,6 +136,7 @@ export function createPushButton32(compLayer: HTMLElement, x: number, y: number)
     snapshot(): Record<string, unknown> {
       return {
         active,
+        normallyOpen,
         showName: shell.getNameVisible(),
         customName: shell.getCustomName(),
         silencer3: valve.getSilencer(),
@@ -133,9 +144,11 @@ export function createPushButton32(compLayer: HTMLElement, x: number, y: number)
     },
     restore(data: Record<string, unknown>): void {
       active = data.active as boolean;
+      normallyOpen = Boolean(data.normallyOpen);
       shell.setNameVisible(Boolean(data.showName));
       shell.setCustomName((data.customName as string | null) ?? null);
       valve.setSilencer((data.silencer3 as 'none' | 'silencer') ?? 'silencer');
+      valve.setSwapped(normallyOpen);
       valve.setActive(active);
     },
     reset(): void {

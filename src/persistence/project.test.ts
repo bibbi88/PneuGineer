@@ -3,14 +3,6 @@ import { appState } from '../app/AppState';
 import { serializeProject, loadProject } from './project';
 import { setComponentMirrored, setComponentRotation } from '../interaction/componentContextMenu';
 import { createSource, SOURCE_TYPE } from '../components/source';
-import { createComponent } from '../components/registry';
-import {
-  saveCustomComponent,
-  deleteCustomComponent,
-  listCustomComponents,
-  getCustomComponent,
-  type CustomComponentDef,
-} from '../components/customComponents';
 import type { ComponentFactoryContext } from '../components/registry';
 import type { ViewportAdapter } from '../ui/viewport';
 
@@ -253,61 +245,5 @@ describe('project origin/last-saved device id (not shown in the UI, only carried
 
     expect(appState.projectOriginDeviceId).toBeNull();
     expect(appState.projectLastSavedDeviceId).toBeNull();
-  });
-});
-
-describe('project custom-component round-trip', () => {
-  beforeEach(() => {
-    appState.components = [];
-    appState.connections = [];
-    for (const def of listCustomComponents()) deleteCustomComponent(def.id);
-  });
-
-  it('embeds the definition of every custom component actually used, and only those', () => {
-    const usedDef: CustomComponentDef = {
-      id: 'custom:used',
-      label: 'Used widget',
-      svgMarkup: '<svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg"></svg>',
-      width: 40,
-      height: 40,
-      ports: [{ key: 'A', cx: 0, cy: 20, orientation: 'H' }],
-    };
-    const unusedDef: CustomComponentDef = { ...usedDef, id: 'custom:unused', label: 'Unused widget' };
-    saveCustomComponent(usedDef);
-    saveCustomComponent(unusedDef);
-
-    const comp = createComponent(usedDef.id, ctx, 0, 0);
-    appState.addComponent(comp);
-
-    const file = serializeProject('test');
-    expect(file.customComponents?.map((d) => d.id)).toEqual(['custom:used']);
-  });
-
-  it('loadProject registers an embedded custom component before spawning components that use it', () => {
-    // Nothing registered yet in this "browser" - as if opening a file someone else made.
-    const file = {
-      schemaVersion: 1 as const,
-      name: 'test',
-      customComponents: [
-        {
-          id: 'custom:fromfile',
-          label: 'From a file',
-          svgMarkup: '<svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg"></svg>',
-          width: 40,
-          height: 40,
-          ports: [{ key: 'A', cx: 0, cy: 20, orientation: 'H' as const }],
-        },
-      ],
-      comps: [{ id: 1, type: 'custom:fromfile', x: 0, y: 0, data: {} }],
-      conns: [],
-    };
-    expect(getCustomComponent('custom:fromfile')).toBeUndefined();
-
-    loadProject(file, ctx, viewport);
-
-    expect(appState.components).toHaveLength(1);
-    expect(appState.components[0]?.type).toBe('custom:fromfile');
-    // Registering it also saved it into this browser's own library for future reuse.
-    expect(getCustomComponent('custom:fromfile')?.label).toBe('From a file');
   });
 });

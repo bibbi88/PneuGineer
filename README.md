@@ -14,7 +14,7 @@ fluid dynamics.
 
 ## Components
 
-- Pressure source, 5/2 valve, AND / OR valve, check valve, restrictor
+- Pressure source, 5/2 valve, AND / OR valve, check valve, throttle valve
 - 3/2 limit valve, 3/2 push button, 3/2 air-piloted valve
 - Double-acting and single-acting (push/pull) cylinders
 - Time delay valve, quick-exhaust valve, one-way flow control valve

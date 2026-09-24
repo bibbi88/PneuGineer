@@ -36,7 +36,16 @@ export function setComponentMirrored(comp: Component, mirrored: boolean): void {
   svg.style.transform = mirrored ? 'scaleX(-1)' : '';
 }
 
+/** Mirroring flips the whole component svg, port labels and all, so it's offered only for the
+ * artwork that reads correctly reversed - the cylinders, whose own name label is HTML outside
+ * that svg. On a valve it would leave every port number printed backwards, so the toolbar's
+ * flip button (see ui/arrangeControls.ts) disables itself on the same basis this menu hides
+ * the entry. */
 const MIRRORABLE_TYPES = new Set<string>([CYLINDER_SINGLE_TYPE, CYLINDER_DOUBLE_TYPE]);
+
+export function isMirrorableType(type: string): boolean {
+  return MIRRORABLE_TYPES.has(type);
+}
 
 function rotateComponent(comp: Component, deltaDeg: number): void {
   setComponentRotation(comp, getComponentRotation(comp) + deltaDeg);

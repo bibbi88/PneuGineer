@@ -19,7 +19,7 @@ export interface ComponentShell {
   getBounds(): ComponentBounds;
   setSelected(sel: boolean): void;
   /** Sets the auto-generated name shown when no custom name is set (e.g. "Cylinder A",
-   * "Restrictor (50%)") - components whose default name can change at runtime should call this
+   * "Throttle valve (50%)") - components whose default name can change at runtime should call this
    * instead of writing to `labelEl` directly, so a custom name (and the hidden-by-default
    * visibility) keeps taking priority over it correctly. */
   setDefaultName(text: string): void;

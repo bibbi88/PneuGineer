@@ -6,6 +6,7 @@ import {
   flowMultiplierToOpenExhaust,
   markExhaustFlow,
   portKey,
+  pressureAt,
   sourceDistance,
   type FrameGraph,
 } from './pressure';
@@ -13,7 +14,6 @@ import { createSource } from '../components/source';
 import { createAndValve } from '../components/andValve';
 import { createOrValve } from '../components/orValve';
 import { createCheckValve } from '../components/checkValve';
-import { createRestrictor } from '../components/restrictor';
 import { createValve52 } from '../components/valve52';
 import { createValve52Mono } from '../components/valve52Mono';
 import { createOneWayFlowControlValve } from '../components/oneWayFlowControlValve';
@@ -228,14 +228,6 @@ describe('computeFrameGraph', () => {
     );
   });
 
-  it('restrictor throttles flow via flowMultiplier without blocking topology', () => {
-    const restrictor = createRestrictor(compLayer(), 0, 0);
-    expect(restrictor.conductivityRule({ isPressurized: () => false })).toEqual([
-      { a: 'IN', b: 'OUT' },
-    ]);
-    expect(restrictor.flowMultiplier?.('IN', 'OUT')).toBeCloseTo(0.5);
-  });
-
   it('one-way flow control valve only throttles the OUT->IN direction, not IN->OUT too', () => {
     const sourceOnIn = createSource(compLayer(), 0, 0);
     const valve = createOneWayFlowControlValve(compLayer(), 0, 0);
@@ -288,6 +280,7 @@ describe('computeFrameGraph', () => {
         flowMultiplierToNearestSource(graph, portKey(cyl.id, p)),
       flowMultiplierToOpenExhaust: (p: string) =>
         flowMultiplierToOpenExhaust(graph, portKey(cyl.id, p)),
+      pressureAt: (p: string) => pressureAt(graph, portKey(cyl.id, p)),
       emitSignal: () => {},
       readSignal: () => false,
     };

@@ -1,15 +1,15 @@
 import type { Component } from '../core/types';
-import type { ViewportAdapter } from './viewport';
 import type { ProjectBarRefs } from './projectBar';
+import { openTipsDialog } from './tipsDialog';
+import { createIcon } from './icons';
 import { appState } from '../app/AppState';
 import { getSelectedComponents, onSelectionChange } from '../interaction/selection';
 import { redrawAllConnections } from '../wires/connection';
-import { setGridEnabled } from '../core/grid';
-import { loadGridPreference, saveGridPreference } from '../app/gridPreference';
 import { setPageFrameSize, renderPageFrame, type PageFrameSize } from './pageFrame';
-import { RESTRICTOR_TYPE } from '../components/restrictor';
 import { ONE_WAY_FLOW_CONTROL_VALVE_TYPE } from '../components/oneWayFlowControlValve';
 import { THROTTLE_VALVE_TYPE } from '../components/throttleValve';
+import { PRESSURE_REDUCING_VALVE_TYPE } from '../components/pressureReducingValve';
+import { SOURCE_PRESSURE } from '../sim/constants';
 import { QUICK_EXHAUST_VALVE_TYPE } from '../components/quickExhaustValve';
 import { TIME_DELAY_VALVE_TYPE } from '../components/timeDelayValve';
 import { LIMIT_VALVE_32_TYPE } from '../components/limitValve32';
@@ -164,33 +164,44 @@ const VALVE_53_MODES: Array<{ type: string; label: string }> = [
 ];
 
 const INSPECTOR_FIELDS: Record<string, InspectorField[]> = {
-  [RESTRICTOR_TYPE]: [
-    { kind: 'number', key: 'flowPct', label: 'Flow %', min: 0, max: 100, step: 5 },
-  ],
   [ONE_WAY_FLOW_CONTROL_VALVE_TYPE]: [
     { kind: 'number', key: 'flowPct', label: 'Reverse flow %', min: 0, max: 100, step: 5 },
   ],
   [THROTTLE_VALVE_TYPE]: [
     { kind: 'number', key: 'flowPct', label: 'Flow %', min: 0, max: 100, step: 5 },
   ],
+  [PRESSURE_REDUCING_VALVE_TYPE]: [
+    {
+      kind: 'number',
+      key: 'outletPressure',
+      label: 'Set pressure (bar)',
+      min: 0,
+      max: SOURCE_PRESSURE,
+      step: 0.5,
+    },
+  ],
   [QUICK_EXHAUST_VALVE_TYPE]: [
     { kind: 'checkbox', key: 'showPortNumbers', label: 'Show port numbers' },
   ],
   [TIME_DELAY_VALVE_TYPE]: [
     { kind: 'number', key: 'delaySec', label: 'Delay (s)', min: 0, max: 30, step: 0.1 },
+    { kind: 'checkbox', key: 'normallyOpen', label: 'Normally open (NO)' },
     { kind: 'silencer', key: 'silencer3', port: '3', label: 'Port 3 silencer' },
   ],
   [PUSH_BUTTON_32_TYPE]: [
     { kind: 'actuatorMode', label: 'Control mode', options: ACTUATOR_MODES },
+    { kind: 'checkbox', key: 'normallyOpen', label: 'Normally open (NO)' },
     { kind: 'silencer', key: 'silencer3', port: '3', label: 'Port 3 silencer' },
   ],
   [LIMIT_VALVE_32_TYPE]: [
     { kind: 'actuatorMode', label: 'Control mode', options: ACTUATOR_MODES },
+    { kind: 'checkbox', key: 'normallyOpen', label: 'Normally open (NO)' },
     { kind: 'sensorKeySelect', key: 'sensorKey', label: 'Sensor key' },
     { kind: 'silencer', key: 'silencer3', port: '3', label: 'Port 3 silencer' },
   ],
   [AIR_VALVE_32_TYPE]: [
     { kind: 'actuatorMode', label: 'Control mode', options: ACTUATOR_MODES },
+    { kind: 'checkbox', key: 'normallyOpen', label: 'Normally open (NO)' },
     { kind: 'silencer', key: 'silencer3', port: '3', label: 'Port 3 silencer' },
   ],
   [VALVE_52_TYPE]: [
@@ -882,40 +893,32 @@ function renderProjectInfoSection(container: HTMLElement, projectBar: ProjectBar
   container.appendChild(frameHint);
 }
 
-/** A workspace-wide preference, not tied to any component, so it renders unconditionally -
- * unlike everything else in this panel, it stays visible with nothing (or several things)
- * selected. Turns off both the visual grid and snap-to-grid together, since a hidden grid a
- * component still silently snaps to is a worse experience than either fully on or fully off. */
-function renderGridSection(container: HTMLElement, viewport: ViewportAdapter): void {
+/** Pinned to the bottom of the panel, below whatever else is showing. It's help rather than a
+ * setting, so it renders unconditionally - the one thing here that's always available no matter
+ * what (or how much) is selected. */
+function renderTipsSection(container: HTMLElement): void {
+  const section = document.createElement('div');
+  section.className = 'inspectorTips';
+
   const heading = document.createElement('div');
   heading.className = 'inspectorSectionHeading';
-  heading.textContent = 'Grid';
-  container.appendChild(heading);
+  heading.textContent = 'Help';
+  section.appendChild(heading);
 
-  const row = document.createElement('label');
-  row.className = 'inspectorRow';
-  const span = document.createElement('span');
-  span.textContent = 'Show grid';
-  const checkbox = document.createElement('input');
-  checkbox.type = 'checkbox';
-  checkbox.checked = loadGridPreference();
-  checkbox.addEventListener('change', () => {
-    setGridEnabled(checkbox.checked);
-    viewport.setGridVisible(checkbox.checked);
-    saveGridPreference(checkbox.checked);
-  });
-  row.append(span, checkbox);
-  container.appendChild(row);
+  const btn = document.createElement('button');
+  btn.className = 'btn inspectorTipsBtn';
+  btn.type = 'button';
+  btn.append(createIcon('tips'), document.createTextNode('Tips & shortcuts'));
+  btn.addEventListener('click', () => openTipsDialog());
+  section.appendChild(btn);
+
+  container.appendChild(section);
 }
 
-export function renderInspector(
-  container: HTMLElement,
-  viewport: ViewportAdapter,
-  projectBar: ProjectBarRefs,
-): void {
-  function refresh(): void {
-    container.replaceChildren();
-
+export function renderInspector(container: HTMLElement, projectBar: ProjectBarRefs): void {
+  // Split from refresh() so the tips section below can always be appended last, whichever of
+  // this function's several early exits the body took.
+  function renderBody(): void {
     const selected = getSelectedComponents();
     if (selected.length !== 1) {
       // Project info and the grid are workspace-wide settings, not component ones - but they
@@ -923,7 +926,6 @@ export function renderInspector(
       // space with (or look like part of) whatever's actually being edited.
       if (selected.length === 0) {
         renderProjectInfoSection(container, projectBar);
-        renderGridSection(container, viewport);
       }
 
       const hint = document.createElement('p');
@@ -964,6 +966,12 @@ export function renderInspector(
       else if (field.kind === 'readonlyText') renderReadonlyTextField(container, comp, field, snap);
       else renderNumberOrTextField(container, comp, field, snap);
     }
+  }
+
+  function refresh(): void {
+    container.replaceChildren();
+    renderBody();
+    renderTipsSection(container);
   }
 
   onSelectionChange(refresh);

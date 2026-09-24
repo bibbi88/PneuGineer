@@ -245,11 +245,15 @@ export function createCylinderDouble(compLayer: HTMLElement, x: number, y: numbe
       // rod-side one (the rod passes out through the same end its port sits on), so it only
       // ever pushes against the smaller annular area, not the full bore.
       if (showForce) {
+        // The pressure actually reaching the driven port, not the supply pressure - a regulator
+        // upstream reduces the force this cylinder can develop, which is most of the reason to
+        // fit one.
+        const drivePressure = drivingPort ? ctx.pressureAt(drivingPort) : 0;
         const force =
           drivingPort === 'A'
-            ? forceFromArea(boreAreaMm2(boreDiameter))
+            ? forceFromArea(boreAreaMm2(boreDiameter), drivePressure)
             : drivingPort === 'B'
-              ? forceFromArea(annularAreaMm2(boreDiameter, rodDiameter))
+              ? forceFromArea(annularAreaMm2(boreDiameter, rodDiameter), drivePressure)
               : 0;
         forceLabelEl.textContent = `${force.toFixed(0)} N`;
         forceLabelEl.style.display = '';

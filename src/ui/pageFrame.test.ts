@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { appState } from '../app/AppState';
-import { getPageFrameWorldBounds, initPageFrame, renderPageFrame, setPageFrameSize } from './pageFrame';
+import {
+  getPageFrameWorldBounds,
+  initPageFrame,
+  renderPageFrame,
+  setPageFrameSize,
+} from './pageFrame';
 import { createSource } from '../components/source';
 import type { ProjectBarRefs } from './projectBar';
 import type { ViewportAdapter } from './viewport';
@@ -33,12 +38,18 @@ function fakeWorkspace(width = 800, height = 600): HTMLElement {
   return el;
 }
 
-function fakeViewport(setTransform: ViewportAdapter['setTransform'] = () => {}): ViewportAdapter {
+/** Remembers what it was last set to, like the real viewport does - fitViewToWorldRect reads
+ * the transform back after setting it, to re-center if its requested scale got clamped. */
+function fakeViewport(onSetTransform: ViewportAdapter['setTransform'] = () => {}): ViewportAdapter {
+  let current = { scale: 1, tx: 0, ty: 0 };
   return {
     clientToWorld: () => ({ x: 0, y: 0 }),
     applyTransform: () => {},
-    getTransform: () => ({ scale: 1, tx: 0, ty: 0 }),
-    setTransform,
+    getTransform: () => ({ ...current }),
+    setTransform: (scale, tx, ty) => {
+      current = { scale: Math.max(0.1, Math.min(4.0, scale)), tx, ty };
+      onSetTransform(scale, tx, ty);
+    },
     setGridVisible: () => {},
   };
 }

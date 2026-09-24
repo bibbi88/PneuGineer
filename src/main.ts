@@ -1,7 +1,6 @@
 import './ui/styles/app.css';
 import { initViewport } from './ui/viewport';
 import { renderComponentLibrary, COMPONENT_DRAG_MIME, getDraggedComponentType } from './ui/sidebar';
-import { renderToolbar } from './ui/toolbar';
 import { placeableComponentsByCategory, type ComponentFactoryContext } from './components/registry';
 import { initLinking } from './interaction/linking';
 import { initMarquee } from './interaction/marquee';
@@ -13,14 +12,14 @@ import {
   setWireInsertHighlight,
   isWireInsertableType,
 } from './interaction/wireInsertion';
-import { spawnComponent } from './interaction/spawn';
+import { placeComponent } from './interaction/spawn';
 import { initValveActuatorSwap } from './interaction/valveActuatorSwap';
 import { initClipboard } from './interaction/clipboard';
 import { initWires } from './wires/connection';
 import { initWireHandles } from './wires/handles';
 import { startSimLoop } from './sim/loop';
 import { appState } from './app/AppState';
-import { renderProjectBar } from './ui/projectBar';
+import { renderTopbar } from './ui/topbar';
 import { showRestoreBanner } from './ui/restoreBanner';
 import { scheduleAutosave, readAutosave, clearAutosave } from './persistence/autosave';
 import { loadProject } from './persistence/project';
@@ -28,8 +27,8 @@ import { initHistory, pushHistory, resetHistory } from './history/historyStore';
 import { renderInspector } from './ui/inspector';
 import { initPageFrame } from './ui/pageFrame';
 import { resetCylinderLetters } from './components/shared/letters';
-import { loadGridPreference } from './app/gridPreference';
-import { setGridEnabled, snap } from './core/grid';
+import { snap } from './core/grid';
+import { canEdit } from './app/modes';
 import { initConfirmBeforeUnload } from './app/confirmClose';
 
 const workspaceQuery = document.querySelector<HTMLElement>('.workspace');
@@ -40,8 +39,7 @@ const compLayerQuery = document.getElementById('compLayer');
 const connLayerQuery = document.getElementById('connLayer') as SVGSVGElement | null;
 const handleLayerQuery = document.getElementById('handleLayer') as SVGSVGElement | null;
 const sidebarButtonsQuery = document.getElementById('sidebarButtons');
-const toolbarButtonsQuery = document.getElementById('toolbarButtons');
-const projectBarQuery = document.getElementById('projectBar');
+const topbarQuery = document.getElementById('topbar');
 const inspectorQuery = document.getElementById('inspector');
 
 if (
@@ -53,8 +51,7 @@ if (
   !connLayerQuery ||
   !handleLayerQuery ||
   !sidebarButtonsQuery ||
-  !toolbarButtonsQuery ||
-  !projectBarQuery ||
+  !topbarQuery ||
   !inspectorQuery
 ) {
   throw new Error('Missing required DOM scaffold elements');
@@ -67,14 +64,10 @@ const compLayer: HTMLElement = compLayerQuery;
 const connLayer: SVGSVGElement = connLayerQuery;
 const handleLayer: SVGSVGElement = handleLayerQuery;
 const sidebarButtons: HTMLElement = sidebarButtonsQuery;
-const toolbarButtons: HTMLElement = toolbarButtonsQuery;
-const projectBarEl: HTMLElement = projectBarQuery;
+const topbarEl: HTMLElement = topbarQuery;
 const inspectorEl: HTMLElement = inspectorQuery;
 
 const viewport = initViewport(viewportQuery, workspaceEl, gridLayerEl);
-const gridPreference = loadGridPreference();
-viewport.setGridVisible(gridPreference);
-setGridEnabled(gridPreference);
 initWires(connLayer, viewport, workspaceEl);
 initWireHandles(handleLayer, viewport, workspaceEl);
 initLinking(connLayer, viewport, workspaceEl);
@@ -91,7 +84,7 @@ initClipboard(factoryCtx, viewport, workspaceEl);
 function addComponentAtViewCenter(type: string): void {
   const rect = workspaceEl.getBoundingClientRect();
   const world = viewport.clientToWorld(rect.left + rect.width / 2, rect.top + rect.height / 2);
-  spawnComponent(type, factoryCtx, viewport, snap(world.x), snap(world.y));
+  placeComponent(type, factoryCtx, viewport, snap(world.x), snap(world.y));
 }
 
 // Dragging a library tile onto the canvas places it wherever it's dropped (like a click, snapped
@@ -104,6 +97,8 @@ function addComponentAtViewCenter(type: string): void {
 // withhold that payload until the actual 'drop' event.
 workspaceEl.addEventListener('dragover', (e) => {
   if (!e.dataTransfer?.types.includes(COMPONENT_DRAG_MIME)) return;
+  // Never offer a drop target while the simulation is running - see placeComponent.
+  if (!canEdit(appState.mode)) return;
   e.preventDefault();
   e.dataTransfer.dropEffect = 'copy';
 
@@ -125,6 +120,7 @@ workspaceEl.addEventListener('drop', (e) => {
   const type = e.dataTransfer?.getData(COMPONENT_DRAG_MIME);
   setWireInsertHighlight(null);
   if (!type) return;
+  if (!canEdit(appState.mode)) return;
   e.preventDefault();
   const world = viewport.clientToWorld(e.clientX, e.clientY);
   // Dropping a check/throttle/one-way-flow valve close enough to an existing wire splices it
@@ -132,7 +128,7 @@ workspaceEl.addEventListener('drop', (e) => {
   // top of it - see interaction/wireInsertion.ts for which types support this and why.
   const spliced = trySpliceOntoWire(type, factoryCtx, viewport, workspaceEl, world);
   if (spliced) return;
-  spawnComponent(type, factoryCtx, viewport, snap(world.x), snap(world.y));
+  placeComponent(type, factoryCtx, viewport, snap(world.x), snap(world.y));
 });
 
 renderComponentLibrary(
@@ -151,16 +147,17 @@ renderComponentLibrary(
 // the user actually places still starts at "A".
 resetCylinderLetters();
 
-renderToolbar(toolbarButtons);
-const projectBar = renderProjectBar(
-  projectBarEl,
-  factoryCtx,
-  viewport,
-  connLayer,
-  frameLayer,
-  workspaceEl,
-);
-renderInspector(inspectorEl, viewport, projectBar);
+const projectBar = renderTopbar(topbarEl, factoryCtx, viewport, connLayer, frameLayer, workspaceEl);
+// The library is an editing tool, so it greys out and stops responding while the simulation
+// runs - matching the toolbar's own disabled buttons, rather than looking usable but silently
+// refusing every click.
+function refreshLibraryEnabled(): void {
+  sidebarButtons.classList.toggle('libraryDisabled', !canEdit(appState.mode));
+}
+appState.onModeChange(refreshLibraryEnabled);
+refreshLibraryEnabled();
+
+renderInspector(inspectorEl, projectBar);
 initPageFrame(frameLayer, projectBar, viewport, workspaceEl);
 startSimLoop();
 

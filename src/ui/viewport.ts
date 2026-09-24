@@ -12,6 +12,11 @@ export interface ViewportAdapter {
   getTransform(): Transform;
   setTransform(scale: number, tx: number, ty: number): void;
   setGridVisible(visible: boolean): void;
+  /** Notified after every pan/zoom, however it was triggered - wheel, middle-drag or a toolbar
+   * button. The toolbar's zoom readout uses it to stay in step with wheel zooming, which it
+   * never hears about otherwise. Optional so the hand-written adapters in tests don't all have
+   * to implement it. */
+  onTransformChange?(cb: () => void): void;
 }
 
 // 0.1 (not the original 0.2) so setTransform (see zoomToFit/page-frame fitting) can still zoom
@@ -31,6 +36,7 @@ export function initViewport(
   let panning = false;
   let panStart = { x: 0, y: 0 };
   let originStart = { x: 0, y: 0 };
+  const transformListeners: Array<() => void> = [];
 
   function applyTransform(): void {
     viewportEl.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
@@ -43,6 +49,8 @@ export function initViewport(
     const cell = GRID_SIZE * scale;
     gridLayerEl.style.backgroundSize = `${cell}px ${cell}px`;
     gridLayerEl.style.backgroundPosition = `${((tx % cell) + cell) % cell}px ${((ty % cell) + cell) % cell}px`;
+
+    for (const cb of transformListeners) cb();
   }
 
   function clientToWorld(cx: number, cy: number): { x: number; y: number } {
@@ -123,6 +131,9 @@ export function initViewport(
     },
     setGridVisible: (visible) => {
       gridLayerEl.style.display = visible ? '' : 'none';
+    },
+    onTransformChange: (cb) => {
+      transformListeners.push(cb);
     },
   };
 }

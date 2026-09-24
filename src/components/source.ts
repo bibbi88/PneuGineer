@@ -19,13 +19,20 @@ export interface SourceGeometry {
 // svgH (72, not the "natural" 73) and portY (16, not 14) are chosen together so the OUT port
 // lands exactly on the 10px grid relative to this canvas's own center - an odd svgH alone
 // leaves it a permanent half-pixel off - see src/core/grid.ts.
+//
+// cy is then what centers the drawing inside that canvas. The symbol runs from the port at
+// portY down to the bottom of the circle at cy + r, so cy = 41 puts that span at 16..56 - an
+// equal 16px margin top and bottom - where the previous 50 left 16 above and only 7 below and
+// visibly sat low in its own box (most obvious in the sidebar icon, which frames the canvas).
+// Any change here has to keep (portY - svgH / 2) a multiple of 10 or the port leaves the grid;
+// with r = 15 that means the stem length (cy - r - portY) has to stay ≡ 10 (mod 20).
 export const SOURCE_DEFAULT_GEOMETRY: SourceGeometry = {
   svgW: 46,
   svgH: 72,
   gx: -27,
   gy: 0,
   cx: 50,
-  cy: 50,
+  cy: 41,
   r: 15,
   portY: 16,
 };

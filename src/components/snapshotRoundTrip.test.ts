@@ -3,7 +3,7 @@ import { createCylinderDouble } from './cylinderDouble';
 import { createCylinderSingle } from './cylinderSingle';
 import { createValve52 } from './valve52';
 import { createValve52Mono } from './valve52Mono';
-import { createRestrictor } from './restrictor';
+import { createThrottleValve } from './throttleValve';
 import { createSource } from './source';
 import { createTextAnnotation } from './textAnnotation';
 import { createPushButton32 } from './pushButton32';
@@ -87,11 +87,11 @@ describe('component snapshot/restore round-trips', () => {
     expect(restored.snapshot()).toEqual(snap);
   });
 
-  it('restrictor round-trips flowPct', () => {
-    const original = createRestrictor(compLayer(), 0, 0);
+  it('throttleValve round-trips flowPct', () => {
+    const original = createThrottleValve(compLayer(), 0, 0);
     const snap = original.snapshot();
 
-    const restored = createRestrictor(compLayer(), 0, 0);
+    const restored = createThrottleValve(compLayer(), 0, 0);
     restored.restore(snap);
     expect(restored.snapshot()).toEqual(snap);
   });

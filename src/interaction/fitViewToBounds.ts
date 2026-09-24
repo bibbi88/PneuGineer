@@ -42,4 +42,18 @@ export function fitViewToWorldRect(
     wsRect.width / 2 - worldCx * scale,
     wsRect.height / 2 - worldCy * scale,
   );
+
+  // setTransform clamps the scale but keeps the pan offset it was handed, so a rect small
+  // enough (or large enough) to want a scale past either zoom limit would end up centered for a
+  // zoom level that was refused - visibly off to one side. Re-center on the scale that actually
+  // landed. Fitting a single small component, which is exactly what "zoom to selection" does,
+  // hits the maximum almost every time.
+  const applied = viewport.getTransform().scale;
+  if (applied !== scale) {
+    viewport.setTransform(
+      applied,
+      wsRect.width / 2 - worldCx * applied,
+      wsRect.height / 2 - worldCy * applied,
+    );
+  }
 }

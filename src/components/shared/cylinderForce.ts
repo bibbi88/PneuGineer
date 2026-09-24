@@ -18,8 +18,10 @@ export function annularAreaMm2(boreDiameterMm: number, rodDiameterMm: number): n
   return Math.max(0, boreAreaMm2(boreDiameterMm) - boreAreaMm2(rodDiameterMm));
 }
 
-/** Force (N) from `SOURCE_PRESSURE` (bar) acting across `areaMm2` - 1 bar = 0.1 N/mm², so this
- * is just that conversion factor applied. */
-export function forceFromArea(areaMm2: number): number {
-  return SOURCE_PRESSURE * 0.1 * areaMm2;
+/** Force (N) from `pressureBar` acting across `areaMm2` - 1 bar = 0.1 N/mm², so this is just
+ * that conversion factor applied. Defaults to the full supply pressure for callers that have no
+ * particular port in mind; a cylinder passes what its driven port is actually seeing, which a
+ * pressure-reducing valve upstream will have lowered (see SimStepContext.pressureAt). */
+export function forceFromArea(areaMm2: number, pressureBar: number = SOURCE_PRESSURE): number {
+  return pressureBar * 0.1 * areaMm2;
 }

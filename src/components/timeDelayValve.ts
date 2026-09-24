@@ -162,6 +162,17 @@ export function createTimeDelayValve(compLayer: HTMLElement, x: number, y: numbe
   const ports = { ...valve.ports, '12': port12 };
 
   let active = false;
+  // Swaps the two cells so the valve passes 1 -> 2 at rest instead of blocking it, turning it
+  // normally open - see pushButton32.ts, which this mirrors. Only the artwork and the rule
+  // change: actuating still slides the mover the same way, so the actuator animates identically
+  // either way round.
+  let normallyOpen = false;
+
+  /** True while 1 is connected through to 2, whichever combination of actuated and
+   * normally-open produced it - both the symbol and the rule follow this one value. */
+  function flowing(): boolean {
+    return active !== normallyOpen;
+  }
   let timer = 0;
   let delaySec = DEFAULT_DELAY_SEC;
 
@@ -183,7 +194,7 @@ export function createTimeDelayValve(compLayer: HTMLElement, x: number, y: numbe
     ports,
 
     conductivityRule(): PortConnection[] {
-      return active ? [{ a: '2', b: '1' }] : [{ a: '2', b: '3' }];
+      return flowing() ? [{ a: '2', b: '1' }] : [{ a: '2', b: '3' }];
     },
 
     step(dt: number, ctx: SimStepContext): void {
@@ -200,6 +211,7 @@ export function createTimeDelayValve(compLayer: HTMLElement, x: number, y: numbe
     snapshot(): Record<string, unknown> {
       return {
         delaySec,
+        normallyOpen,
         showName: shell.getNameVisible(),
         customName: shell.getCustomName(),
         silencer3: valve.getSilencer(),
@@ -207,10 +219,13 @@ export function createTimeDelayValve(compLayer: HTMLElement, x: number, y: numbe
     },
     restore(data: Record<string, unknown>): void {
       delaySec = data.delaySec as number;
+      normallyOpen = Boolean(data.normallyOpen);
       shell.setNameVisible(Boolean(data.showName));
       shell.setCustomName((data.customName as string | null) ?? null);
       valve.setSilencer((data.silencer3 as 'none' | 'silencer') ?? 'silencer');
       updateLabel();
+      valve.setSwapped(normallyOpen);
+      valve.setActive(active);
     },
     reset(): void {
       active = false;

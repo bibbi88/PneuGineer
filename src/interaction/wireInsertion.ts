@@ -5,7 +5,10 @@ import { appState } from '../app/AppState';
 import { spawnComponent } from './spawn';
 import { setComponentRotation } from './componentContextMenu';
 import { createConnection, redrawConnection, removeConnection } from '../wires/connection';
-import { computeConnectionAnchors, computeConnectionGeometry } from '../geometry/connectionGeometry';
+import {
+  computeConnectionAnchors,
+  computeConnectionGeometry,
+} from '../geometry/connectionGeometry';
 import {
   distPointToSegment,
   guideCorners,
@@ -21,6 +24,7 @@ import { QUICK_EXHAUST_VALVE_TYPE } from '../components/quickExhaustValve';
 import { CYLINDER_SINGLE_TYPE } from '../components/cylinderSingle';
 import { CYLINDER_DOUBLE_TYPE } from '../components/cylinderDouble';
 import { THROTTLE_VALVE_TYPE } from '../components/throttleValve';
+import { PRESSURE_REDUCING_VALVE_TYPE } from '../components/pressureReducingValve';
 import { ONE_WAY_FLOW_CONTROL_VALVE_TYPE } from '../components/oneWayFlowControlValve';
 
 /** Component types this can splice onto a wire. Most have exactly two ports, named 'IN'/'OUT',
@@ -34,6 +38,7 @@ const WIRE_INSERTABLE_TYPES = new Set<string>([
   CHECK_VALVE_TYPE,
   THROTTLE_VALVE_TYPE,
   ONE_WAY_FLOW_CONTROL_VALVE_TYPE,
+  PRESSURE_REDUCING_VALVE_TYPE,
 ]);
 
 /** How close a drop point needs to land to a wire to splice into it, rather than just landing

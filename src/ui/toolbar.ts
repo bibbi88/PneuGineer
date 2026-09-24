@@ -3,33 +3,14 @@ import { Modes } from '../app/modes';
 import { requestSingleStep } from '../sim/loop';
 import { undo, redo, canUndo, canRedo, onHistoryChange } from '../history/historyStore';
 import { redrawAllConnections } from '../wires/connection';
-import { openTipsDialog } from './tipsDialog';
+import { iconButton } from './iconButton';
+import { createIcon } from './icons';
 
+/** The toolbar's simulation section: run/stop, pause and single-step the simulation, then undo
+ * and redo. Play and Stop share one button, which swaps its icon and label to whichever action
+ * the current mode offers. */
 export function renderToolbar(container: HTMLElement): void {
-  const playStopBtn = document.createElement('button');
-  const pauseBtn = document.createElement('button');
-  const stepBtn = document.createElement('button');
-  const undoBtn = document.createElement('button');
-  const redoBtn = document.createElement('button');
-  const tipsBtn = document.createElement('button');
-
-  for (const btn of [playStopBtn, pauseBtn, stepBtn, undoBtn, redoBtn, tipsBtn]) {
-    btn.className = 'btn';
-  }
-
-  pauseBtn.textContent = '⏸ Pause';
-  stepBtn.textContent = '⏭ Step';
-  undoBtn.textContent = '↶ Undo';
-  redoBtn.textContent = '↷ Redo';
-  tipsBtn.textContent = '💡 Tips';
-  tipsBtn.addEventListener('click', () => openTipsDialog());
-
-  function updatePlayStopButton(): void {
-    playStopBtn.textContent = appState.mode === Modes.PLAY ? '⏹ Stop' : '▶ Play';
-  }
-  updatePlayStopButton();
-
-  playStopBtn.addEventListener('click', () => {
+  const playStopBtn = iconButton('play', 'Play', () => {
     const nextMode = appState.mode === Modes.PLAY ? Modes.STOP : Modes.PLAY;
     if (nextMode === Modes.STOP) {
       for (const c of appState.components) c.reset();
@@ -40,19 +21,28 @@ export function renderToolbar(container: HTMLElement): void {
       redrawAllConnections();
     }
     appState.setMode(nextMode);
-    updatePlayStopButton();
   });
-  pauseBtn.addEventListener('click', () => {
+
+  const pauseBtn = iconButton('pause', 'Pause', () => {
     appState.setMode(Modes.PAUSE);
-    updatePlayStopButton();
   });
-  stepBtn.addEventListener('click', () => {
+  const stepBtn = iconButton('step', 'Step one cycle', () => {
     appState.setMode(Modes.PAUSE);
     requestSingleStep();
-    updatePlayStopButton();
   });
-  undoBtn.addEventListener('click', undo);
-  redoBtn.addEventListener('click', redo);
+  const undoBtn = iconButton('undo', 'Undo', undo);
+  const redoBtn = iconButton('redo', 'Redo', redo);
+
+  function updatePlayStopButton(): void {
+    const stopping = appState.mode === Modes.PLAY;
+    const label = stopping ? 'Stop' : 'Play';
+    playStopBtn.title = label;
+    playStopBtn.setAttribute('aria-label', label);
+    playStopBtn.classList.toggle('iconBtn--danger', stopping);
+    playStopBtn.replaceChildren(createIcon(stopping ? 'stop' : 'play'));
+  }
+  updatePlayStopButton();
+  appState.onModeChange(updatePlayStopButton);
 
   function updateUndoRedoButtons(): void {
     undoBtn.disabled = !canUndo();
@@ -61,5 +51,5 @@ export function renderToolbar(container: HTMLElement): void {
   onHistoryChange(updateUndoRedoButtons);
   updateUndoRedoButtons();
 
-  container.append(playStopBtn, pauseBtn, stepBtn, undoBtn, redoBtn, tipsBtn);
+  container.append(playStopBtn, pauseBtn, stepBtn, undoBtn, redoBtn);
 }

@@ -4,12 +4,16 @@ import type { ComponentFactoryContext } from '../components/registry';
 import type { ViewportAdapter } from './viewport';
 import { resetHistory } from '../history/historyStore';
 import { openExportDialog } from './exportDialog';
+import { iconButton } from './iconButton';
 
 export interface ProjectBarRefs {
   getName(): string;
   setName(name: string): void;
 }
 
+/** The toolbar's project section: the project name, then save, load and export. The name field
+ * is the canonical copy - the inspector's own "Project name" row and the page frame's title
+ * block both read and write it through the refs returned here, rather than keeping their own. */
 export function renderProjectBar(
   container: HTMLElement,
   ctx: ComponentFactoryContext,
@@ -22,19 +26,16 @@ export function renderProjectBar(
   nameInput.type = 'text';
   nameInput.value = 'project';
   nameInput.className = 'projectName';
+  nameInput.title = 'Project name';
   nameInput.setAttribute('aria-label', 'Project name');
 
-  const saveBtn = document.createElement('button');
-  saveBtn.className = 'btn';
-  saveBtn.title = 'Save';
-  saveBtn.textContent = '💾 Save';
-  saveBtn.addEventListener('click', () => void saveProjectToFile(nameInput.value || 'project'));
+  const saveBtn = iconButton(
+    'save',
+    'Save project',
+    () => void saveProjectToFile(nameInput.value || 'project'),
+  );
 
-  const loadBtn = document.createElement('button');
-  loadBtn.className = 'btn';
-  loadBtn.title = 'Load';
-  loadBtn.textContent = '📂 Load';
-  loadBtn.addEventListener('click', () => {
+  const loadBtn = iconButton('folderOpen', 'Load project', () => {
     // Reset history only once a file was actually picked - loadProjectFromPicker itself
     // does the clear+rebuild, so this must run right before that, not before the picker
     // even opens (a cancelled picker shouldn't wipe undo history for nothing).
@@ -43,19 +44,11 @@ export function renderProjectBar(
     });
   });
 
-  const saveLoadRow = document.createElement('div');
-  saveLoadRow.className = 'btnRow';
-  saveLoadRow.append(saveBtn, loadBtn);
-
-  const exportBtn = document.createElement('button');
-  exportBtn.className = 'btn';
-  exportBtn.textContent = '⬇ Export…';
-  exportBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
+  const exportBtn = iconButton('download', 'Export image…', () => {
     openExportDialog(nameInput.value || 'project', connLayer, frameLayer, viewport, workspaceEl);
   });
 
-  container.append(nameInput, saveLoadRow, exportBtn);
+  container.append(nameInput, saveBtn, loadBtn, exportBtn);
 
   return {
     getName: () => nameInput.value || 'project',

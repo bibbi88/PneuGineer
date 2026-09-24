@@ -139,6 +139,17 @@ export function createLimitValve32(compLayer: HTMLElement, x: number, y: number)
   const id = uid();
 
   let active = false;
+  // Swaps the two cells so the valve passes 1 -> 2 at rest instead of blocking it, turning it
+  // normally open - see pushButton32.ts, which this mirrors. Only the artwork and the rule
+  // change: actuating still slides the mover the same way, so the actuator animates identically
+  // either way round.
+  let normallyOpen = false;
+
+  /** True while 1 is connected through to 2, whichever combination of actuated and
+   * normally-open produced it - both the symbol and the rule follow this one value. */
+  function flowing(): boolean {
+    return active !== normallyOpen;
+  }
   // A freshly placed limit switch starts unbound rather than defaulting to some sensor - every
   // new one used to default to the same fixed key (or, later, "whichever is free"), either of
   // which still means guessing at a binding you'd probably change anyway. Starting blank also
@@ -174,7 +185,7 @@ export function createLimitValve32(compLayer: HTMLElement, x: number, y: number)
     ports: valve.ports,
 
     conductivityRule(): PortConnection[] {
-      return active ? [{ a: '2', b: '1' }] : [{ a: '2', b: '3' }];
+      return flowing() ? [{ a: '2', b: '1' }] : [{ a: '2', b: '3' }];
     },
 
     recompute(): void {
@@ -185,6 +196,7 @@ export function createLimitValve32(compLayer: HTMLElement, x: number, y: number)
     snapshot(): Record<string, unknown> {
       return {
         active,
+        normallyOpen,
         sensorKey,
         showName: shell.getNameVisible(),
         customName: shell.getCustomName(),
@@ -193,11 +205,13 @@ export function createLimitValve32(compLayer: HTMLElement, x: number, y: number)
     },
     restore(data: Record<string, unknown>): void {
       active = data.active as boolean;
+      normallyOpen = Boolean(data.normallyOpen);
       sensorKey = data.sensorKey as string;
       shell.setNameVisible(Boolean(data.showName));
       shell.setCustomName((data.customName as string | null) ?? null);
       valve.setSilencer((data.silencer3 as 'none' | 'silencer') ?? 'silencer');
       updateLabel();
+      valve.setSwapped(normallyOpen);
       valve.setActive(active);
     },
     reset(): void {

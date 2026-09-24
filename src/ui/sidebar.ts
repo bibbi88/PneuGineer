@@ -29,7 +29,12 @@ export interface SidebarGroupSpec {
 
 /** The two categories reached for most while wiring up a circuit - expanded by default so they
  * don't cost an extra click on every session; the rest start collapsed. */
-const OPEN_BY_DEFAULT = new Set(['Directional valves', 'Logic']);
+const OPEN_BY_DEFAULT = new Set([
+  'Mechanical/Manual',
+  'Air operated',
+  'Solenoid operated',
+  'Logic',
+]);
 
 export function renderComponentLibrary(container: HTMLElement, groups: SidebarGroupSpec[]): void {
   const filterInput = document.createElement('input');

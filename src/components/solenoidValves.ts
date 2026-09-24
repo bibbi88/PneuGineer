@@ -353,7 +353,9 @@ export function createValve53Solenoid(compLayer: HTMLElement, x: number, y: numb
     svgW,
     svgH,
     '5/3 solenoid valve',
-    { x: geo.gx0 - geo.w0, y: geo.gy0, w: geo.w0 * 2, h: geo.h0 },
+    // Three cells wide, like the pneumatic 5/3 this shares its body with - see that valve's own
+    // note on why this isn't the 5/2 family's w0 * 2.
+    { x: geo.gx0 - geo.w0, y: geo.gy0, w: geo.w0 * 3, h: geo.h0 },
   );
   const svg = shell.svg;
   svg.style.overflow = 'visible';

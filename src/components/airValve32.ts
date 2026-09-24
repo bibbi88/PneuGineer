@@ -108,6 +108,17 @@ export function createAirValve32(compLayer: HTMLElement, x: number, y: number): 
   const ports = { ...valve.ports, '14': port14 };
 
   let active = false;
+  // Swaps the two cells so the valve passes 1 -> 2 at rest instead of blocking it, turning it
+  // normally open - see pushButton32.ts, which this mirrors. Only the artwork and the rule
+  // change: actuating still slides the mover the same way, so the actuator animates identically
+  // either way round.
+  let normallyOpen = false;
+
+  /** True while 1 is connected through to 2, whichever combination of actuated and
+   * normally-open produced it - both the symbol and the rule follow this one value. */
+  function flowing(): boolean {
+    return active !== normallyOpen;
+  }
 
   const comp: Component = {
     id: uid(),
@@ -122,7 +133,7 @@ export function createAirValve32(compLayer: HTMLElement, x: number, y: number): 
     ports,
 
     conductivityRule(): PortConnection[] {
-      return active ? [{ a: '2', b: '1' }] : [{ a: '2', b: '3' }];
+      return flowing() ? [{ a: '2', b: '1' }] : [{ a: '2', b: '3' }];
     },
 
     onPressureChange(ctx: ConductivityContext): void {
@@ -133,6 +144,7 @@ export function createAirValve32(compLayer: HTMLElement, x: number, y: number): 
     snapshot(): Record<string, unknown> {
       return {
         active,
+        normallyOpen,
         showName: shell.getNameVisible(),
         customName: shell.getCustomName(),
         silencer3: valve.getSilencer(),
@@ -140,9 +152,11 @@ export function createAirValve32(compLayer: HTMLElement, x: number, y: number): 
     },
     restore(data: Record<string, unknown>): void {
       active = data.active as boolean;
+      normallyOpen = Boolean(data.normallyOpen);
       shell.setNameVisible(Boolean(data.showName));
       shell.setCustomName((data.customName as string | null) ?? null);
       valve.setSilencer((data.silencer3 as 'none' | 'silencer') ?? 'silencer');
+      valve.setSwapped(normallyOpen);
       valve.setActive(active);
     },
     reset(): void {

@@ -3,6 +3,7 @@ import { createQuickExhaustValve } from './quickExhaustValve';
 import { createOneWayFlowControlValve } from './oneWayFlowControlValve';
 import { createThrottleValve } from './throttleValve';
 import { createTimeDelayValve } from './timeDelayValve';
+import { SOURCE_PRESSURE } from '../sim/constants';
 
 function compLayer(): HTMLElement {
   return document.createElement('div');
@@ -14,6 +15,7 @@ function stepCtx(overrides: Partial<Record<string, unknown>> = {}) {
     isPressurized: () => false,
     flowMultiplierToNearestSource: () => 1,
     flowMultiplierToOpenExhaust: () => 1,
+    pressureAt: () => SOURCE_PRESSURE,
     emitSignal: vi.fn(),
     readSignal: () => false,
     ...overrides,
