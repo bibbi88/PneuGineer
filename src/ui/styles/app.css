@@ -732,6 +732,14 @@ rect.wireHandle.wireStubHandle {
   font-weight: 600;
 }
 
+/* Two solenoids answering to one coil name - allowed (a real circuit may drive several valves
+   off one output) but nearly always a slip, and otherwise invisible until the simulation runs.
+   Same treatment as a duplicated sensor label above. */
+.solenoidLabelDuplicate {
+  fill: var(--accent);
+  font-weight: 600;
+}
+
 .port.pressurized {
   fill: var(--accent);
   stroke: var(--accent);
@@ -1045,10 +1053,20 @@ rect.wireHandle.wireStubHandle {
   font-size: 12px;
 }
 
+/* One row of orientation for a new canvas: what to do with the sidebar, and the two mouse
+   gestures that are otherwise undiscoverable. Wraps rather than running past the workspace edge
+   on a narrow window, so it stays a single row wherever there is room for one. */
 .hint {
   position: absolute;
   bottom: 8px;
   left: 8px;
+  right: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  width: fit-content;
+  max-width: calc(100% - 16px);
   padding: 6px 8px;
   font-size: 12px;
   color: #333;
@@ -1056,6 +1074,15 @@ rect.wireHandle.wireStubHandle {
   border: 1px solid #ddd;
   border-radius: 6px;
   z-index: 3;
+}
+
+.hint .hintSep {
+  color: var(--faint);
+}
+
+.hint .hintKey {
+  font-weight: 600;
+  color: var(--ink);
 }
 
 /* ---------- Export dialog ---------- */

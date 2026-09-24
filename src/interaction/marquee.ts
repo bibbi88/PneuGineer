@@ -16,6 +16,10 @@ export function initMarquee(workspaceEl: HTMLElement, connLayer: SVGSVGElement):
   workspaceEl.addEventListener('mousedown', (e) => {
     if (e.target !== connLayer && e.target !== workspaceEl) return;
     if (e.button !== 0) return;
+    // Alt + left is the viewport's own pan gesture (ui/viewport.ts) - without this the press
+    // would start a marquee at the same time as the pan, leaving a rubber band stretching
+    // across the screen while the view slides under it.
+    if (e.altKey) return;
 
     const additive = e.shiftKey;
     if (!additive) clearSelection();

@@ -28,7 +28,9 @@ const TIP_SECTIONS: TipSection[] = [
     heading: 'Canvas navigation',
     tips: [
       'Scroll to zoom in/out.',
-      'Middle-click drag (or Alt + right-click drag) to pan.',
+      'Middle-click drag, or Alt + drag with either outer button, to pan.',
+      'Drag with the left button on empty canvas to rubber-band select; hold Shift to add to ' +
+        'the current selection rather than replace it.',
       'Right-click empty canvas → Zoom to fit, the same as the toolbar button.',
       'Right-click empty canvas → Paste, to drop a copy exactly where you clicked.',
     ],
@@ -76,6 +78,9 @@ const TIP_SECTIONS: TipSection[] = [
         'a lamp. Electrical terminals (dark blue) only connect to other electrical terminals.',
       'A coil publishes its name (e.g. Y1, K1) while energized. A solenoid valve with the same ' +
         'name shifts, and a contact whose "Signal" is that name (a relay contact) closes.',
+      'Each solenoid valve you place takes the next free Y name, so two valves never start out ' +
+        'sharing a coil. If you rename one onto another the labels turn red - allowed, since a ' +
+        'real circuit may drive several valves off one output, but usually a slip.',
       'Set a contact’s Signal to a cylinder sensor label (e.g. A1) to use it as a position sensor.',
       'The PLC has inputs I0.0-I0.3 (true while wired to +24 V), outputs Q0.0-Q0.3 (drive their ' +
         'terminal to +24 V when true) and L+/M supply terminals. Double-click the PLC to write ' +

@@ -90,7 +90,10 @@ export function initViewport(
 
   window.addEventListener('mousedown', (e) => {
     if (!isOverWorkspace(e.clientX, e.clientY)) return;
-    if (e.button === 1 || (e.button === 2 && e.altKey)) {
+    // Middle drag, or Alt with either outer button. Alt is what keeps the left-button pan out
+    // of the way of marquee selection, which owns a plain left drag on empty canvas.
+    const panButton = e.button === 1 || ((e.button === 0 || e.button === 2) && e.altKey);
+    if (panButton) {
       panning = true;
       panStart = { x: e.clientX, y: e.clientY };
       originStart = { x: tx, y: ty };

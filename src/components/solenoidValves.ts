@@ -1,6 +1,7 @@
 import type { Component, PortConnection } from '../core/types';
 import { uid } from '../core/ids';
 import { getSignal } from '../sim/signals';
+import { appState } from '../app/AppState';
 import { buildComponentShell, createSvgEl } from './shared/svgHelpers';
 import { setSilencerState, type SilencerOption } from './shared/silencer';
 import { VALVE_52_MONO_DEFAULT_GEOMETRY, drawValve52MonoBody } from './valve52Mono';
@@ -15,6 +16,81 @@ import { addSpringZigzag } from './shared/spring';
 export const VALVE_52_SOLENOID_TYPE = 'valve52Solenoid';
 export const VALVE_52_SOLENOID_DOUBLE_TYPE = 'valve52SolenoidDouble';
 export const VALVE_53_SOLENOID_TYPE = 'valve53Solenoid';
+
+const SOLENOID_VALVE_TYPES = new Set<string>([
+  VALVE_52_SOLENOID_TYPE,
+  VALVE_52_SOLENOID_DOUBLE_TYPE,
+  VALVE_53_SOLENOID_TYPE,
+]);
+
+/** Every snapshot field these valves keep a coil name in - one ('key') on the single-solenoid
+ * valve, two ('key14'/'key12') on the double-ended ones. */
+const SOLENOID_KEY_FIELDS = ['key', 'key14', 'key12'] as const;
+
+/**
+ * The next `count` coil names not already used by a solenoid valve on the canvas, so dropping a
+ * second valve doesn't silently give it the same coil as the first - both would then shift
+ * together off one signal, which is rarely what's wanted and is invisible until you run it.
+ *
+ * Scoped to these valves on purpose. Electrical coils allocate their own names from the same Y
+ * series (see nextFreeKey in electrical.ts) *without* looking here, so the first coil placed
+ * comes out as Y1 and drives the first valve placed - the pairing you'd want - rather than
+ * skipping past it to Y2. Matching names across the two is the mechanism, not a collision.
+ *
+ * Reads live component state rather than counting placements, so it is unaffected by the
+ * throwaway instances the sidebar builds its icons from (those never reach appState) and it
+ * reuses names freed by deleting a valve.
+ */
+function solenoidKeyUseCount(key: string): number {
+  const target = key.trim().toUpperCase();
+  if (!target) return 0;
+  let uses = 0;
+  for (const c of appState.components) {
+    if (!SOLENOID_VALVE_TYPES.has(c.type)) continue;
+    const snap = c.snapshot() as Record<string, unknown>;
+    for (const field of SOLENOID_KEY_FIELDS) {
+      const value = snap[field];
+      if (typeof value === 'string' && value.trim().toUpperCase() === target) uses++;
+    }
+  }
+  return uses;
+}
+
+/**
+ * Flags a coil label that some other solenoid - on this valve or another - already answers to.
+ * Both shift together off the one signal, which a real circuit is allowed to do, so this warns
+ * rather than blocks; but it is nearly always accidental, and it stays invisible until you run
+ * the simulation. Same treatment, and the same reasoning, as a limit switch bound to a sensor
+ * another one is already using.
+ *
+ * Counting uses rather than comparing against other components means a valve whose own two
+ * coils have been given the same name is caught too - it would otherwise look perfectly fine
+ * while both ends fired at once.
+ */
+function markDuplicateLabel(el: SVGTextElement, key: string): void {
+  el.classList.toggle('solenoidLabelDuplicate', solenoidKeyUseCount(key) > 1);
+}
+
+function nextFreeSolenoidKeys(count: number): string[] {
+  const used = new Set<string>();
+  for (const c of appState.components) {
+    if (!SOLENOID_VALVE_TYPES.has(c.type)) continue;
+    const snap = c.snapshot() as Record<string, unknown>;
+    for (const field of SOLENOID_KEY_FIELDS) {
+      const value = snap[field];
+      if (typeof value === 'string' && value.trim()) used.add(value.trim().toUpperCase());
+    }
+  }
+
+  const names: string[] = [];
+  for (let n = 1; names.length < count; n++) {
+    const name = `Y${n}`;
+    if (used.has(name)) continue;
+    used.add(name);
+    names.push(name);
+  }
+  return names;
+}
 
 const STROKE = 2;
 
@@ -95,7 +171,7 @@ export function createValve52Solenoid(compLayer: HTMLElement, x: number, y: numb
   const pilotGroup = body.gInner.lastElementChild as SVGElement;
   const nameEl = drawSolenoid(pilotGroup, 'left', 0, geo.h0 / 2);
 
-  let key = 'Y1';
+  let key = nextFreeSolenoidKeys(1)[0] ?? 'Y1';
   let silencer3: SilencerOption = 'silencer';
   let silencer5: SilencerOption = 'silencer';
   let state: 0 | 1 = 1;
@@ -108,8 +184,12 @@ export function createValve52Solenoid(compLayer: HTMLElement, x: number, y: numb
   }
   function refreshLabel(): void {
     nameEl.textContent = key;
+    markDuplicateLabel(nameEl, key);
   }
   refreshLabel();
+  // Also re-check when some *other* valve is renamed: this one's label has to turn red (or stop
+  // being red) on a change it never sees itself.
+  appState.onChange(refreshLabel);
   applyState();
 
   const comp: Component = {
@@ -207,8 +287,9 @@ export function createValve52SolenoidDouble(
   const leftName = drawSolenoid(leftGroup, 'left', 0, geo.h0 / 2);
   const rightName = drawSolenoid(rightGroup, 'right', geo.w0 * 2, geo.h0 / 2);
 
-  let key14 = 'Y1';
-  let key12 = 'Y2';
+  const [freeKey14, freeKey12] = nextFreeSolenoidKeys(2);
+  let key14 = freeKey14 ?? 'Y1';
+  let key12 = freeKey12 ?? 'Y2';
   let silencer3: SilencerOption = 'silencer';
   let silencer5: SilencerOption = 'silencer';
   let state: 0 | 1 = 1;
@@ -224,8 +305,11 @@ export function createValve52SolenoidDouble(
   function refreshLabels(): void {
     leftName.textContent = key14;
     rightName.textContent = key12;
+    markDuplicateLabel(leftName, key14);
+    markDuplicateLabel(rightName, key12);
   }
   refreshLabels();
+  appState.onChange(refreshLabels);
   applyState();
 
   const comp: Component = {
@@ -364,8 +448,9 @@ export function createValve53Solenoid(compLayer: HTMLElement, x: number, y: numb
   const name14 = drawSolenoidEnd(body.leftGroup, 'left', 0, geo.h0 / 2, geo);
   const name12 = drawSolenoidEnd(body.rightGroup, 'right', geo.w0 * 3, geo.h0 / 2, geo);
 
-  let key14 = 'Y1';
-  let key12 = 'Y2';
+  const [freeKey14, freeKey12] = nextFreeSolenoidKeys(2);
+  let key14 = freeKey14 ?? 'Y1';
+  let key12 = freeKey12 ?? 'Y2';
   let silencer3: SilencerOption = 'silencer';
   let silencer5: SilencerOption = 'silencer';
   let state: Valve53State = 'C';
@@ -377,8 +462,11 @@ export function createValve53Solenoid(compLayer: HTMLElement, x: number, y: numb
   function refreshLabels(): void {
     name14.textContent = key14;
     name12.textContent = key12;
+    markDuplicateLabel(name14, key14);
+    markDuplicateLabel(name12, key12);
   }
   refreshLabels();
+  appState.onChange(refreshLabels);
   applyState();
 
   const comp: Component = {
