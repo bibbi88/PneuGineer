@@ -30,7 +30,12 @@ import { swapComponentType } from '../interaction/valveActuatorSwap';
 import { JUNCTION_TYPE } from '../components/junction';
 import { VALVE_53_MONO_TYPE } from '../components/valve53Mono';
 import { PLC_TYPE } from '../components/plc';
-import { ELEC_CONTACT_TYPE, ELEC_COIL_TYPE, ELEC_PUSH_BUTTON_TYPE } from '../components/electrical';
+import {
+  ELEC_CONTACT_TYPE,
+  ELEC_COIL_TYPE,
+  ELEC_PUSH_BUTTON_TYPE,
+  ELEC_CHANGEOVER_TYPE,
+} from '../components/electrical';
 import {
   VALVE_52_SOLENOID_TYPE,
   VALVE_52_SOLENOID_DOUBLE_TYPE,
@@ -243,6 +248,9 @@ const INSPECTOR_FIELDS: Record<string, InspectorField[]> = {
   [ELEC_PUSH_BUTTON_TYPE]: [
     { kind: 'actuatorMode', label: 'Type', options: ELEC_CONTACT_MODES },
     { kind: 'checkbox', key: 'normallyClosed', label: 'Normally closed (NC)' },
+  ],
+  [ELEC_CHANGEOVER_TYPE]: [
+    { kind: 'text', key: 'key', label: 'Signal (relay coil or sensor, e.g. K1, A1)' },
   ],
   [PLC_TYPE]: [
     {

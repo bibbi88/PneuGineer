@@ -9,6 +9,7 @@ export const ELEC_RAIL_PLUS_TYPE = 'elecRailPlus';
 export const ELEC_RAIL_ZERO_TYPE = 'elecRailZero';
 export const ELEC_CONTACT_TYPE = 'elecContact';
 export const ELEC_PUSH_BUTTON_TYPE = 'elecPushButton';
+export const ELEC_CHANGEOVER_TYPE = 'elecChangeover';
 export const ELEC_COIL_TYPE = 'elecCoil';
 export const ELEC_LAMP_TYPE = 'elecLamp';
 
@@ -77,41 +78,44 @@ function twoTerminalPorts(g: SVGElement): Component['ports'] {
   };
 }
 
-/** The switching blade between the two fixed contact terminals: vertical while closed, swung
- * off to the side while open. NC contacts also get the short cross-bar the standard symbol
- * uses to tell them apart from NO ones at a glance. */
+/** IEC 60617 make/break contact drawn vertically: the blade pivots on the lower fixed contact.
+ * NO (07-02-01): at rest the blade leans off to the left, short of the upper contact. NC
+ * (07-02-03): the upper contact has a short hook to the right, and at rest the blade leans
+ * right and rests against the hook. Actuated, an NO blade stands straight up onto the upper
+ * contact and an NC blade swings clear of the hook, back to the NO rest position. */
 function drawContactSymbol(g: SVGElement, normallyClosed: boolean): {
   setClosed(closed: boolean): void;
   setNormallyClosed(nc: boolean): void;
-  blade: SVGLineElement;
+  /** Midpoint of the blade, where an actuator's mechanical link attaches. */
+  bladeMid(): { x: number; y: number };
 } {
   g.append(line(CX, TOP_Y, CX, CONTACT_TOP_Y), line(CX, CONTACT_BOT_Y, CX, BOT_Y));
-  g.append(
-    createSvgEl('circle', { cx: CX, cy: CONTACT_TOP_Y, r: 2.5, fill: STROKE }),
-    createSvgEl('circle', { cx: CX, cy: CONTACT_BOT_Y, r: 2.5, fill: STROKE }),
-  );
+  const hook = line(CX, CONTACT_TOP_Y, CX + 10, CONTACT_TOP_Y);
   const blade = line(CX, CONTACT_BOT_Y, CX, CONTACT_TOP_Y);
-  const nc = line(CX - 8, CONTACT_TOP_Y + 4, CX + 8, CONTACT_TOP_Y + 12, 1.5);
-  g.append(blade, nc);
+  g.append(hook, blade);
 
-  let closed = false;
+  let nc = normallyClosed;
+  let closed = normallyClosed;
+  let end = { x: CX, y: CONTACT_TOP_Y };
   function apply(): void {
-    blade.setAttribute('x2', String(closed ? CX : CX + 14));
-    blade.setAttribute('y2', String(closed ? CONTACT_TOP_Y : CONTACT_TOP_Y + 6));
+    if (closed) end = nc ? { x: CX + 14, y: CONTACT_TOP_Y - 3 } : { x: CX, y: CONTACT_TOP_Y };
+    else end = { x: CX - 13, y: CONTACT_TOP_Y + 3 };
+    blade.setAttribute('x2', String(end.x));
+    blade.setAttribute('y2', String(end.y));
+    hook.style.display = nc ? '' : 'none';
   }
-  function setNormallyClosed(v: boolean): void {
-    nc.style.display = v ? '' : 'none';
-  }
-  setNormallyClosed(normallyClosed);
   apply();
 
   return {
-    blade,
     setClosed(v: boolean): void {
       closed = v;
       apply();
     },
-    setNormallyClosed,
+    setNormallyClosed(v: boolean): void {
+      nc = v;
+      apply();
+    },
+    bladeMid: () => ({ x: (CX + end.x) / 2, y: (CONTACT_BOT_Y + end.y) / 2 }),
   };
 }
 
@@ -121,8 +125,10 @@ function railComponent(
   y: number,
   kind: 'plus' | 'zero',
 ): Component {
-  const w = 100;
-  const h = 40;
+  // Upright and narrow like FluidSIM's electrical connections, so it sits directly above (+24 V)
+  // or below (0 V) the current path it feeds. The port stays 20px off the canvas center, on grid.
+  const w = 40;
+  const h = 60;
   const type = kind === 'plus' ? ELEC_RAIL_PLUS_TYPE : ELEC_RAIL_ZERO_TYPE;
   const shell = buildComponentShell(
     compLayer,
@@ -134,12 +140,25 @@ function railComponent(
     kind === 'plus' ? '+24 V supply' : '0 V supply',
     { x: 5, y: 0, w: w - 10, h },
   );
-  // Plus rail: bar on top with the terminal below it; zero rail: the mirror image.
-  const barY = kind === 'plus' ? 12 : 28;
-  const portY = kind === 'plus' ? 30 : 10;
-  shell.svg.append(line(5, barY, w - 5, barY, 3), line(w / 2, barY, w / 2, portY));
-  const label = textEl(w / 2 + 6, kind === 'plus' ? 8 : 38, 11, 'start');
-  label.textContent = kind === 'plus' ? '+24 V' : '0 V';
+  // IEC 60617 terminal (03-02-02, an open circle) with the conductor running to the port: the
+  // plus supply feeds down from above, the zero supply returns up from below. The voltage is
+  // written on the far side of the terminal, as in FluidSIM.
+  const TERM_R = 4;
+  const termY = kind === 'plus' ? 22 : 38;
+  const portY = kind === 'plus' ? 50 : 10;
+  shell.svg.append(
+    line(w / 2, kind === 'plus' ? termY + TERM_R : termY - TERM_R, w / 2, portY),
+    createSvgEl('circle', {
+      cx: w / 2,
+      cy: termY,
+      r: TERM_R,
+      fill: '#fff',
+      stroke: STROKE,
+      'stroke-width': 2,
+    }),
+  );
+  const label = textEl(w / 2, kind === 'plus' ? termY - TERM_R - 4 : termY + TERM_R + 12, 11);
+  label.textContent = kind === 'plus' ? '+24V' : '0V';
   shell.svg.appendChild(label);
   const ports = { P: createPort(shell.svg, 'P', w / 2, portY, 'V', { electrical: true }) };
 
@@ -192,7 +211,8 @@ export function createElecContact(compLayer: HTMLElement, x: number, y: number):
   let normallyClosed = false;
   let closed = false;
   const symbol = drawContactSymbol(g, normallyClosed);
-  const label = textEl(CX + 12, CONTACT_TOP_Y - 4, 11, 'start');
+  // Above the NC hook / blade tip, beside the upper conductor.
+  const label = textEl(CX + 5, CONTACT_TOP_Y - 10, 11, 'start');
   g.appendChild(label);
   const ports = twoTerminalPorts(g);
 
@@ -252,6 +272,85 @@ export function createElecContact(compLayer: HTMLElement, x: number, y: number):
   return comp;
 }
 
+/**
+ * A changeover contact (växelkontakt, IEC 60617 07-02-04) driven by a named signal, like
+ * {@link createElecContact}: the common terminal (bottom) connects to NC (top left) at rest and
+ * switches over to NO (top right, in line with the common) while the signal is on.
+ */
+export function createElecChangeover(compLayer: HTMLElement, x: number, y: number): Component {
+  const { shell, g } = twoTerminalBase(compLayer, ELEC_CHANGEOVER_TYPE, x, y, 'Changeover');
+  const NC_X = CX - 20;
+  let key = '';
+  let operated = false;
+  g.append(
+    line(CX, CONTACT_BOT_Y, CX, BOT_Y),
+    line(CX, TOP_Y, CX, CONTACT_TOP_Y),
+    line(NC_X, TOP_Y, NC_X, CONTACT_TOP_Y),
+    line(NC_X, CONTACT_TOP_Y, NC_X + 10, CONTACT_TOP_Y),
+  );
+  const blade = line(CX, CONTACT_BOT_Y, CX, CONTACT_TOP_Y);
+  g.appendChild(blade);
+  const label = textEl(CX + 5, CONTACT_TOP_Y - 10, 11, 'start');
+  g.appendChild(label);
+  const ports: Component['ports'] = {
+    NC: createPort(g, 'NC', NC_X, TOP_Y, 'V', { electrical: true }),
+    NO: createPort(g, 'NO', CX, TOP_Y, 'V', { electrical: true }),
+    COM: createPort(g, 'COM', CX, BOT_Y, 'V', { electrical: true }),
+  };
+
+  function refresh(): void {
+    label.textContent = key;
+    // At rest the blade leans left past the NC hook; operated it stands up onto the NO contact.
+    blade.setAttribute('x2', String(operated ? CX : NC_X + 6));
+    blade.setAttribute('y2', String(operated ? CONTACT_TOP_Y : CONTACT_TOP_Y - 3));
+  }
+  refresh();
+
+  const comp: Component = {
+    id: uid(),
+    type: ELEC_CHANGEOVER_TYPE,
+    el: shell.el,
+    x,
+    y,
+    svgW: TWO_TERMINAL_W,
+    svgH: TWO_TERMINAL_H,
+    gx: 0,
+    gy: 0,
+    ports,
+    electrical: {
+      closedEdges: (): PortConnection[] => [{ a: 'COM', b: operated ? 'NO' : 'NC' }],
+    },
+    conductivityRule: (): PortConnection[] => [],
+    recompute(): void {
+      operated = key ? getSignal(key) : false;
+      refresh();
+    },
+    snapshot: () => ({
+      key,
+      showName: shell.getNameVisible(),
+      customName: shell.getCustomName(),
+    }),
+    restore(data: Record<string, unknown>): void {
+      key = (data.key as string) ?? '';
+      shell.setNameVisible(Boolean(data.showName));
+      shell.setCustomName((data.customName as string | null) ?? null);
+      comp.recompute?.();
+    },
+    reset(): void {
+      comp.recompute?.();
+    },
+    setPos(nx: number, ny: number): void {
+      comp.x = nx;
+      comp.y = ny;
+      shell.setPos(nx, ny);
+    },
+    getBounds: shell.getBounds,
+    setSelected: shell.setSelected,
+  };
+  comp.recompute?.();
+  return comp;
+}
+
 /** A manually operated contact: held closed (NO) or open (NC) while the mouse is pressed on it
  * during a run; Ctrl+click latches it, like the pneumatic push button. */
 export function createElecPushButton(compLayer: HTMLElement, x: number, y: number): Component {
@@ -260,21 +359,26 @@ export function createElecPushButton(compLayer: HTMLElement, x: number, y: numbe
   let pressed = false;
   let latched = false;
   const symbol = drawContactSymbol(g, normallyClosed);
-  // Dashed actuator link from the blade out to the push head.
-  const head = createSvgEl('g');
-  head.append(
-    createSvgEl('line', {
-      x1: CX + 2,
-      y1: 50,
-      x2: CX + 22,
-      y2: 50,
-      stroke: STROKE,
-      'stroke-width': 1.5,
-      'stroke-dasharray': '3 3',
-    }),
-    line(CX + 22, 42, CX + 22, 58),
-  );
-  g.appendChild(head);
+  // IEC 60617 02-13-05 "operated by pushing": a "[" bracket on the left, joined to the blade by
+  // a dashed mechanical link (02-12-01). Pressing slides the bracket toward the contact.
+  const HEAD_X = CX - 20;
+  const HEAD_Y = 50;
+  const link = createSvgEl('line', {
+    x1: HEAD_X,
+    y1: HEAD_Y,
+    x2: CX,
+    y2: HEAD_Y,
+    stroke: STROKE,
+    'stroke-width': 1.5,
+    'stroke-dasharray': '3 2',
+  });
+  const head = createSvgEl('path', {
+    d: `M ${HEAD_X + 4} ${HEAD_Y - 8} H ${HEAD_X} V ${HEAD_Y + 8} H ${HEAD_X + 4}`,
+    fill: 'none',
+    stroke: STROKE,
+    'stroke-width': 2,
+  });
+  g.append(link, head);
   const ports = twoTerminalPorts(g);
 
   function isClosed(): boolean {
@@ -283,7 +387,13 @@ export function createElecPushButton(compLayer: HTMLElement, x: number, y: numbe
   function refresh(): void {
     symbol.setNormallyClosed(normallyClosed);
     symbol.setClosed(isClosed());
-    head.setAttribute('transform', pressed ? 'translate(-4,0)' : '');
+    const shift = pressed ? 4 : 0;
+    head.setAttribute('transform', shift ? `translate(${shift},0)` : '');
+    const mid = symbol.bladeMid();
+    link.setAttribute('x1', String(HEAD_X + shift));
+    link.setAttribute('x2', String(mid.x));
+    link.setAttribute('y1', String(mid.y));
+    link.setAttribute('y2', String(mid.y));
   }
   refresh();
 

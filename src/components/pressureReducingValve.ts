@@ -1,6 +1,6 @@
 import type { Component, FlowVisualContext, PortConnection, PortKey } from '../core/types';
 import { uid } from '../core/ids';
-import { buildComponentShell, createPort, createSvgEl, addArrowMarker } from './shared/svgHelpers';
+import { buildComponentShell, createPort, createSvgEl } from './shared/svgHelpers';
 import { addSpringZigzag, SPRING_DEFAULT_GEOMETRY } from './shared/spring';
 import { SOURCE_PRESSURE } from '../sim/constants';
 
@@ -55,14 +55,14 @@ export const PRESSURE_REDUCING_VALVE_DEFAULT_GEOMETRY: PressureReducingValveGeom
   localH: 100,
   portX: 46,
   portMargin: 10,
-  boxHalfW: 18,
-  boxHalfH: 22,
+  boxHalfW: 20,
+  boxHalfH: 20,
   arrowInset: 6,
   springSpan: SPRING_DEFAULT_GEOMETRY.springSpan,
   springSegLen: SPRING_DEFAULT_GEOMETRY.springSegLen,
   springZigW: SPRING_DEFAULT_GEOMETRY.springZigW,
   springZigH: SPRING_DEFAULT_GEOMETRY.springZigH,
-  pilotX: 88,
+  pilotX: 82,
   pilotTapY: 6,
   adjustHalfH: 14,
 };
@@ -73,13 +73,38 @@ const OY = 7;
  * so a freshly placed valve reads as doing something rather than passing supply straight on. */
 const DEFAULT_OUTLET_PRESSURE = 3.0;
 
+/** A straight arrow from (x1, y1) to the tip at (x2, y2) with a filled head of fixed size. Drawn
+ * directly rather than with the shared SVG marker, whose head scales with stroke width and so
+ * swamps a symbol this small. */
+function addArrow(
+  g: SVGElement,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  width: number,
+  headLen: number,
+  headHalfW: number,
+): void {
+  const len = Math.hypot(x2 - x1, y2 - y1);
+  const ux = (x2 - x1) / len;
+  const uy = (y2 - y1) / len;
+  const bx = x2 - ux * headLen;
+  const by = y2 - uy * headLen;
+  g.append(
+    createSvgEl('line', { x1, y1, x2: bx, y2: by, stroke: '#111', 'stroke-width': width }),
+    createSvgEl('path', {
+      d: `M ${x2} ${y2} L ${bx - uy * headHalfW} ${by + ux * headHalfW} L ${bx + uy * headHalfW} ${by - ux * headHalfW} Z`,
+      fill: '#111',
+    }),
+  );
+}
+
 /** Draws the symbol into `g` and returns the port positions that resulted. Pure with respect to
  * `g`'s own contents, so the symbol lab can call it repeatedly against a cleared group. */
 export function drawPressureReducingValveBody(
-  svg: SVGSVGElement,
   g: SVGElement,
   geo: PressureReducingValveGeometry,
-  arrowId: string,
 ): {
   bottomY: number;
   topY: number;
@@ -94,8 +119,6 @@ export function drawPressureReducingValveBody(
   const boxBottom = midY + geo.boxHalfH;
   const boxLeft = geo.portX - geo.boxHalfW;
   const boxRight = geo.portX + geo.boxHalfW;
-
-  addArrowMarker(svg, arrowId);
 
   // One element for both stubs (two subpaths) so there is a single thing to highlight, and so
   // neither stub runs through the envelope - the arrow inside is what carries flow across it.
@@ -121,45 +144,45 @@ export function drawPressureReducingValveBody(
   );
 
   // Flow arrow, pointing the way through the valve: in at the bottom, out at the top.
-  g.appendChild(
-    createSvgEl('line', {
-      x1: geo.portX,
-      y1: boxBottom - geo.arrowInset,
-      x2: geo.portX,
-      y2: boxTop + geo.arrowInset,
-      stroke: '#111',
-      'stroke-width': 2,
-      'marker-end': `url(#${arrowId})`,
-    }),
-  );
+  addArrow(g, geo.portX, boxBottom - geo.arrowInset, geo.portX, boxTop + geo.arrowInset, 2, 8, 4);
 
-  // Setting spring, bearing on the envelope's left wall, with the diagonal adjustability arrow
-  // struck through it. Same spring symbol the valve family uses (shared/spring.ts).
+  // Setting spring, bearing on the envelope's left wall, with the thin diagonal adjustability
+  // arrow struck across it - kept clear of the envelope so the spring stays readable. Same
+  // spring symbol the valve family uses (shared/spring.ts).
   const springEnd = boxLeft - geo.springSpan;
   addSpringZigzag(g, boxLeft, springEnd, midY, 2, geo);
-  g.appendChild(
-    createSvgEl('line', {
-      x1: springEnd - 4,
-      y1: midY + geo.adjustHalfH,
-      x2: boxLeft + 4,
-      y2: midY - geo.adjustHalfH,
-      stroke: '#111',
-      'stroke-width': 2,
-      'marker-end': `url(#${arrowId})`,
-    }),
+  addArrow(
+    g,
+    springEnd + 2,
+    midY + geo.adjustHalfH,
+    boxLeft - 4,
+    midY - geo.adjustHalfH,
+    1.5,
+    6,
+    3,
   );
 
-  // Control line, dashed, tapped off the outlet and led round to the opposite wall - the one
-  // feature that distinguishes this from a relief valve, which taps its inlet instead.
+  // Control line, dashed, tapped off the outlet (with a junction dot where it joins) and led
+  // round to the opposite wall, where it acts against the spring - the one feature that
+  // distinguishes this from a relief valve, which taps its inlet instead.
+  const tapY = boxTop - geo.pilotTapY;
+  const DASH = 4;
+  const GAP = 3;
+  const pilotLen = geo.pilotX - geo.portX + (midY - tapY) + (geo.pilotX - boxRight);
+  // Phase the dashes so the line always ends on a full dash at the envelope wall rather than
+  // stopping short in a gap (the start is hidden under the junction dot anyway).
+  const dashOffset = (((DASH - pilotLen) % (DASH + GAP)) + DASH + GAP) % (DASH + GAP);
   g.appendChild(
     createSvgEl('path', {
-      d: `M ${geo.portX} ${boxTop - geo.pilotTapY} L ${geo.pilotX} ${boxTop - geo.pilotTapY} L ${geo.pilotX} ${midY} L ${boxRight} ${midY}`,
+      d: `M ${geo.portX} ${tapY} L ${geo.pilotX} ${tapY} L ${geo.pilotX} ${midY} L ${boxRight} ${midY}`,
       fill: 'none',
       stroke: '#111',
       'stroke-width': 1.5,
-      'stroke-dasharray': '4 3',
+      'stroke-dasharray': `${DASH} ${GAP}`,
+      'stroke-dashoffset': dashOffset,
     }),
   );
+  g.appendChild(createSvgEl('circle', { cx: geo.portX, cy: tapY, r: 2.5, fill: '#111' }));
 
   return { bottomY, topY, portX: geo.portX, flowPath };
 }
@@ -194,12 +217,7 @@ export function createPressureReducingValve(
   );
 
   const g = createSvgEl('g', { transform: `translate(${OX},${OY})` });
-  const { bottomY, topY, portX, flowPath } = drawPressureReducingValveBody(
-    shell.svg,
-    g,
-    geo,
-    `arrow-prv-${uid()}`,
-  );
+  const { bottomY, topY, portX, flowPath } = drawPressureReducingValveBody(g, geo);
   shell.svg.appendChild(g);
 
   const ports = {

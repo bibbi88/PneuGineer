@@ -25,12 +25,14 @@ import {
   createElecRailZero,
   createElecContact,
   createElecPushButton,
+  createElecChangeover,
   createElecCoil,
   createElecLamp,
   ELEC_RAIL_PLUS_TYPE,
   ELEC_RAIL_ZERO_TYPE,
   ELEC_CONTACT_TYPE,
   ELEC_PUSH_BUTTON_TYPE,
+  ELEC_CHANGEOVER_TYPE,
   ELEC_COIL_TYPE,
   ELEC_LAMP_TYPE,
 } from './electrical';
@@ -294,6 +296,15 @@ export const componentRegistry = new Map<string, RegistryEntry>([
         return c;
       },
       label: 'Push button NC',
+      placeable: true,
+      category: ComponentCategory.ELECTRICAL,
+    },
+  ],
+  [
+    ELEC_CHANGEOVER_TYPE,
+    {
+      factory: (ctx, x, y) => createElecChangeover(ctx.compLayer, x, y),
+      label: 'Changeover contact',
       placeable: true,
       category: ComponentCategory.ELECTRICAL,
     },

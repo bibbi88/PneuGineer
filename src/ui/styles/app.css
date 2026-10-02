@@ -240,8 +240,16 @@ body {
   transition: transform 0.15s ease;
 }
 
-.libCategory[open] summary::before {
+.libCategory[open] > summary::before {
   transform: rotate(45deg);
+}
+
+.libSubcategories {
+  padding: 0 0 4px 12px;
+}
+
+.libCategory--sub:last-child {
+  border-bottom: none;
 }
 
 .libCategoryName {

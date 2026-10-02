@@ -71,8 +71,8 @@ export function drawThrottleValveBody(
   flowPath.classList.add('owfvFlowPath');
   g.appendChild(flowPath);
 
-  // The restriction glyph - lens/arc "ball-and-seat" shape plus its directional arrow, lifted
-  // verbatim from the one-way flow control valve's own check-valve path (see
+  // The restriction glyph - lens/arc shape plus its diagonal adjustment arrow, lifted verbatim
+  // from the one-way flow control valve's own throttle path (see
   // oneWayFlowControlValve.ts's decor group and drawOneWayFlowControlValveBody's own doc) so the
   // two components' line glyphs match exactly.
   const decorTransform = `matrix(${geo.decorScale},0,0,${geo.decorScale},${geo.decorOffsetX},${geo.decorOffsetY})`;

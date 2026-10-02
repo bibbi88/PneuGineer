@@ -174,6 +174,9 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
     w: geo.w,
     h: geo.h,
   });
+  // Cylinders are what the sensor/contact names (A1, A0...) refer to, so show the name by
+  // default; restore() still applies a saved project's own setting.
+  shell.setNameVisible(true);
 
   const g = createSvgEl('g', { transform: `translate(${geo.gx},${geo.gy})` });
   const { piston, rod, rodTip, leadA, capPortX, rodPortX } = drawCylinderSingleBody(g, geo);

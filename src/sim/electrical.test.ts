@@ -10,6 +10,7 @@ import {
   createElecCoil,
   createElecContact,
   createElecLamp,
+  createElecChangeover,
 } from '../components/electrical';
 import { createPlc } from '../components/plc';
 import { createElecPushButton } from '../components/electrical';
@@ -102,6 +103,42 @@ describe('solveElectrical', () => {
 
     solveElectrical(0);
     expect(getSignal('Y1')).toBe(true);
+  });
+
+  it('a changeover contact feeds NC at rest and switches over to NO when its signal is on', () => {
+    const build = (withK1: boolean): void => {
+      appState.components = [];
+      appState.connections = [];
+      resetSignals();
+      const plus = add(createElecRailPlus(layer(), 0, 0));
+      const zero = add(createElecRailZero(layer(), 0, 600));
+      if (withK1) {
+        const k1 = add(createElecCoil(layer(), 0, 150));
+        configure(k1, { key: 'K1' });
+        wire(plus, 'P', k1, 'A');
+        wire(k1, 'B', zero, 'P');
+      }
+      const co = add(createElecChangeover(layer(), 200, 150));
+      configure(co, { key: 'K1' });
+      const ncLoad = add(createElecCoil(layer(), 150, 300));
+      configure(ncLoad, { key: 'H1' });
+      const noLoad = add(createElecCoil(layer(), 250, 300));
+      configure(noLoad, { key: 'H2' });
+      wire(plus, 'P', co, 'COM');
+      wire(co, 'NC', ncLoad, 'A');
+      wire(co, 'NO', noLoad, 'A');
+      wire(ncLoad, 'B', zero, 'P');
+      wire(noLoad, 'B', zero, 'P');
+      solveElectrical(0);
+    };
+
+    build(false);
+    expect(getSignal('H1')).toBe(true);
+    expect(getSignal('H2')).toBe(false);
+
+    build(true);
+    expect(getSignal('H1')).toBe(false);
+    expect(getSignal('H2')).toBe(true);
   });
 
   it('a solenoid valve shifts while the coil with its name is energized', () => {

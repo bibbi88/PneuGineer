@@ -331,8 +331,8 @@ describe('computeFrameGraph', () => {
 
     valve.updateFlowVisual?.(flowVisualCtx(graph, valve.id));
 
-    expect(valve.el.querySelectorAll('.owfvFlowPath--pressurized').length).toBe(0);
-    expect(valve.el.querySelectorAll('.owfvFlowPath--exhausting').length).toBeGreaterThan(0);
+    expect(owfvPathLit(valve, 'throttle')).toBe(true);
+    expect(owfvPathLit(valve, 'check')).toBe(false);
     expect(valve.el.querySelector('.flowThrottleCircle')?.classList.contains('flowing')).toBe(
       false,
     );
@@ -347,8 +347,8 @@ describe('computeFrameGraph', () => {
 
     valve.updateFlowVisual?.(flowVisualCtx(graph, valve.id));
 
-    expect(valve.el.querySelectorAll('.owfvFlowPath--pressurized').length).toBe(1);
-    expect(valve.el.querySelectorAll('.owfvFlowPath--exhausting').length).toBe(0);
+    expect(owfvPathLit(valve, 'check')).toBe(true);
+    expect(owfvPathLit(valve, 'throttle')).toBe(false);
     expect(valve.el.querySelector('.flowThrottleCircle')?.classList.contains('flowing')).toBe(true);
   });
 
@@ -365,10 +365,20 @@ describe('computeFrameGraph', () => {
 
     valve.updateFlowVisual?.(flowVisualCtx(graph, valve.id));
 
-    expect(valve.el.querySelectorAll('.owfvFlowPath--pressurized').length).toBe(0);
-    expect(valve.el.querySelectorAll('.owfvFlowPath--exhausting').length).toBeGreaterThan(0);
+    expect(owfvPathLit(valve, 'throttle')).toBe(true);
+    expect(owfvPathLit(valve, 'check')).toBe(false);
     expect(valve.el.querySelector('.flowThrottleCircle')?.classList.contains('flowing')).toBe(
       false,
     );
   });
 });
+
+/** Whether any segment of the one-way flow control valve's 'check' or 'throttle' path is
+ * highlighted (pressurized or exhausting). */
+function owfvPathLit(valve: { el: HTMLElement }, path: 'check' | 'throttle'): boolean {
+  return Array.from(valve.el.querySelectorAll(`[data-path="${path}"]`)).some(
+    (el) =>
+      el.classList.contains('owfvFlowPath--pressurized') ||
+      el.classList.contains('owfvFlowPath--exhausting'),
+  );
+}

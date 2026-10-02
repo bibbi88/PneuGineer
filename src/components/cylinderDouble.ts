@@ -156,6 +156,9 @@ export function createCylinderDouble(compLayer: HTMLElement, x: number, y: numbe
     `Cylinder ${letter}`,
     { x: geo.gx, y: geo.gy, w: geo.w, h: geo.h },
   );
+  // Cylinders are what the sensor/contact names (A1, A0...) refer to, so show the name by
+  // default; restore() still applies a saved project's own setting.
+  shell.setNameVisible(true);
   const g = createSvgEl('g', { transform: `translate(${geo.gx},${geo.gy})` });
   const { piston, rod, rodTip, a: A, b: B } = drawCylinderDoubleBody(g, geo);
   shell.svg.appendChild(g);

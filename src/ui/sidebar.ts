@@ -27,14 +27,33 @@ export interface SidebarGroupSpec {
   items: SidebarItemSpec[];
 }
 
-/** The two categories reached for most while wiring up a circuit - expanded by default so they
- * don't cost an extra click on every session; the rest start collapsed. */
-const OPEN_BY_DEFAULT = new Set([
-  'Mechanical/Manual',
-  'Air operated',
-  'Solenoid operated',
-  'Logic',
-]);
+/** Categories nested under a shared parent dropdown instead of sitting at the top level - the
+ * directional valves are split by actuation, but all three are "the valves" when scanning. */
+const PARENT_OF: Record<string, string> = {
+  'Mechanical/Manual': 'Directional valves',
+  'Air operated': 'Directional valves',
+  'Solenoid operated': 'Directional valves',
+};
+
+function createCategoryDetails(
+  category: string,
+  itemCount: number
+): { details: HTMLDetailsElement; count: HTMLSpanElement } {
+  const details = document.createElement('details');
+  // All categories start collapsed so the library stays scannable at a glance.
+  details.className = 'libCategory';
+
+  const summary = document.createElement('summary');
+  const name = document.createElement('span');
+  name.className = 'libCategoryName';
+  name.textContent = category;
+  const count = document.createElement('span');
+  count.className = 'libCategoryCount';
+  count.textContent = String(itemCount);
+  summary.append(name, count);
+  details.appendChild(summary);
+  return { details, count };
+}
 
 export function renderComponentLibrary(container: HTMLElement, groups: SidebarGroupSpec[]): void {
   const filterInput = document.createElement('input');
@@ -46,25 +65,22 @@ export function renderComponentLibrary(container: HTMLElement, groups: SidebarGr
 
   const groupEntries: Array<{
     details: HTMLDetailsElement;
-    openByDefault: boolean;
     tiles: Array<{ el: HTMLButtonElement; label: string }>;
   }> = [];
 
-  for (const group of groups) {
-    const details = document.createElement('details');
-    details.className = 'libCategory';
-    const openByDefault = OPEN_BY_DEFAULT.has(group.category);
-    details.open = openByDefault;
+  const parentEntries = new Map<
+    string,
+    {
+      details: HTMLDetailsElement;
+      count: HTMLSpanElement;
+      body: HTMLDivElement;
+      itemCount: number;
+      children: HTMLDetailsElement[];
+    }
+  >();
 
-    const summary = document.createElement('summary');
-    const name = document.createElement('span');
-    name.className = 'libCategoryName';
-    name.textContent = group.category;
-    const count = document.createElement('span');
-    count.className = 'libCategoryCount';
-    count.textContent = String(group.items.length);
-    summary.append(name, count);
-    details.appendChild(summary);
+  for (const group of groups) {
+    const { details } = createCategoryDetails(group.category, group.items.length);
 
     const grid = document.createElement('div');
     grid.className = group.items.length === 1 ? 'libGrid libGrid--single' : 'libGrid';
@@ -103,8 +119,33 @@ export function renderComponentLibrary(container: HTMLElement, groups: SidebarGr
     }
 
     details.appendChild(grid);
-    container.appendChild(details);
-    groupEntries.push({ details, openByDefault, tiles });
+    groupEntries.push({ details, tiles });
+
+    const parentName = PARENT_OF[group.category];
+    if (!parentName) {
+      container.appendChild(details);
+      continue;
+    }
+    let parent = parentEntries.get(parentName);
+    if (!parent) {
+      const created = createCategoryDetails(parentName, 0);
+      const body = document.createElement('div');
+      body.className = 'libSubcategories';
+      created.details.appendChild(body);
+      container.appendChild(created.details);
+      parent = {
+        ...created,
+        body,
+        itemCount: 0,
+        children: [],
+      };
+      parentEntries.set(parentName, parent);
+    }
+    details.classList.add('libCategory--sub');
+    parent.body.appendChild(details);
+    parent.children.push(details);
+    parent.itemCount += group.items.length;
+    parent.count.textContent = String(parent.itemCount);
   }
 
   filterInput.addEventListener('input', () => {
@@ -117,7 +158,12 @@ export function renderComponentLibrary(container: HTMLElement, groups: SidebarGr
         anyMatch = anyMatch || match;
       }
       group.details.hidden = !anyMatch;
-      group.details.open = query === '' ? group.openByDefault : anyMatch;
+      group.details.open = query !== '' && anyMatch;
+    }
+    for (const parent of parentEntries.values()) {
+      const anyMatch = parent.children.some((child) => !child.hidden);
+      parent.details.hidden = !anyMatch;
+      parent.details.open = query !== '' && anyMatch;
     }
   });
 }
