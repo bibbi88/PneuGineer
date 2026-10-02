@@ -174,6 +174,8 @@ const INSPECTOR_FIELDS: Record<string, InspectorField[]> = {
   ],
   [THROTTLE_VALVE_TYPE]: [
     { kind: 'number', key: 'flowPct', label: 'Flow %', min: 0, max: 100, step: 5 },
+    { kind: 'silencer', key: 'silencerIN', port: 'IN', label: 'IN silencer' },
+    { kind: 'silencer', key: 'silencerOUT', port: 'OUT', label: 'OUT silencer' },
   ],
   [PRESSURE_REDUCING_VALVE_TYPE]: [
     {

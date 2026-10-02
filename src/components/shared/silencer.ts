@@ -33,6 +33,9 @@ export function createSilencerSymbol(cx: number, cy: number, dir: 1 | -1): SVGGE
  * once something is already attached there. */
 export function setSilencerState(port: PortDef, symbol: SVGGElement, option: SilencerOption): void {
   const active = option === 'silencer';
+  // Lets the port right-click menu find the symbol standing in for this port while it's
+  // silenced (see interaction/portContextMenu.ts).
+  symbol.dataset.port = port.key;
   symbol.style.display = active ? '' : 'none';
   port.el.classList.toggle('portSilenced', active);
   port.el.style.pointerEvents = active ? 'none' : '';

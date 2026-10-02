@@ -1,6 +1,7 @@
 import type { Component, FlowVisualContext, PortConnection } from '../core/types';
 import { uid } from '../core/ids';
 import { buildComponentShell, createPort, createSvgEl } from './shared/svgHelpers';
+import { createSilencerSymbol, setSilencerState, type SilencerOption } from './shared/silencer';
 
 export const THROTTLE_VALVE_TYPE = 'throttleValve';
 
@@ -125,6 +126,21 @@ export function createThrottleValve(compLayer: HTMLElement, x: number, y: number
     OUT: createPort(g, 'OUT', portX, topY, 'V'),
   };
 
+  // Either port can take a silencer, for the common exhaust-throttling setup where the throttle
+  // screws straight into a valve's exhaust port and its free end vents to atmosphere (an open
+  // port already counts as atmosphere in the simulation, so this is purely visual). Off by
+  // default, since a throttle usually sits in a line.
+  let silencerIN: SilencerOption = 'none';
+  let silencerOUT: SilencerOption = 'none';
+  const silencerInEl = createSilencerSymbol(portX, bottomY, 1);
+  const silencerOutEl = createSilencerSymbol(portX, topY, -1);
+  g.append(silencerInEl, silencerOutEl);
+  function applySilencers(): void {
+    setSilencerState(ports.IN, silencerInEl, silencerIN);
+    setSilencerState(ports.OUT, silencerOutEl, silencerOUT);
+  }
+  applySilencers();
+
   let flowPct = DEFAULT_FLOW_PCT;
 
   function updateLabel(): void {
@@ -165,10 +181,19 @@ export function createThrottleValve(compLayer: HTMLElement, x: number, y: number
     },
 
     snapshot(): Record<string, unknown> {
-      return { flowPct, showName: shell.getNameVisible(), customName: shell.getCustomName() };
+      return {
+        flowPct,
+        silencerIN,
+        silencerOUT,
+        showName: shell.getNameVisible(),
+        customName: shell.getCustomName(),
+      };
     },
     restore(data: Record<string, unknown>): void {
       flowPct = data.flowPct as number;
+      silencerIN = (data.silencerIN as SilencerOption) ?? 'none';
+      silencerOUT = (data.silencerOUT as SilencerOption) ?? 'none';
+      applySilencers();
       shell.setNameVisible(Boolean(data.showName));
       shell.setCustomName((data.customName as string | null) ?? null);
       updateLabel();

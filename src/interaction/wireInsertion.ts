@@ -26,12 +26,28 @@ import { CYLINDER_DOUBLE_TYPE } from '../components/cylinderDouble';
 import { THROTTLE_VALVE_TYPE } from '../components/throttleValve';
 import { PRESSURE_REDUCING_VALVE_TYPE } from '../components/pressureReducingValve';
 import { ONE_WAY_FLOW_CONTROL_VALVE_TYPE } from '../components/oneWayFlowControlValve';
+import { SOURCE_TYPE } from '../components/source';
+import { LIMIT_VALVE_32_TYPE } from '../components/limitValve32';
+import { PUSH_BUTTON_32_TYPE } from '../components/pushButton32';
+import { AIR_VALVE_32_TYPE } from '../components/airValve32';
+import { TIME_DELAY_VALVE_TYPE } from '../components/timeDelayValve';
+
+/** The 3/2 valve family (shared/slidingValve32.ts): ports 1 (supply) and 2 (outlet) sit on one
+ * vertical line, 2 above 1, but off the component's own center - port 3 (exhaust) and any pilot
+ * port stay free. Spliced by spliceThreeTwo. */
+const THREE_TWO_TYPES = new Set<string>([
+  LIMIT_VALVE_32_TYPE,
+  PUSH_BUTTON_32_TYPE,
+  AIR_VALVE_32_TYPE,
+  TIME_DELAY_VALVE_TYPE,
+]);
 
 /** Component types this can splice onto a wire. Most have exactly two ports, named 'IN'/'OUT',
  * that read as a single straight pass-through line when unrotated (vertical, IN at the bottom) -
- * see checkValve.ts/throttleValve.ts/oneWayFlowControlValve.ts. The quick exhaust valve is the
- * exception (ports 1/2 aren't collinear, port 3 stays free) and has its own path, see
- * spliceQuickExhaust. Other multi-port components (AND/OR valves, 3/2 valves) are still ordinary
+ * see checkValve.ts/throttleValve.ts/oneWayFlowControlValve.ts. The quick exhaust valve (ports
+ * 1/2 aren't collinear, port 3 stays free) and the 3/2 valves (1/2 collinear but off-center, and
+ * which way round they go matters) have their own paths, see spliceQuickExhaust and
+ * spliceThreeTwo. Other multi-port components (AND/OR valves, 5/2 valves) are still ordinary
  * unconnected drops. */
 const WIRE_INSERTABLE_TYPES = new Set<string>([
   QUICK_EXHAUST_VALVE_TYPE,
@@ -39,6 +55,7 @@ const WIRE_INSERTABLE_TYPES = new Set<string>([
   THROTTLE_VALVE_TYPE,
   ONE_WAY_FLOW_CONTROL_VALVE_TYPE,
   PRESSURE_REDUCING_VALVE_TYPE,
+  ...THREE_TWO_TYPES,
 ]);
 
 /** How close a drop point needs to land to a wire to splice into it, rather than just landing
@@ -196,6 +213,73 @@ function spliceQuickExhaust(
   }
 }
 
+/** Whether the wire's "from" end is its supply side: a pressure source at either end decides it,
+ * then a cylinder (always a consumer) at either end, and otherwise the wire's own drawing
+ * direction - wires are most often drawn from the supply outward. */
+function supplyIsOnFrom(conn: Connection): boolean {
+  const fromType = appState.findComponent(conn.from.id)?.type;
+  const toType = appState.findComponent(conn.to.id)?.type;
+  if (fromType === SOURCE_TYPE) return true;
+  if (toType === SOURCE_TYPE) return false;
+  if (isCylinder(conn.from.id) && !isCylinder(conn.to.id)) return false;
+  return true;
+}
+
+/**
+ * Splices a 3/2 valve in: port 1 (supply) takes the wire half on the supply side, port 2
+ * (outlet) the other half, and port 3 / any pilot port are left free. Rotated to the wire's own
+ * direction, picking whichever of the two rotations along it puts port 1 toward the supply, and
+ * shifted so port 1 sits exactly on the wire at the drop point - port 2 then lands on the same
+ * line, since the two are collinear. The supply half keeps its exact path; the outlet half
+ * auto-routes from port 2 (which sits a valve-length further along than the drop point).
+ */
+function spliceThreeTwo(
+  comp: Component,
+  hit: WireHit,
+  splitPoint: Point,
+  viewport: ViewportAdapter,
+  workspaceEl: HTMLElement,
+): void {
+  const { conn, a, b, bestIdx, guides } = hit;
+  const supplyOnFrom = supplyIsOnFrom(conn);
+  const supplyEnd = supplyOnFrom ? a : b;
+  const dist = (p: Point, q: Point): number => Math.hypot(p.x - q.x, p.y - q.y);
+
+  const placeAt = (rot: number): void => {
+    setComponentRotation(comp, rot);
+    const p1 = portGlobalPosition(viewport, workspaceEl, comp, '1');
+    comp.setPos(comp.x + splitPoint.x - p1.x, comp.y + splitPoint.y - p1.y);
+  };
+  const [first, second] = a.y === b.y ? [90, 270] : [0, 180];
+  placeAt(first);
+  const p2 = portGlobalPosition(viewport, workspaceEl, comp, '2');
+  // Port 1 is at the split point, so port 2 should be the one farther from the supply end.
+  if (dist(p2, supplyEnd) < dist(splitPoint, supplyEnd)) placeAt(second);
+
+  const { from: originalFrom, to: originalTo, stubStartLen, stubEndLen } = conn;
+  removeConnection(conn.id);
+
+  if (supplyOnFrom) {
+    const supplyConn = createConnection(originalFrom, { id: comp.id, port: '1' });
+    supplyConn.guides = guides.slice(0, bestIdx);
+    supplyConn.stubStartLen = stubStartLen;
+    supplyConn.stubEndLen = 0;
+    redrawConnection(supplyConn);
+    const outletConn = createConnection({ id: comp.id, port: '2' }, originalTo);
+    outletConn.stubEndLen = stubEndLen;
+    redrawConnection(outletConn);
+  } else {
+    const outletConn = createConnection(originalFrom, { id: comp.id, port: '2' });
+    outletConn.stubStartLen = stubStartLen;
+    redrawConnection(outletConn);
+    const supplyConn = createConnection({ id: comp.id, port: '1' }, originalTo);
+    supplyConn.guides = guides.slice(bestIdx);
+    supplyConn.stubStartLen = 0;
+    supplyConn.stubEndLen = stubEndLen;
+    redrawConnection(supplyConn);
+  }
+}
+
 /**
  * If `type` is one of the wire-insertable types and `worldPoint` lands close enough to an
  * existing wire, creates it spliced into that wire instead of floating unconnected - the
@@ -228,6 +312,10 @@ export function trySpliceOntoWire(
   const comp = spawnComponent(type, ctx, viewport, splitPoint.x, splitPoint.y);
   if (type === QUICK_EXHAUST_VALVE_TYPE) {
     spliceQuickExhaust(comp, hit, splitPoint, viewport, workspaceEl);
+    return comp;
+  }
+  if (THREE_TWO_TYPES.has(type)) {
+    spliceThreeTwo(comp, hit, splitPoint, viewport, workspaceEl);
     return comp;
   }
   if (horizontal) setComponentRotation(comp, 90);

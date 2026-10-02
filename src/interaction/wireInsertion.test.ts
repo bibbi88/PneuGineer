@@ -11,6 +11,11 @@ import { createJunction } from '../components/junction';
 import { CHECK_VALVE_TYPE } from '../components/checkValve';
 import { QUICK_EXHAUST_VALVE_TYPE } from '../components/quickExhaustValve';
 import { JUNCTION_TYPE } from '../components/junction';
+import { createSource } from '../components/source';
+import { PUSH_BUTTON_32_TYPE } from '../components/pushButton32';
+import { AIR_VALVE_32_TYPE } from '../components/airValve32';
+import { LIMIT_VALVE_32_TYPE } from '../components/limitValve32';
+import { portGlobalPosition } from '../geometry/coords';
 import type { ComponentFactoryContext } from '../components/registry';
 import type { ViewportAdapter } from '../ui/viewport';
 
@@ -103,11 +108,11 @@ describe('trySpliceOntoWire', () => {
       viewport,
       workspaceEl,
     );
-    rectSpy = vi
-      .spyOn(Element.prototype, 'getBoundingClientRect')
-      .mockImplementation(function (this: Element) {
-        return fakePortRect(this);
-      });
+    rectSpy = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (
+      this: Element,
+    ) {
+      return fakePortRect(this);
+    });
   });
 
   afterEach(() => {
@@ -217,6 +222,78 @@ describe('trySpliceOntoWire', () => {
     // No cylinder at either end -> outlet (2) goes to the wire's "to" end (b), inlet (1) to a.
     expect(p1?.from.id).toBe(a.id);
     expect(p2?.to.id).toBe(b.id);
+  });
+
+  it('splices a 3/2 valve in with port 1 toward the supply, port 2 toward the consumer, port 3 free', () => {
+    // Plain wire, no source or cylinder at either end: the wire's "from" end (a, above) is
+    // taken as the supply side.
+    const a = createJunction(compLayer(), 300, 100, 'V');
+    const b = createJunction(compLayer(), 300, 500, 'V');
+    appState.addComponent(a);
+    appState.addComponent(b);
+    createConnection({ id: a.id, port: 'P' }, { id: b.id, port: 'P' });
+
+    const comp = trySpliceOntoWire(PUSH_BUTTON_32_TYPE, ctx, viewport, workspaceEl, {
+      x: 300,
+      y: 280,
+    });
+    if (!comp) throw new Error('expected a splice');
+
+    expect(appState.connections).toHaveLength(2);
+    expect(appState.connections.find((c) => c.to.id === comp.id)?.to.port).toBe('1');
+    expect(appState.connections.find((c) => c.from.id === comp.id)?.from.port).toBe('2');
+    expect(appState.connections.some((c) => c.from.port === '3' || c.to.port === '3')).toBe(false);
+    // Port 1 sits exactly on the wire at the drop point, port 2 further along the same line,
+    // toward b - which takes flipping the valve over (unrotated, port 1 is at the bottom).
+    expect(comp.el.dataset.rot).toBe('180');
+    expect(portGlobalPosition(viewport, workspaceEl, comp, '1')).toEqual({ x: 300, y: 280 });
+    const p2 = portGlobalPosition(viewport, workspaceEl, comp, '2');
+    expect(p2.x).toBe(300);
+    expect(p2.y).toBeGreaterThan(280);
+  });
+
+  it('puts a 3/2 valve\'s port 1 toward a pressure source even when it is the wire\'s "to" end', () => {
+    const a = createJunction(compLayer(), 300, 100, 'V');
+    const source = createSource(compLayer(), 300, 500);
+    appState.addComponent(a);
+    appState.addComponent(source);
+    createConnection({ id: a.id, port: 'P' }, { id: source.id, port: 'OUT' });
+
+    const comp = trySpliceOntoWire(AIR_VALVE_32_TYPE, ctx, viewport, workspaceEl, {
+      x: 300,
+      y: 280,
+    });
+    if (!comp) throw new Error('expected a splice');
+
+    const toSource = appState.connections.find((c) => c.to.id === source.id);
+    expect(toSource?.from).toEqual({ id: comp.id, port: '1' });
+    expect(appState.connections.find((c) => c.from.id === a.id)?.to).toEqual({
+      id: comp.id,
+      port: '2',
+    });
+    // Unrotated already has port 1 at the bottom, facing the source below.
+    expect(comp.el.dataset.rot ?? '0').toBe('0');
+    expect(portGlobalPosition(viewport, workspaceEl, comp, '1')).toEqual({ x: 300, y: 280 });
+  });
+
+  it('turns a 3/2 valve sideways for a horizontal wire, port 1 still on the line', () => {
+    const a = createJunction(compLayer(), 100, 300, 'H');
+    const b = createJunction(compLayer(), 500, 300, 'H');
+    appState.addComponent(a);
+    appState.addComponent(b);
+    createConnection({ id: a.id, port: 'P' }, { id: b.id, port: 'P' });
+
+    const comp = trySpliceOntoWire(LIMIT_VALVE_32_TYPE, ctx, viewport, workspaceEl, {
+      x: 280,
+      y: 300,
+    });
+    if (!comp) throw new Error('expected a splice');
+
+    expect(['90', '270']).toContain(comp.el.dataset.rot);
+    expect(portGlobalPosition(viewport, workspaceEl, comp, '1')).toEqual({ x: 280, y: 300 });
+    const p2 = portGlobalPosition(viewport, workspaceEl, comp, '2');
+    expect(p2.y).toBe(300);
+    expect(p2.x).toBeGreaterThan(280); // toward b, away from the supply end a
   });
 
   it('leaves the wire alone for a component type that is not wire-insertable', () => {

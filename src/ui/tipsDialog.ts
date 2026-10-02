@@ -41,10 +41,13 @@ const TIP_SECTIONS: TipSection[] = [
       'Drag a component from the sidebar onto the canvas, or click it to add at the view center. ' +
         'Placing is an edit, so the library greys out while the simulation is running - stop it ' +
         'first.',
-      'Drag a check valve, throttle valve, one-way flow control valve, quick exhaust valve or ' +
-        'pressure reducing valve onto an existing wire (it highlights green when close enough) ' +
-        'to splice it in, instead of dropping it unconnected on top.',
+      'Drag a check valve, throttle valve, one-way flow control valve, quick exhaust valve, ' +
+        'pressure reducing valve or 3/2 valve onto an existing wire (it highlights green when ' +
+        'close enough) to splice it in, instead of dropping it unconnected on top. A 3/2 valve ' +
+        'turns to put port 1 toward the supply and port 2 toward the consumer.',
       'Right-click a component for Rotate, Copy, and Delete.',
+      'Right-click a port to add a pressure source to it, or a silencer on an exhaust port ' +
+        '(right-click the silencer itself to change it again).',
       'Arrow keys nudge the selected component; hold Shift to move a full grid step further.',
       'Delete or Backspace removes the current selection.',
       'Ctrl+C / Ctrl+V copies and pastes the selection.',
