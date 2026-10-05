@@ -191,6 +191,7 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
   let normallyExtended = false;
   let sensors: CylinderSensor[] = defaultSensors(letter);
   let ventingNow = false;
+  let fillingNow = false;
   let boreDiameter = DEFAULT_BORE_DIAMETER_MM;
   let rodDiameter = DEFAULT_ROD_DIAMETER_MM;
   let showForce = false;
@@ -248,6 +249,7 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
       const pressurizedA = ctx.isPressurized('A');
       const target = targetFor(pressurizedA);
       ventingNow = !pressurizedA && target !== pos;
+      fillingNow = pressurizedA && target !== pos;
 
       if (target !== pos) {
         // While air is coming in through A, only the supply side can restrict it (the spring
@@ -327,6 +329,7 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
     reset(): void {
       pos = normallyExtended ? 1 : 0;
       ventingNow = false;
+      fillingNow = false;
       if (showForce) forceLabelEl.textContent = '0 N';
       updateVisual();
     },
@@ -339,6 +342,7 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
     getBounds: shell.getBounds,
     setSelected: shell.setSelected,
     currentlyVenting: () => (ventingNow ? ['A'] : []),
+    currentlyFilling: () => (fillingNow ? ['A'] : []),
 
     relabel(): void {
       const oldLetter = letter;

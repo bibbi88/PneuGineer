@@ -171,6 +171,7 @@ export function createCylinderDouble(compLayer: HTMLElement, x: number, y: numbe
   let pos = 0;
   let sensors: CylinderSensor[] = defaultSensors(letter);
   let ventingNow: 'A' | 'B' | null = null;
+  let fillingNow: 'A' | 'B' | null = null;
   let boreDiameter = DEFAULT_BORE_DIAMETER_MM;
   let rodDiameter = DEFAULT_ROD_DIAMETER_MM;
   let showForce = false;
@@ -226,6 +227,7 @@ export function createCylinderDouble(compLayer: HTMLElement, x: number, y: numbe
       // bottoms out there's no more volume to displace, so the exhaust flow (and its animation)
       // should stop right along with the motion.
       ventingNow = drivingPort && ventingPort && target !== pos ? ventingPort : null;
+      fillingNow = drivingPort && ventingPort && target !== pos ? drivingPort : null;
 
       if (drivingPort && ventingPort) {
         // Whichever side is more restricted sets the pace - a flow control valve throttling
@@ -301,6 +303,7 @@ export function createCylinderDouble(compLayer: HTMLElement, x: number, y: numbe
     reset(): void {
       pos = 0;
       ventingNow = null;
+      fillingNow = null;
       if (showForce) forceLabelEl.textContent = '0 N';
       updateVisual();
     },
@@ -313,6 +316,7 @@ export function createCylinderDouble(compLayer: HTMLElement, x: number, y: numbe
     getBounds: shell.getBounds,
     setSelected: shell.setSelected,
     currentlyVenting: () => (ventingNow ? [ventingNow] : []),
+    currentlyFilling: () => (fillingNow ? [fillingNow] : []),
 
     relabel(): void {
       const oldLetter = letter;

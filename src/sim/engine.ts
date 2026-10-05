@@ -5,6 +5,7 @@ import {
   flowMultiplierToNearestSource,
   flowMultiplierToOpenExhaust,
   markExhaustFlow,
+  markSupplyFlow,
   portKey,
   pressureAt,
   sourceDistance,
@@ -67,6 +68,14 @@ export function stepSimulation(dt: number): FrameGraph {
   }
   markExhaustFlow(graph, ventingKeys);
 
+  // Same for supply air actually streaming in (a cylinder still moving), as opposed to a line
+  // that is merely pressurized - lets e.g. a check valve close again once the piston stops.
+  const fillingKeys: string[] = [];
+  for (const c of appState.components) {
+    for (const p of c.currentlyFilling?.() ?? []) fillingKeys.push(portKey(c.id, p));
+  }
+  markSupplyFlow(graph, fillingKeys);
+
   // Only now that markExhaustFlow has run does anything have a reliable answer to "is this port
   // exhausting" - a separate, purely-cosmetic pass so a component's step() (which runs before
   // it's known) never has to fall back on `isPressurized` alone for that.
@@ -77,6 +86,7 @@ export function stepSimulation(dt: number): FrameGraph {
       isExhausting: (p) => graph.exhausting.has(portKey(c.id, p)),
       exhaustDistance: (p) => graph.exhaustDepth.get(portKey(c.id, p)) ?? Infinity,
       sourceDistance: (p) => sourceDistance(graph, portKey(c.id, p)),
+      supplyDistance: (p) => graph.supplyDepth.get(portKey(c.id, p)) ?? Infinity,
     };
     c.updateFlowVisual(ctx);
   }

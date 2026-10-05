@@ -87,6 +87,11 @@ export interface FlowVisualContext {
    * reachable. The supply-side companion to `exhaustDistance`, for telling apart two ports
    * that likewise always share one `isPressurized` boolean. */
   sourceDistance(port: PortKey): number;
+  /** Hop-count from `port` to the nearest port actively drawing supply air (see
+   * `Component.currentlyFilling`), walking back toward the supply over pressurized ports only -
+   * Infinity if no supply air is streaming through `port` right now. The supply-flow companion
+   * to `exhaustDistance`: air moves from the higher count toward the lower one. */
+  supplyDistance(port: PortKey): number;
 }
 
 export interface ComponentBounds {
@@ -129,6 +134,12 @@ export interface Component<TSnapshot = Record<string, unknown>> {
    * exhaust flow animation on wires); has no effect on the pressure/conductivity simulation
    * itself. Empty (or omitted) when nothing is currently moving/exhausting. */
   currentlyVenting?(): PortKey[];
+  /** The supply-side counterpart of `currentlyVenting`: ports this component is actively drawing
+   * supply air in through as of the most recent step() - e.g. a cylinder's currently-driven
+   * chamber while the piston is still moving. Once the piston reaches its end position the air
+   * stops flowing (the line stays pressurized, but nothing streams through it any more), so
+   * this goes empty. Purely a visualization hook, like `currentlyVenting`. */
+  currentlyFilling?(): PortKey[];
 
   snapshot(): TSnapshot;
   restore(data: TSnapshot): void;

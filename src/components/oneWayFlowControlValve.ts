@@ -161,6 +161,15 @@ export function drawOneWayFlowControlValveBody(
   return { bottomY, topY, portX: geo.portX, throttleCircle, throttlePath, checkPath };
 }
 
+/** Lights `segments` as carrying supply air (pressure colour) or exhaust air (exhaust colour,
+ * animated), or clears them when `flowing` is false. */
+function setPathFlow(segments: SVGLineElement[], flowing: boolean, exhaust: boolean): void {
+  for (const seg of segments) {
+    seg.classList.toggle('owfvFlowPath--pressurized', flowing && !exhaust);
+    seg.classList.toggle('owfvFlowPath--exhausting', flowing && exhaust);
+  }
+}
+
 /** Check valve + adjustable throttle in parallel: free flow IN->OUT through the check valve's
  * own path, throttled (flowPct) flow OUT->IN through the throttle's path. */
 export function createOneWayFlowControlValve(
@@ -215,42 +224,56 @@ export function createOneWayFlowControlValve(
       return fromPort === 'IN' ? 1 : flowPct / 100;
     },
 
-    // Purely a visual cue (nudges the throttle's circle glyph up a touch, and highlights
-    // whichever of the two parallel paths air is actually taking - see .flowThrottleCircle and
-    // .owfvFlowPath in app.css). This can't be based on IN/OUT's own isPressurized or
-    // isExhausting: this valve's own edge is undirected (conducts both ways, just at different
-    // rates), so the flood-fills behind both of those always reach IN and OUT together - neither
-    // boolean alone can say which side actually has the supply (or the open vent) behind it. The
-    // distance variants can: whichever port is fewer hops from a live source is the one air is
-    // entering from, so IN closer means free flow through the check valve (IN->OUT), OUT closer
-    // means throttled flow the other way (OUT->IN) - the check valve blocks that direction, so
-    // the throttle is the only path left. Same idea for the exhaust side (e.g. the realistic
-    // "meter-out" wiring, this valve's OUT tied straight to a cylinder's own exhaust): a merely-
-    // pressurized-but-static source distance shouldn't win over air that's actually mid-flight to
-    // atmosphere right now, so exhaust distance is checked first and source distance is only the
-    // fallback for when nothing is currently venting through here at all.
+    // Purely a visual cue: lifts the check valve's ball off its seat and highlights whichever of
+    // the two parallel paths air is actually streaming through right now - see
+    // .flowThrottleCircle and .owfvFlowPath in app.css. Only *moving* air lifts the ball or
+    // singles out one path: once the cylinder downstream reaches its end position the flow
+    // stops and the ball drops back onto its seat. The valve still holds standing air at supply
+    // pressure then, so the throttle's path (always open) shows the pressure colour, matching
+    // the pressurized wires on either side; the check valve's path stays unpainted, since the
+    // seated ball blocks it.
+    //
+    // Which way the air goes can't come from IN/OUT's own isPressurized/isExhausting: this
+    // valve's own edge conducts both ways (just at different rates), so both ports always share
+    // those booleans. The distance variants can tell them apart. Exhaust air (exhaustDistance)
+    // moves away from the venting cylinder port, so it enters at whichever port is fewer hops
+    // from it; supply air (supplyDistance) moves toward the filling cylinder port, so it leaves
+    // through whichever port is fewer hops from it. Forward (IN->OUT) is free flow through the
+    // check valve; reverse (OUT->IN) is blocked there, leaving only the throttle.
+    //
+    // The colour follows the kind of air rather than the path: returning exhaust air in the
+    // exhaust colour, incoming supply air in the pressure colour - the same red/amber the wires
+    // use. Exhaust is checked first: air already on its way out to atmosphere is the more
+    // specific signal of the two.
     updateFlowVisual(ctx: FlowVisualContext): void {
       const inExhaust = ctx.exhaustDistance('IN');
       const outExhaust = ctx.exhaustDistance('OUT');
-      const inSource = ctx.sourceDistance('IN');
-      const outSource = ctx.sourceDistance('OUT');
+      const inSupply = ctx.supplyDistance('IN');
+      const outSupply = ctx.supplyDistance('OUT');
 
       let forward = false; // IN -> OUT, free through the check valve
       let reverse = false; // OUT -> IN, throttled
+      let exhaust = false;
 
       if (Number.isFinite(Math.min(inExhaust, outExhaust)) && inExhaust !== outExhaust) {
+        exhaust = true;
         forward = inExhaust < outExhaust;
-        reverse = outExhaust < inExhaust;
-      } else if (Number.isFinite(Math.min(inSource, outSource)) && inSource !== outSource) {
-        forward = inSource < outSource;
-        reverse = outSource < inSource;
+        reverse = !forward;
+      } else if (Number.isFinite(Math.min(inSupply, outSupply)) && inSupply !== outSupply) {
+        forward = outSupply < inSupply;
+        reverse = !forward;
+      } else if (ctx.isPressurized('IN') || ctx.isPressurized('OUT')) {
+        // Pressurized but nothing moving: the ball stays seated and blocks the check valve's
+        // path, so only the throttle's open path shows the standing pressure.
+        throttleCircle.classList.remove('flowing');
+        setPathFlow(checkPath, false, false);
+        setPathFlow([throttlePath], true, false);
+        return;
       }
 
-      // Forward: the check valve's ball lifts off its seat and its path carries the air.
-      // Reverse: the check valve is shut, so only the throttle's path carries it.
       throttleCircle.classList.toggle('flowing', forward);
-      for (const seg of checkPath) seg.classList.toggle('owfvFlowPath--pressurized', forward);
-      throttlePath.classList.toggle('owfvFlowPath--exhausting', reverse);
+      setPathFlow(checkPath, forward, exhaust);
+      setPathFlow([throttlePath], reverse, exhaust);
     },
 
     snapshot(): Record<string, unknown> {
@@ -263,8 +286,8 @@ export function createOneWayFlowControlValve(
     },
     reset(): void {
       throttleCircle.classList.remove('flowing');
-      for (const seg of checkPath) seg.classList.remove('owfvFlowPath--pressurized');
-      throttlePath.classList.remove('owfvFlowPath--exhausting');
+      setPathFlow(checkPath, false, false);
+      setPathFlow([throttlePath], false, false);
     },
 
     setPos(nx: number, ny: number): void {

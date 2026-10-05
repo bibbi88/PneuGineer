@@ -32,6 +32,10 @@ export interface FrameGraph {
   /** Hop count from the nearest venting port, for every port in `exhausting` - lets a renderer
    * tell which end of a wire air is coming from without needing its own separate walk. */
   exhaustDepth: Map<PortKeyStr, number>;
+  /** Hop count back toward the supply from the nearest port actively drawing supply air (see
+   * `markSupplyFlow`), for every port currently carrying live supply flow - the supply-side
+   * counterpart of `exhaustDepth`. Visualization only, like `exhausting`. */
+  supplyDepth: Map<PortKeyStr, number>;
 }
 
 export function emptyFrameGraph(): FrameGraph {
@@ -44,7 +48,36 @@ export function emptyFrameGraph(): FrameGraph {
     pressureCaps: new Map(),
     exhausting: new Set(),
     exhaustDepth: new Map(),
+    supplyDepth: new Map(),
   };
+}
+
+/**
+ * Walks back toward the supply from every port currently drawing supply air in (see
+ * `Component.currentlyFilling`), following edges against their direction (`reverseAdjacency`:
+ * which ports can feed air into this one) and only through pressurized ports, recording each
+ * port's hop count in `graph.supplyDepth`. Supply air streams from higher counts toward lower
+ * ones. Like `markExhaustFlow`, call after the step() pass and before rendering.
+ */
+export function markSupplyFlow(graph: FrameGraph, fillingKeys: PortKeyStr[]): void {
+  graph.supplyDepth.clear();
+
+  const queue: PortKeyStr[] = [];
+  for (const key of fillingKeys) {
+    if (graph.supplyDepth.has(key) || !graph.pressurized.has(key)) continue;
+    graph.supplyDepth.set(key, 0);
+    queue.push(key);
+  }
+
+  while (queue.length > 0) {
+    const cur = queue.shift() as PortKeyStr;
+    const curDepth = graph.supplyDepth.get(cur) ?? 0;
+    for (const prev of graph.reverseAdjacency.get(cur) ?? []) {
+      if (graph.supplyDepth.has(prev) || !graph.pressurized.has(prev)) continue;
+      graph.supplyDepth.set(prev, curDepth + 1);
+      queue.push(prev);
+    }
+  }
 }
 
 /**
@@ -270,6 +303,7 @@ export function computeFrameGraph(
     pressureCaps,
     exhausting: new Set(),
     exhaustDepth: new Map(),
+    supplyDepth: new Map(),
   };
 }
 

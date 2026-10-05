@@ -5,6 +5,7 @@ import {
   flowMultiplierToNearestSource,
   flowMultiplierToOpenExhaust,
   markExhaustFlow,
+  markSupplyFlow,
   portKey,
   pressureAt,
   sourceDistance,
@@ -35,6 +36,7 @@ function flowVisualCtx(graph: FrameGraph, componentId: number) {
     isExhausting: (p: string) => graph.exhausting.has(portKey(componentId, p)),
     exhaustDistance: (p: string) => graph.exhaustDepth.get(portKey(componentId, p)) ?? Infinity,
     sourceDistance: (p: string) => sourceDistance(graph, portKey(componentId, p)),
+    supplyDistance: (p: string) => graph.supplyDepth.get(portKey(componentId, p)) ?? Infinity,
   };
 }
 
@@ -317,68 +319,92 @@ describe('computeFrameGraph', () => {
     expect(graph.exhausting.size).toBe(0);
   });
 
-  it('one-way flow control valve highlights the throttle path (not the check valve) when actually exhausting', () => {
-    // Regression test: this valve's own edge is undirected, so IN and OUT always read the same
-    // `isExhausting` (and `isPressurized`) boolean regardless of which side actually has the
-    // vent behind it - only the distance variants can tell them apart. In this "meter-out"
-    // wiring (OUT tied straight to a cylinder's exhaust, IN left open) OUT is one hop from the
-    // venting port and IN is two, so OUT should win.
-    const cyl = createCylinderDouble(compLayer(), 0, 0);
-    const valve = createOneWayFlowControlValve(compLayer(), 0, 0);
-    const connections = [wire(cyl.id, 'B', valve.id, 'OUT')];
-    const graph = computeFrameGraph([cyl, valve], connections, nextVersion());
-    markExhaustFlow(graph, [portKey(cyl.id, 'B')]);
+  describe('one-way flow control valve flow visual', () => {
+    /** source -> valve `supplyPort`, valve's other port -> cylinder A, then marks this frame's
+     * flow: cylinder A filling (`filling`) and/or cylinder B venting through the valve
+     * (`venting`, B wired to the valve's other port instead of A). */
+    function run(opts: {
+      supplyPort?: 'IN' | 'OUT';
+      exhaustPort?: 'IN' | 'OUT';
+      filling?: boolean;
+    }) {
+      const cyl = createCylinderDouble(compLayer(), 0, 0);
+      const valve = createOneWayFlowControlValve(compLayer(), 0, 0);
+      const comps: Component[] = [cyl, valve];
+      const connections: Connection[] = [];
+      if (opts.supplyPort) {
+        const source = createSource(compLayer(), 0, 0);
+        comps.push(source);
+        const other = opts.supplyPort === 'IN' ? 'OUT' : 'IN';
+        connections.push(wire(source.id, 'OUT', valve.id, opts.supplyPort));
+        connections.push(wire(valve.id, other, cyl.id, 'A'));
+      }
+      if (opts.exhaustPort) connections.push(wire(cyl.id, 'B', valve.id, opts.exhaustPort));
 
-    valve.updateFlowVisual?.(flowVisualCtx(graph, valve.id));
+      const graph = computeFrameGraph(comps, connections, nextVersion());
+      markExhaustFlow(graph, opts.exhaustPort ? [portKey(cyl.id, 'B')] : []);
+      markSupplyFlow(graph, opts.filling ? [portKey(cyl.id, 'A')] : []);
+      valve.updateFlowVisual?.(flowVisualCtx(graph, valve.id));
+      return valve;
+    }
 
-    expect(owfvPathLit(valve, 'throttle')).toBe(true);
-    expect(owfvPathLit(valve, 'check')).toBe(false);
-    expect(valve.el.querySelector('.flowThrottleCircle')?.classList.contains('flowing')).toBe(
-      false,
-    );
-  });
+    it('supply streaming IN -> OUT: ball lifted, check valve path in the pressure colour', () => {
+      const valve = run({ supplyPort: 'IN', filling: true });
+      expect(owfvPathFlow(valve, 'check')).toBe('supply');
+      expect(owfvPathFlow(valve, 'throttle')).toBe(null);
+      expect(ballLifted(valve)).toBe(true);
+    });
 
-  it('one-way flow control valve highlights the check valve path (not the throttle) for ordinary forward supply', () => {
-    const source = createSource(compLayer(), 0, 0);
-    const valve = createOneWayFlowControlValve(compLayer(), 0, 0);
-    const connections = [wire(source.id, 'OUT', valve.id, 'IN')];
-    const graph = computeFrameGraph([source, valve], connections, nextVersion());
-    markExhaustFlow(graph, []);
+    it('cylinder at its end position: nothing flows, ball closed, only the open throttle path shows the pressure', () => {
+      const valve = run({ supplyPort: 'IN', filling: false });
+      expect(owfvPathFlow(valve, 'check')).toBe(null);
+      expect(owfvPathFlow(valve, 'throttle')).toBe('supply');
+      expect(ballLifted(valve)).toBe(false);
+    });
 
-    valve.updateFlowVisual?.(flowVisualCtx(graph, valve.id));
+    it('no pressure and no flow: nothing lit, ball closed', () => {
+      const valve = run({});
+      expect(owfvPathFlow(valve, 'check')).toBe(null);
+      expect(owfvPathFlow(valve, 'throttle')).toBe(null);
+      expect(ballLifted(valve)).toBe(false);
+    });
 
-    expect(owfvPathLit(valve, 'check')).toBe(true);
-    expect(owfvPathLit(valve, 'throttle')).toBe(false);
-    expect(valve.el.querySelector('.flowThrottleCircle')?.classList.contains('flowing')).toBe(true);
-  });
+    it('supply streaming OUT -> IN (meter-in): throttle path in the pressure colour, ball closed', () => {
+      const valve = run({ supplyPort: 'OUT', filling: true });
+      expect(owfvPathFlow(valve, 'throttle')).toBe('supply');
+      expect(owfvPathFlow(valve, 'check')).toBe(null);
+      expect(ballLifted(valve)).toBe(false);
+    });
 
-  it('one-way flow control valve highlights the throttle path (not the check valve) when the source sits on OUT, the check-valve-blocked side', () => {
-    // Regression test for the reported bug: a source wired directly to OUT - the direction the
-    // check valve blocks, so only the throttle can actually carry it - used to still light up
-    // the check valve path, because plain `isPressurized` can't tell which port the source is
-    // actually behind (both read pressurized either way).
-    const source = createSource(compLayer(), 0, 0);
-    const valve = createOneWayFlowControlValve(compLayer(), 0, 0);
-    const connections = [wire(source.id, 'OUT', valve.id, 'OUT')];
-    const graph = computeFrameGraph([source, valve], connections, nextVersion());
-    markExhaustFlow(graph, []);
+    it('exhaust returning OUT -> IN (meter-out): throttle path in the exhaust colour, ball closed', () => {
+      // OUT is one hop from the venting cylinder port, IN two, so air enters at OUT.
+      const valve = run({ exhaustPort: 'OUT' });
+      expect(owfvPathFlow(valve, 'throttle')).toBe('exhaust');
+      expect(owfvPathFlow(valve, 'check')).toBe(null);
+      expect(ballLifted(valve)).toBe(false);
+    });
 
-    valve.updateFlowVisual?.(flowVisualCtx(graph, valve.id));
-
-    expect(owfvPathLit(valve, 'throttle')).toBe(true);
-    expect(owfvPathLit(valve, 'check')).toBe(false);
-    expect(valve.el.querySelector('.flowThrottleCircle')?.classList.contains('flowing')).toBe(
-      false,
-    );
+    it('exhaust returning IN -> OUT: ball lifted, check valve path in the exhaust colour', () => {
+      const valve = run({ exhaustPort: 'IN' });
+      expect(owfvPathFlow(valve, 'check')).toBe('exhaust');
+      expect(owfvPathFlow(valve, 'throttle')).toBe(null);
+      expect(ballLifted(valve)).toBe(true);
+    });
   });
 });
 
-/** Whether any segment of the one-way flow control valve's 'check' or 'throttle' path is
- * highlighted (pressurized or exhausting). */
-function owfvPathLit(valve: { el: HTMLElement }, path: 'check' | 'throttle'): boolean {
-  return Array.from(valve.el.querySelectorAll(`[data-path="${path}"]`)).some(
-    (el) =>
-      el.classList.contains('owfvFlowPath--pressurized') ||
-      el.classList.contains('owfvFlowPath--exhausting'),
-  );
+/** Which kind of air the one-way flow control valve's 'check' or 'throttle' path is lit for:
+ * 'supply' (pressure colour), 'exhaust' (exhaust colour), or null when it isn't lit at all. */
+function owfvPathFlow(
+  valve: { el: HTMLElement },
+  path: 'check' | 'throttle',
+): 'supply' | 'exhaust' | null {
+  const segs = Array.from(valve.el.querySelectorAll(`[data-path="${path}"]`));
+  if (segs.some((el) => el.classList.contains('owfvFlowPath--exhausting'))) return 'exhaust';
+  if (segs.some((el) => el.classList.contains('owfvFlowPath--pressurized'))) return 'supply';
+  return null;
+}
+
+function ballLifted(valve: { el: HTMLElement }): boolean {
+  return valve.el.querySelector('.flowThrottleCircle')?.classList.contains('flowing') ?? false;
 }
