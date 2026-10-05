@@ -53,10 +53,16 @@ export function createJunction(
       return [];
     },
 
+    // The axis a new branch leaves along (see wireSplitting.ts: across the line the junction
+    // was placed on), saved so it survives a reload. Older saves have none and keep 'H'.
     snapshot(): Record<string, unknown> {
-      return {};
+      return { orientation: ports.P.entryOrientation };
     },
-    restore(): void {},
+    restore(data: Record<string, unknown>): void {
+      if (data.orientation === 'H' || data.orientation === 'V') {
+        ports.P.entryOrientation = data.orientation;
+      }
+    },
     reset(): void {},
 
     setPos(nx: number, ny: number): void {

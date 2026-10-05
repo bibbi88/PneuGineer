@@ -7,6 +7,7 @@ import {
   computeConnectionGeometry,
 } from '../geometry/connectionGeometry';
 import {
+  completeGuides,
   guideCorners,
   seedGuidesFromPoints,
   stubLenFromPoint,
@@ -77,6 +78,17 @@ export function refreshHandlesForSelection(): void {
     const points = computeConnectionGeometry(viewportRef, workspaceRef, conn);
     const seeded = seedGuidesFromPoints(points, stubOutPoint, stubInPoint);
     if (seeded.length > 0) conn.guides = seeded;
+  }
+  // Include the bend the renderer adds when the last guide doesn't line up with the end stub,
+  // so every drawn segment gets a handle in the right place (that bend becomes draggable too).
+  if (conn.guides.length > 0) {
+    conn.guides = completeGuides(
+      fromAnchor,
+      toAnchor,
+      conn.guides,
+      conn.stubStartLen,
+      conn.stubEndLen,
+    );
   }
 
   const corners = guideCorners(fromAnchor, toAnchor, conn.guides, conn.stubStartLen);

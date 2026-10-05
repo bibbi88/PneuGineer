@@ -6,6 +6,11 @@ const CELL_SIZE = 20;
 const OBSTACLE_COST = 8;
 const TURN_PENALTY = 4;
 const GRID_MARGIN_PX = 80;
+/** Extra cost per cell already occupied by another wire. Low enough that crossing a wire (one
+ * or two cells) costs less than a detour, high enough that running *along* one for any distance
+ * - two wires drawn on top of each other, which reads as one wire - loses to a parallel route
+ * a cell over. */
+const WIRE_COST = 3;
 
 interface Grid {
   cellSize: number;
@@ -24,6 +29,35 @@ function toCell(grid: Grid, p: Point): { col: number; row: number } {
 
 function toPoint(grid: Grid, col: number, row: number): Point {
   return { x: grid.minX + col * grid.cellSize, y: grid.minY + row * grid.cellSize };
+}
+
+/** Adds WIRE_COST to every grid cell an existing wire's polyline runs through. The wires are
+ * orthogonal, so each segment is a straight run along one row or column. */
+function markWires(grid: Grid, wires: Point[][]): void {
+  const { cols, rows, cost, minX, minY, cellSize } = grid;
+  const colOf = (x: number): number => Math.round((x - minX) / cellSize);
+  const rowOf = (y: number): number => Math.round((y - minY) / cellSize);
+  for (const points of wires) {
+    for (let i = 0; i < points.length - 1; i++) {
+      const a = points[i] as Point;
+      const b = points[i + 1] as Point;
+      let c0 = colOf(Math.min(a.x, b.x));
+      let c1 = colOf(Math.max(a.x, b.x));
+      let r0 = rowOf(Math.min(a.y, b.y));
+      let r1 = rowOf(Math.max(a.y, b.y));
+      if (c1 < 0 || r1 < 0 || c0 >= cols || r0 >= rows) continue;
+      c0 = Math.max(0, c0);
+      r0 = Math.max(0, r0);
+      c1 = Math.min(cols - 1, c1);
+      r1 = Math.min(rows - 1, r1);
+      for (let row = r0; row <= r1; row++) {
+        for (let col = c0; col <= c1; col++) {
+          const idx = row * cols + col;
+          cost[idx] = Math.min(255, (cost[idx] ?? 0) + WIRE_COST);
+        }
+      }
+    }
+  }
 }
 
 function buildGrid(
@@ -248,8 +282,9 @@ function directBridge(from: Point, to: Point, stubOut: Point, stubIn: Point): Po
 
 /**
  * Grid-based orthogonal A* route between two port anchors, routing around (not through)
- * other components. Falls back to the simple one-corner route if no path is found (e.g. the
- * grid is fully boxed in) so a connection is never left unrendered.
+ * other components and preferring not to run along `otherWires` (the polylines of wires already
+ * drawn). Falls back to the simple one-corner route if no path is found (e.g. the grid is fully
+ * boxed in) so a connection is never left unrendered.
  */
 export function autoRouteAStar(
   from: PortAnchor,
@@ -258,11 +293,13 @@ export function autoRouteAStar(
   excludeIds: Set<ComponentId>,
   stubStartLen: number | null = null,
   stubEndLen: number | null = null,
+  otherWires: Point[][] = [],
 ): Point[] {
   const stubOut = stubPoint(from, to.pos, stubStartLen ?? WIRE_STUB);
   const stubIn = stubPoint(to, from.pos, stubEndLen ?? WIRE_STUB);
 
   const grid = buildGrid(components, excludeIds, stubOut, stubIn);
+  markWires(grid, otherWires);
   const startCell = toCell(grid, stubOut);
   const goalCell = toCell(grid, stubIn);
 

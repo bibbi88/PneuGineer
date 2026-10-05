@@ -4,8 +4,9 @@ import { appState } from '../app/AppState';
 import { createConnection } from '../wires/connection';
 import { JUNCTION_TYPE } from '../components/junction';
 import { createSvgEl } from '../components/shared/svgHelpers';
-import { pathFromPoints } from '../geometry/routing';
-import { PORT_HOVER_RADIUS } from '../sim/constants';
+import { pathFromPoints, stubPoint } from '../geometry/routing';
+import { worldPortAnchor } from '../geometry/connectionGeometry';
+import { PORT_HOVER_RADIUS, WIRE_STUB } from '../sim/constants';
 
 export interface PendingPort {
   compId: ComponentId;
@@ -16,6 +17,7 @@ let pendingPort: PendingPort | null = null;
 let previewPath: SVGPathElement | null = null;
 let hoveredPortEl: SVGCircleElement | null = null;
 let viewportRef: ViewportAdapter | null = null;
+let workspaceRef: HTMLElement | null = null;
 
 export function initLinking(
   connLayer: SVGSVGElement,
@@ -23,6 +25,7 @@ export function initLinking(
   workspaceEl: HTMLElement,
 ): void {
   viewportRef = viewport;
+  workspaceRef = workspaceEl;
   previewPath = createSvgEl('path', { class: 'wireGhost', fill: 'none' });
   connLayer.appendChild(previewPath);
 
@@ -92,9 +95,19 @@ function updatePreview(clientX: number, clientY: number): void {
   }
   const comp = appState.findComponent(pendingPort.compId);
   if (!comp) return;
-  const from = portWorldPos(comp, pendingPort.port);
   const to = viewportRef.clientToWorld(clientX, clientY);
-  previewPath.setAttribute('d', pathFromPoints([from, to]));
+  const anchor = workspaceRef
+    ? worldPortAnchor(viewportRef, workspaceRef, comp, pendingPort.port)
+    : null;
+  if (!anchor) {
+    previewPath.setAttribute('d', pathFromPoints([portWorldPos(comp, pendingPort.port), to]));
+    return;
+  }
+  // Same start the finished wire will have - a short stub out of the port - then one right
+  // angle to the pointer, rather than a diagonal straight line.
+  const stub = stubPoint(anchor, to, WIRE_STUB);
+  const corner = anchor.entryOrientation === 'V' ? { x: stub.x, y: to.y } : { x: to.x, y: stub.y };
+  previewPath.setAttribute('d', pathFromPoints([anchor.pos, stub, corner, to]));
 }
 
 /**

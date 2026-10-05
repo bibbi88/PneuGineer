@@ -110,8 +110,8 @@ describe('pressure reducing valve actually reduces pressure', () => {
     expect(pressureAt(graph, portKey(reg.id, 'OUT'))).toBeCloseTo(SOURCE_PRESSURE);
   });
 
-  it('does not regulate air travelling backwards through it', () => {
-    // Fed from its OUT side instead: a regulator reduces downstream only, so nothing is capped.
+  it('does not let air back through from OUT to IN', () => {
+    // Fed from its OUT side instead: the valve is closed that way, so nothing reaches IN.
     const source = createSource(compLayer(), 0, 0);
     const reg = createPressureReducingValve(compLayer(), 0, 200);
     setPressure(reg, 1);
@@ -121,7 +121,8 @@ describe('pressure reducing valve actually reduces pressure', () => {
       [wire(source.id, 'OUT', reg.id, 'OUT')],
       nextVersion(),
     );
-    expect(pressureAt(graph, portKey(reg.id, 'IN'))).toBeCloseTo(SOURCE_PRESSURE);
+    expect(graph.pressurized.has(portKey(reg.id, 'IN'))).toBe(false);
+    expect(pressureAt(graph, portKey(reg.id, 'IN'))).toBe(0);
   });
 
   it('an unregulated path in parallel wins, rather than the regulator limiting a line it is not in series with', () => {

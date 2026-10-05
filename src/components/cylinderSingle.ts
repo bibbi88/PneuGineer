@@ -248,18 +248,22 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
     step(dt: number, ctx: SimStepContext): void {
       const pressurizedA = ctx.isPressurized('A');
       const target = targetFor(pressurizedA);
-      ventingNow = !pressurizedA && target !== pos;
-      fillingNow = pressurizedA && target !== pos;
+      // While air is coming in through A, only the supply side can restrict it (the spring side
+      // vents to atmosphere directly, with no port or valve of its own). On the spring return
+      // stroke, A is what the piston is now exhausting through - a flow control valve out that
+      // way (a "meter-out" setup, the standard way to control cylinder speed) throttles the
+      // return just as it would a driven stroke, and a shut-off exhaust (0) holds it.
+      const multiplier =
+        target === pos
+          ? 0
+          : pressurizedA
+            ? ctx.flowMultiplierToNearestSource('A')
+            : ctx.flowMultiplierToOpenExhaust('A');
+      const moving = multiplier > 0;
+      ventingNow = moving && !pressurizedA;
+      fillingNow = moving && pressurizedA;
 
       if (target !== pos) {
-        // While air is coming in through A, only the supply side can restrict it (the spring
-        // side vents to atmosphere directly, with no port or valve of its own). On the spring
-        // return stroke, A is what the piston is now exhausting through - a flow control valve
-        // out that way (a "meter-out" setup, the standard way to control cylinder speed) throttles
-        // the return just as it would a driven stroke.
-        const multiplier = pressurizedA
-          ? ctx.flowMultiplierToNearestSource('A')
-          : ctx.flowMultiplierToOpenExhaust('A');
         const dir = target > pos ? 1 : -1;
         const step = BASE_CYL_SPEED * multiplier * dt;
         pos += dir * Math.min(step, Math.abs(target - pos));
@@ -343,7 +347,6 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
     setSelected: shell.setSelected,
     currentlyVenting: () => (ventingNow ? ['A'] : []),
     currentlyFilling: () => (fillingNow ? ['A'] : []),
-    sealedPorts: () => ['A'],
 
     relabel(): void {
       const oldLetter = letter;

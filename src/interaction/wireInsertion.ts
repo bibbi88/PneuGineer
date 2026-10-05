@@ -10,6 +10,7 @@ import {
   computeConnectionGeometry,
 } from '../geometry/connectionGeometry';
 import {
+  completeGuides,
   distPointToSegment,
   guideCorners,
   seedGuidesFromPoints,
@@ -115,6 +116,9 @@ function connectionPolyline(
     const points = computeConnectionGeometry(viewport, workspaceEl, conn);
     guides = seedGuidesFromPoints(points, stubOut0, stubIn);
   }
+  // Including the bend the renderer adds when the last guide doesn't line up with the end
+  // stub - otherwise the last segment here is a diagonal that isn't on screen.
+  guides = completeGuides(fromAnchor, toAnchor, guides, conn.stubStartLen, conn.stubEndLen);
 
   const corners = guideCorners(fromAnchor, toAnchor, guides, conn.stubStartLen);
   return { points: [...corners, stubIn], guides };

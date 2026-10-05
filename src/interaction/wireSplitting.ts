@@ -12,6 +12,7 @@ import {
   computeConnectionGeometry,
 } from '../geometry/connectionGeometry';
 import {
+  completeGuides,
   distPointToSegment,
   guideCorners,
   seedGuidesFromPoints,
@@ -19,9 +20,14 @@ import {
   type Point,
 } from '../geometry/routing';
 import { WIRE_STUB } from '../sim/constants';
+import { snap } from '../core/grid';
 import { makeDraggable } from './drag';
 import { wireUpPortLinking, getPendingPort } from './linking';
 import { wireUpComponentContextMenu } from './componentContextMenu';
+
+function clampToSegment(v: number, a: number, b: number): number {
+  return Math.max(Math.min(a, b), Math.min(Math.max(a, b), v));
+}
 
 function projectOntoSegment(p: Point, a: Point, b: Point): Point {
   if (a.y === b.y) {
@@ -64,6 +70,15 @@ export function initWireSplitting(
       conn.guides = seedGuidesFromPoints(points, stubOut0, stubIn0);
     }
 
+    // Include the bend the renderer adds when the last guide doesn't line up with the end stub,
+    // so the segments measured below are the ones actually drawn.
+    conn.guides = completeGuides(
+      fromAnchor,
+      toAnchor,
+      conn.guides,
+      conn.stubStartLen,
+      conn.stubEndLen,
+    );
     const stubIn = stubPoint(toAnchor, fromAnchor.pos, conn.stubEndLen ?? WIRE_STUB);
     const corners = guideCorners(fromAnchor, toAnchor, conn.guides, conn.stubStartLen);
     const allPoints: Point[] = [...corners, stubIn];
@@ -83,10 +98,20 @@ export function initWireSplitting(
 
     const a = allPoints[bestIdx] as Point;
     const b = allPoints[bestIdx + 1] as Point;
-    const junctionPos = projectOntoSegment(clickWorld, a, b);
-    const junctionOrientation: 'H' | 'V' = a.y === b.y ? 'H' : 'V';
+    // Snapped like everything else placed on the canvas, but only along the line - the cross
+    // axis stays exactly on the wire.
+    const lineHorizontal = a.y === b.y;
+    const projected = projectOntoSegment(clickWorld, a, b);
+    const junctionPos = lineHorizontal
+      ? { x: clampToSegment(snap(projected.x), a.x, b.x), y: projected.y }
+      : { x: projected.x, y: clampToSegment(snap(projected.y), a.y, b.y) };
+    // The junction's port faces *across* the line it sits on: the two halves of the split
+    // line meet it with zero-length stubs (so its axis doesn't affect them), and the new
+    // branch then leaves it at a right angle - a clean T rather than a wire that may set off
+    // along the very line it's joining.
+    const branchOrientation: 'H' | 'V' = lineHorizontal ? 'V' : 'H';
 
-    const junction = createJunction(compLayer, junctionPos.x, junctionPos.y, junctionOrientation);
+    const junction = createJunction(compLayer, junctionPos.x, junctionPos.y, branchOrientation);
     appState.addComponent(junction);
     makeDraggable(junction, viewport);
     wireUpPortLinking(junction);
@@ -116,14 +141,13 @@ export function initWireSplitting(
     secondConn.stubEndLen = stubEndLen;
     redrawConnection(secondConn);
 
-    // The third wire, from whichever port the drag started at to this new junction - zeroed for
-    // the same reason as the two split halves above, so it approaches the junction as directly
-    // as possible instead of being forced into a perpendicular launch first.
+    // The third wire, from whichever port the drag started at to this new junction. It keeps a
+    // normal stub at the junction end, which (with the junction's port facing across the line)
+    // makes it leave the line at a right angle, on whichever side the other port is.
     const thirdConn = createConnection(
       { id: pending.compId, port: pending.port },
       { id: junction.id, port: 'P' },
     );
-    thirdConn.stubEndLen = 0;
     redrawConnection(thirdConn);
 
     return true;

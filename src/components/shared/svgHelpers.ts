@@ -1,4 +1,5 @@
 import type { ComponentBounds, PortDef, PortKey } from '../../core/types';
+import { rotateQuarter } from '../../geometry/coords';
 
 export const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -102,6 +103,26 @@ export function buildComponentShell(
   let cx = x;
   let cy = y;
 
+  // `box` in world space, following the component's current rotation (comp.el's data-rot, a
+  // multiple of 90) and mirroring (data-mirror, which flips the svg artwork left-right about its
+  // own center) - read live from the same attributes the CSS transform is built from, so a
+  // rotated component is avoided by the wire router, and hit by a marquee, where it is actually
+  // drawn rather than where it would be unrotated.
+  function worldBounds(): ComponentBounds {
+    let x0 = box.x - svgW / 2;
+    const y0 = box.y - svgH / 2;
+    if (el.dataset.mirror === '1') x0 = -(x0 + box.w);
+    const rot = (((Number(el.dataset.rot ?? '0') % 360) + 360) % 360) as 0 | 90 | 180 | 270;
+    const [ax, ay] = rotateQuarter(x0, y0, rot);
+    const [bx, by] = rotateQuarter(x0 + box.w, y0 + box.h, rot);
+    return {
+      x: cx + Math.min(ax, bx),
+      y: cy + Math.min(ay, by),
+      w: Math.abs(bx - ax),
+      h: Math.abs(by - ay),
+    };
+  }
+
   function setPos(nx: number, ny: number): void {
     cx = nx;
     cy = ny;
@@ -117,13 +138,14 @@ export function buildComponentShell(
     svg,
     labelEl,
     setPos,
-    getBounds: () => ({
-      x: cx - svgW / 2 + box.x,
-      y: cy - svgH / 2 + box.y,
-      w: box.w,
-      h: box.h,
-    }),
-    setSelected: (sel: boolean) => boundsEl.classList.toggle('selected', sel),
+    getBounds: worldBounds,
+    setSelected: (sel: boolean) => {
+      // boundsEl sits on comp.el (rotated with it) but outside the mirrored svg, so follow the
+      // mirroring by hand to keep the outline on the artwork.
+      const mirrored = el.dataset.mirror === '1';
+      boundsEl.style.left = `${mirrored ? svgW - box.x - box.w : box.x}px`;
+      boundsEl.classList.toggle('selected', sel);
+    },
     setDefaultName: (text: string) => {
       defaultName = text;
       renderName();

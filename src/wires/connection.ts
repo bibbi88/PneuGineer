@@ -14,6 +14,7 @@ import {
   computeConnectionGeometry,
 } from '../geometry/connectionGeometry';
 import {
+  completeGuides,
   distPointToSegment,
   guideCorners,
   pathFromPoints,
@@ -207,6 +208,14 @@ function addBendAtWorldPoint(conn: Connection, worldPoint: Point): void {
     const points = computeConnectionGeometry(viewportRef, workspaceRef, conn);
     conn.guides = seedGuidesFromPoints(points, stubOut, stubIn);
   }
+  // Include the bend the renderer adds when the last guide doesn't line up with the end stub.
+  conn.guides = completeGuides(
+    fromAnchor,
+    toAnchor,
+    conn.guides,
+    conn.stubStartLen,
+    conn.stubEndLen,
+  );
 
   const corners = guideCorners(fromAnchor, toAnchor, conn.guides, conn.stubStartLen);
   const allPoints: Point[] = [...corners, stubIn];

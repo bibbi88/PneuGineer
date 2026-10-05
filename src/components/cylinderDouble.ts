@@ -223,20 +223,26 @@ export function createCylinderDouble(compLayer: HTMLElement, x: number, y: numbe
         ventingPort = 'A';
       }
 
-      // Only actually venting while there's still a real move left to make - once the piston
-      // bottoms out there's no more volume to displace, so the exhaust flow (and its animation)
-      // should stop right along with the motion.
-      ventingNow = drivingPort && ventingPort && target !== pos ? ventingPort : null;
-      fillingNow = drivingPort && ventingPort && target !== pos ? drivingPort : null;
+      // Whichever side is more restricted sets the pace - a flow control valve throttling the
+      // exhausting chamber slows the piston down just as much as one throttling the supply
+      // would, matching how these are actually used (a "meter-out" flow control on the exhaust
+      // is the standard way to control cylinder speed in real pneumatics). A shut-off exhaust
+      // (0) holds the piston where it is.
+      const multiplier =
+        drivingPort && ventingPort
+          ? Math.min(
+              ctx.flowMultiplierToNearestSource(drivingPort),
+              ctx.flowMultiplierToOpenExhaust(ventingPort),
+            )
+          : 0;
+
+      // Air only streams in and out while the piston is actually moving - not once it bottoms
+      // out (no more volume to displace), nor while it's held by a shut-off exhaust.
+      const moving = multiplier > 0 && target !== pos;
+      ventingNow = moving ? ventingPort : null;
+      fillingNow = moving ? drivingPort : null;
 
       if (drivingPort && ventingPort) {
-        // Whichever side is more restricted sets the pace - a flow control valve throttling
-        // the exhausting chamber slows the piston down just as much as one throttling the
-        // supply would, matching how these are actually used (a "meter-out" flow control on
-        // the exhaust is the standard way to control cylinder speed in real pneumatics).
-        const inMultiplier = ctx.flowMultiplierToNearestSource(drivingPort);
-        const outMultiplier = ctx.flowMultiplierToOpenExhaust(ventingPort);
-        const multiplier = Math.min(inMultiplier, outMultiplier);
         const dir = target > pos ? 1 : -1;
         const step = BASE_CYL_SPEED * multiplier * dt;
         pos += dir * Math.min(step, Math.abs(target - pos));
@@ -317,7 +323,6 @@ export function createCylinderDouble(compLayer: HTMLElement, x: number, y: numbe
     setSelected: shell.setSelected,
     currentlyVenting: () => (ventingNow ? [ventingNow] : []),
     currentlyFilling: () => (fillingNow ? [fillingNow] : []),
-    sealedPorts: () => ['A', 'B'],
 
     relabel(): void {
       const oldLetter = letter;

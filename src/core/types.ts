@@ -129,11 +129,6 @@ export interface Component<TSnapshot = Record<string, unknown>> {
   pressureLimit?(fromPort: PortKey, toPort: PortKey): number | null;
   /** Ports that inject pressure into the system (e.g. a pressure source's outlet). */
   sourcePorts?(): PortKey[];
-  /** Ports that open into a closed volume, e.g. a cylinder's chambers. When a line ends at one
-   * of these, the air has nowhere further to go - unlike a line ending at an open port (a
-   * valve's exhaust), which vents to atmosphere. Lets the exhaust-speed calculation ignore
-   * other cylinders sharing a line rather than mistaking their chambers for exhaust vents. */
-  sealedPorts?(): PortKey[];
   /** Ports this component is actively venting air out through as of the most recent step() -
    * e.g. a cylinder's currently-retracting chamber. Purely a visualization hook (drives the
    * exhaust flow animation on wires); has no effect on the pressure/conductivity simulation

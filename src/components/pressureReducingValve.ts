@@ -246,12 +246,15 @@ export function createPressureReducingValve(
 
     // Normally open: a regulator restricts pressure, not the topology, so air always has a path
     // through it.
+    // One way only, IN -> OUT. Once the outlet reaches the set pressure the valve closes, and
+    // air downstream can't push back through it - a cylinder fed through it can't exhaust back
+    // this way, so it holds (fit a check valve in parallel, or put the reducing valve in the
+    // supply ahead of the directional valve, for a return path).
     conductivityRule(): PortConnection[] {
-      return [{ a: 'IN', b: 'OUT' }];
+      return [{ a: 'IN', b: 'OUT', directed: true }];
     },
 
-    // Downstream only. Air travelling backwards through a regulator (a cylinder exhausting back
-    // through it, say) isn't regulated, so OUT -> IN gets no ceiling.
+    // Downstream only: caps what reaches OUT at the set pressure.
     pressureLimit(fromPort: PortKey): number | null {
       return fromPort === 'IN' ? outletPressure : null;
     },

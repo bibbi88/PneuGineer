@@ -19,9 +19,11 @@ export interface FrameGraph {
    * exposes edges leaving a port, never ones arriving at it. */
   reverseAdjacency: Map<PortKeyStr, Set<PortKeyStr>>;
   sourceKeys: Set<PortKeyStr>;
-  /** Ports that open into a closed volume (see `Component.sealedPorts`) - a dead end there is
-   * not a way out to atmosphere. */
-  sealedKeys: Set<PortKeyStr>;
+  /** Ports with at least one wire attached. Air only escapes to atmosphere through a port with
+   * nothing connected to it (a valve's exhaust port, the open end of a throttle) - a wired dead
+   * end (another cylinder's chamber, a closed valve port, the outlet of a valve that won't let
+   * air back through) traps it instead. See `flowMultiplierToOpenExhaust`. */
+  wiredKeys: Set<PortKeyStr>;
   /** Pressure (bar) available at each port that has any - see `computePressures`. A port absent
    * from the map has none: either it isn't pressurized, or no live supply reaches it. */
   pressure: Map<PortKeyStr, number>;
@@ -47,7 +49,7 @@ export function emptyFrameGraph(): FrameGraph {
     adjacency: new Map(),
     reverseAdjacency: new Map(),
     sourceKeys: new Set(),
-    sealedKeys: new Set(),
+    wiredKeys: new Set(),
     pressure: new Map(),
     pressureCaps: new Map(),
     exhausting: new Set(),
@@ -251,14 +253,12 @@ export function computeFrameGraph(
 
   const pressurized = new Set<PortKeyStr>();
   const sourceKeys = new Set<PortKeyStr>();
-  const sealedKeys = new Set<PortKeyStr>();
   for (const c of components) {
     for (const p of c.sourcePorts?.() ?? []) {
       const key = portKey(c.id, p);
       pressurized.add(key);
       sourceKeys.add(key);
     }
-    for (const p of c.sealedPorts?.() ?? []) sealedKeys.add(portKey(c.id, p));
   }
   flood(adjacency, pressurized);
 
@@ -305,7 +305,7 @@ export function computeFrameGraph(
     adjacency,
     reverseAdjacency,
     sourceKeys,
-    sealedKeys,
+    wiredKeys: new Set(wireAdjacency.keys()),
     pressure: computePressures(adjacency, pressureCaps, pressurized, sourceKeys),
     pressureCaps,
     exhausting: new Set(),
@@ -320,15 +320,20 @@ export function computeFrameGraph(
  * circuits actually favor for controlling actuator speed (throttling the exhaust rather than
  * the supply gives much steadier control, since the exhausting chamber is what's resisting the
  * piston's motion). Walks the graph outward from `fromKey`, multiplying each edge's flow
- * multiplier along the way, until it dead-ends at a port with no further unvisited neighbors -
- * there's no dedicated "atmosphere" node in this graph, so a true dead end (an open exhaust
- * port, typically fitted with just a silencer that doesn't itself appear here) is what stands
- * in for it - except a sealed port (another cylinder's chamber on the same line), which is a
- * closed volume rather than a way out and so doesn't count. When more than one dead end is reachable (a branching exhaust path), the most
- * restrictive one wins, matching this simulator's existing multiply-along-the-path model for
- * components in series. Returns 1 (unrestricted) if `fromKey` isn't wired to anything at all.
+ * multiplier along the way, until it dead-ends at a port with no further unvisited neighbors.
+ * There's no dedicated "atmosphere" node in this graph: an open port - one with no wire attached,
+ * like a valve's exhaust port (typically fitted with just a silencer, which doesn't appear here)
+ * or the free end of a throttle - is what stands in for it. A dead end at a *wired* port is not
+ * a way out: the air is trapped there (another cylinder's chamber on the same line, a closed
+ * valve port, the outlet of a check or pressure reducing valve that won't let air back through).
+ * When more than one open port is reachable (a branching exhaust path), the most restrictive one
+ * wins, matching this simulator's existing multiply-along-the-path model for components in
+ * series. Returns 1 (unrestricted) if `fromKey` isn't wired to anything at all - it then vents
+ * straight to atmosphere itself - and 0 if it is wired but no open port can be reached, so a
+ * cylinder whose exhaust is shut off holds its position.
  */
 export function flowMultiplierToOpenExhaust(graph: FrameGraph, fromKey: PortKeyStr): number {
+  if (!graph.wiredKeys.has(fromKey)) return 1;
   const queue: Array<{ key: PortKeyStr; mult: number }> = [{ key: fromKey, mult: 1 }];
   const visited = new Set<PortKeyStr>([fromKey]);
   let leafMult = Infinity;
@@ -339,9 +344,7 @@ export function flowMultiplierToOpenExhaust(graph: FrameGraph, fromKey: PortKeyS
     const neighbors = graph.adjacency.get(cur.key);
     const unvisited = [...(neighbors?.keys() ?? [])].filter((k) => !visited.has(k));
     if (unvisited.length === 0) {
-      // A dead end at a closed volume (another cylinder's chamber sharing this line) is not a
-      // way out - counting it would let a throttle in front of *that* cylinder slow this one.
-      if (!graph.sealedKeys.has(cur.key)) leafMult = Math.min(leafMult, cur.mult);
+      if (!graph.wiredKeys.has(cur.key)) leafMult = Math.min(leafMult, cur.mult);
       continue;
     }
     for (const next of unvisited) {
@@ -350,7 +353,7 @@ export function flowMultiplierToOpenExhaust(graph: FrameGraph, fromKey: PortKeyS
     }
   }
 
-  return leafMult === Infinity ? 1 : leafMult;
+  return leafMult === Infinity ? 0 : leafMult;
 }
 
 /**

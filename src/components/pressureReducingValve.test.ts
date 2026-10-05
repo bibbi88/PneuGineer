@@ -12,9 +12,9 @@ function layer(): HTMLElement {
 const noPressure = { isPressurized: () => false };
 
 describe('createPressureReducingValve', () => {
-  it('is normally open: IN conducts through to OUT', () => {
+  it('is normally open IN -> OUT, and one way only', () => {
     const valve = createPressureReducingValve(layer(), 0, 0);
-    expect(valve.conductivityRule(noPressure)).toEqual([{ a: 'IN', b: 'OUT' }]);
+    expect(valve.conductivityRule(noPressure)).toEqual([{ a: 'IN', b: 'OUT', directed: true }]);
   });
 
   it('starts at a reduced set pressure, below the supply', () => {

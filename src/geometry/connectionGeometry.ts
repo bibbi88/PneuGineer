@@ -1,7 +1,7 @@
-import type { Connection, ComponentId } from '../core/types';
+import type { Component, Connection, ComponentId, PortKey } from '../core/types';
 import type { ViewportAdapter } from '../ui/viewport';
 import { appState } from '../app/AppState';
-import { portGlobalPosition } from './coords';
+import { componentRotation, portGlobalPosition, rotateQuarter } from './coords';
 import { routeWithGuides, type Point, type PortAnchor } from './routing';
 import { autoRouteAStar } from './autoRoute';
 
@@ -16,6 +16,58 @@ interface CacheEntry {
 
 const cache = new Map<ComponentId, CacheEntry>();
 
+/** Each connection's most recently computed polyline, whichever way it was routed - what the
+ * auto-router steers new wires away from running along. Entries for deleted connections are
+ * simply never looked up again (only ids still in appState.connections are read). */
+const lastRoute = new Map<ComponentId, Point[]>();
+
+/**
+ * A port's wire anchor in world space: its position, the axis its wire leaves along, and which
+ * way along that axis.
+ *
+ * A port's own `entryOrientation`/`pilotDir` describe the component's unrotated artwork, so
+ * they're turned here to match the component's current rotation and mirroring - otherwise a
+ * rotated valve's wires would leave sideways along (or straight into) its body.
+ *
+ * The exit direction is fixed to point *out of* the component (away from its center along the
+ * exit axis): a wire leaving the top port of a valve goes up first and then around, never down
+ * through the valve, even when the other end is below. A port sitting at the component's own
+ * center along that axis (a junction dot) has no "outward", so it keeps the default of heading
+ * toward whatever the wire connects to.
+ */
+export function worldPortAnchor(
+  viewport: ViewportAdapter,
+  workspaceEl: HTMLElement,
+  comp: Component,
+  portKey: PortKey,
+): PortAnchor | null {
+  const port = comp.ports[portKey];
+  if (!port) return null;
+  const pos = portGlobalPosition(viewport, workspaceEl, comp, portKey);
+  const rot = componentRotation(comp);
+  const quarterTurned = rot === 90 || rot === 270;
+  const entryOrientation: 'H' | 'V' = quarterTurned
+    ? port.entryOrientation === 'H'
+      ? 'V'
+      : 'H'
+    : port.entryOrientation;
+
+  let exitDir: 1 | -1 | undefined;
+  if (port.pilotDir) {
+    let vx = port.entryOrientation === 'H' ? port.pilotDir : 0;
+    const vy = port.entryOrientation === 'V' ? port.pilotDir : 0;
+    if (comp.el.dataset.mirror === '1') vx = -vx;
+    const [wx, wy] = rotateQuarter(vx, vy, rot);
+    exitDir = (entryOrientation === 'H' ? wx : wy) > 0 ? 1 : -1;
+  } else {
+    const b = comp.getBounds();
+    const offset = entryOrientation === 'H' ? pos.x - (b.x + b.w / 2) : pos.y - (b.y + b.h / 2);
+    if (Math.abs(offset) >= 1) exitDir = offset > 0 ? 1 : -1;
+  }
+
+  return { pos, entryOrientation, pilotDir: exitDir };
+}
+
 export function computeConnectionAnchors(
   viewport: ViewportAdapter,
   workspaceEl: HTMLElement,
@@ -25,22 +77,10 @@ export function computeConnectionAnchors(
   const toComp = appState.findComponent(conn.to.id);
   if (!fromComp || !toComp) return null;
 
-  const fromPort = fromComp.ports[conn.from.port];
-  const toPort = toComp.ports[conn.to.port];
-  if (!fromPort || !toPort) return null;
-
-  return {
-    fromAnchor: {
-      pos: portGlobalPosition(viewport, workspaceEl, fromComp, conn.from.port),
-      entryOrientation: fromPort.entryOrientation,
-      pilotDir: fromPort.pilotDir,
-    },
-    toAnchor: {
-      pos: portGlobalPosition(viewport, workspaceEl, toComp, conn.to.port),
-      entryOrientation: toPort.entryOrientation,
-      pilotDir: toPort.pilotDir,
-    },
-  };
+  const fromAnchor = worldPortAnchor(viewport, workspaceEl, fromComp, conn.from.port);
+  const toAnchor = worldPortAnchor(viewport, workspaceEl, toComp, conn.to.port);
+  if (!fromAnchor || !toAnchor) return null;
+  return { fromAnchor, toAnchor };
 }
 
 export function computeConnectionGeometry(
@@ -61,7 +101,15 @@ export function computeConnectionGeometry(
   // straight line the split was preserving - so a non-null stub length (only ever set by
   // deliberate editing, never left as A*'s implicit default) is treated as the same signal.
   if (conn.guides.length > 0 || conn.stubStartLen !== null || conn.stubEndLen !== null) {
-    return routeWithGuides(fromAnchor, toAnchor, conn.guides, conn.stubStartLen, conn.stubEndLen);
+    const guided = routeWithGuides(
+      fromAnchor,
+      toAnchor,
+      conn.guides,
+      conn.stubStartLen,
+      conn.stubEndLen,
+    );
+    lastRoute.set(conn.id, guided);
+    return guided;
   }
 
   // The A* route only depends on endpoint positions and topology (which components exist/where) -
@@ -75,10 +123,22 @@ export function computeConnectionGeometry(
     cached.toX === toAnchor.pos.x &&
     cached.toY === toAnchor.pos.y
   ) {
+    lastRoute.set(conn.id, cached.points);
     return cached.points;
   }
 
-  const excludeIds = new Set<ComponentId>([conn.from.id, conn.to.id]);
+  const otherWires: Point[][] = [];
+  for (const other of appState.connections) {
+    if (other.id === conn.id) continue;
+    const route = lastRoute.get(other.id);
+    if (route) otherWires.push(route);
+  }
+
+  // The wire's own two components are obstacles too: every wire now leaves its port outward
+  // (see worldPortAnchor), so there's no need to let the route cut back through the very
+  // component it starts or ends at - which is exactly what it used to do when the other end
+  // was on the far side of it.
+  const excludeIds = new Set<ComponentId>();
   const points = autoRouteAStar(
     fromAnchor,
     toAnchor,
@@ -86,7 +146,9 @@ export function computeConnectionGeometry(
     excludeIds,
     conn.stubStartLen,
     conn.stubEndLen,
+    otherWires,
   );
+  lastRoute.set(conn.id, points);
 
   cache.set(conn.id, {
     topologyVersion: appState.topologyVersion,

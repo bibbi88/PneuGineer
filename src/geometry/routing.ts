@@ -146,6 +146,32 @@ export function guideCorners(
   return corners;
 }
 
+/**
+ * `guides`, plus the extra bend `routeWithGuides` draws when the last guide's corner doesn't
+ * line up with the end stub (typically after the component at that end has been moved). That
+ * bend is real on screen but absent from the guide list, so anything that maps the guide list
+ * back onto the drawn wire - splitting it at a drop point, adding a bend where it was
+ * double-clicked, placing drag handles - must use this instead, or it measures against an
+ * imaginary diagonal from the last corner straight to the port and lands somewhere the wire
+ * isn't. Returns `guides` itself when no bend is missing.
+ */
+export function completeGuides(
+  from: PortAnchor,
+  to: PortAnchor,
+  guides: WireGuide[],
+  stubStartLen: number | null = null,
+  stubEndLen: number | null = null,
+): WireGuide[] {
+  const stubIn = stubPoint(to, from.pos, stubEndLen ?? WIRE_STUB);
+  const corners = guideCorners(from, to, guides, stubStartLen);
+  const last = corners[corners.length - 1] as Point;
+  if (last.x !== stubIn.x && last.y !== stubIn.y) {
+    // routeWithGuides bridges with { x: stubIn.x, y: last.y } - a bend that fixes x.
+    return [...guides, { type: 'V', pos: stubIn.x }];
+  }
+  return guides;
+}
+
 /** Reverse-engineers a guide list from a rendered path's internal corners, so a connection
  * that's still on auto-route can be "seeded" with editable guides matching its current visual
  * shape the first time the user drags a bend.
