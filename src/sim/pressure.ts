@@ -19,6 +19,9 @@ export interface FrameGraph {
    * exposes edges leaving a port, never ones arriving at it. */
   reverseAdjacency: Map<PortKeyStr, Set<PortKeyStr>>;
   sourceKeys: Set<PortKeyStr>;
+  /** Ports that open into a closed volume (see `Component.sealedPorts`) - a dead end there is
+   * not a way out to atmosphere. */
+  sealedKeys: Set<PortKeyStr>;
   /** Pressure (bar) available at each port that has any - see `computePressures`. A port absent
    * from the map has none: either it isn't pressurized, or no live supply reaches it. */
   pressure: Map<PortKeyStr, number>;
@@ -44,6 +47,7 @@ export function emptyFrameGraph(): FrameGraph {
     adjacency: new Map(),
     reverseAdjacency: new Map(),
     sourceKeys: new Set(),
+    sealedKeys: new Set(),
     pressure: new Map(),
     pressureCaps: new Map(),
     exhausting: new Set(),
@@ -247,12 +251,14 @@ export function computeFrameGraph(
 
   const pressurized = new Set<PortKeyStr>();
   const sourceKeys = new Set<PortKeyStr>();
+  const sealedKeys = new Set<PortKeyStr>();
   for (const c of components) {
     for (const p of c.sourcePorts?.() ?? []) {
       const key = portKey(c.id, p);
       pressurized.add(key);
       sourceKeys.add(key);
     }
+    for (const p of c.sealedPorts?.() ?? []) sealedKeys.add(portKey(c.id, p));
   }
   flood(adjacency, pressurized);
 
@@ -299,6 +305,7 @@ export function computeFrameGraph(
     adjacency,
     reverseAdjacency,
     sourceKeys,
+    sealedKeys,
     pressure: computePressures(adjacency, pressureCaps, pressurized, sourceKeys),
     pressureCaps,
     exhausting: new Set(),
@@ -316,7 +323,8 @@ export function computeFrameGraph(
  * multiplier along the way, until it dead-ends at a port with no further unvisited neighbors -
  * there's no dedicated "atmosphere" node in this graph, so a true dead end (an open exhaust
  * port, typically fitted with just a silencer that doesn't itself appear here) is what stands
- * in for it. When more than one dead end is reachable (a branching exhaust path), the most
+ * in for it - except a sealed port (another cylinder's chamber on the same line), which is a
+ * closed volume rather than a way out and so doesn't count. When more than one dead end is reachable (a branching exhaust path), the most
  * restrictive one wins, matching this simulator's existing multiply-along-the-path model for
  * components in series. Returns 1 (unrestricted) if `fromKey` isn't wired to anything at all.
  */
@@ -331,7 +339,9 @@ export function flowMultiplierToOpenExhaust(graph: FrameGraph, fromKey: PortKeyS
     const neighbors = graph.adjacency.get(cur.key);
     const unvisited = [...(neighbors?.keys() ?? [])].filter((k) => !visited.has(k));
     if (unvisited.length === 0) {
-      leafMult = Math.min(leafMult, cur.mult);
+      // A dead end at a closed volume (another cylinder's chamber sharing this line) is not a
+      // way out - counting it would let a throttle in front of *that* cylinder slow this one.
+      if (!graph.sealedKeys.has(cur.key)) leafMult = Math.min(leafMult, cur.mult);
       continue;
     }
     for (const next of unvisited) {

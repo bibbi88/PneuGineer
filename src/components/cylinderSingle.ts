@@ -343,6 +343,7 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
     setSelected: shell.setSelected,
     currentlyVenting: () => (ventingNow ? ['A'] : []),
     currentlyFilling: () => (fillingNow ? ['A'] : []),
+    sealedPorts: () => ['A'],
 
     relabel(): void {
       const oldLetter = letter;

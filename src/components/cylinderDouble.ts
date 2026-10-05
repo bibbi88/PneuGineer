@@ -317,6 +317,7 @@ export function createCylinderDouble(compLayer: HTMLElement, x: number, y: numbe
     setSelected: shell.setSelected,
     currentlyVenting: () => (ventingNow ? [ventingNow] : []),
     currentlyFilling: () => (fillingNow ? [fillingNow] : []),
+    sealedPorts: () => ['A', 'B'],
 
     relabel(): void {
       const oldLetter = letter;

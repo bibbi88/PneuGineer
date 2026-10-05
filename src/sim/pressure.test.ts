@@ -262,6 +262,29 @@ describe('computeFrameGraph', () => {
     expect(flowMultiplierToOpenExhaust(graph, portKey(cyl.id, 'B'))).toBeCloseTo(0.5);
   });
 
+  it('a throttle in front of one cylinder does not slow another cylinder sharing the same exhaust line', () => {
+    // One valve port feeding two cylinders, the second one metered in through its own one-way
+    // flow control valve (free flow back out of cylinder 2, throttled on the way in). Cylinder
+    // 1's exhaust walk reaches cylinder 2's chamber through that throttle in its throttled
+    // direction - but a cylinder chamber is a closed volume, not a way out to atmosphere, so it
+    // must not count as an (extra-restrictive) exhaust route for cylinder 1.
+    const cyl1 = createCylinderDouble(compLayer(), 0, 0);
+    const cyl2 = createCylinderDouble(compLayer(), 0, 0);
+    const meterIn = createOneWayFlowControlValve(compLayer(), 0, 0);
+    // Stand-in for the valve's open exhaust port: free flow IN -> OUT, OUT left open.
+    const vent = createOneWayFlowControlValve(compLayer(), 0, 0);
+    const connections = [
+      wire(cyl1.id, 'B', vent.id, 'IN'),
+      wire(cyl1.id, 'B', meterIn.id, 'OUT'),
+      wire(meterIn.id, 'IN', cyl2.id, 'B'),
+    ];
+    const graph = computeFrameGraph([cyl1, cyl2, meterIn, vent], connections, nextVersion());
+
+    expect(flowMultiplierToOpenExhaust(graph, portKey(cyl1.id, 'B'))).toBe(1);
+    // Cylinder 2 exhausts back out through the check valve, unthrottled.
+    expect(flowMultiplierToOpenExhaust(graph, portKey(cyl2.id, 'B'))).toBe(1);
+  });
+
   it('a throttled exhaust slows the cylinder down, not just a throttled supply', () => {
     // Regression test: cylinder speed used to only ever look at flowMultiplierToNearestSource on
     // the driving port, so a flow control valve wired to meter the exhaust (the way these are
