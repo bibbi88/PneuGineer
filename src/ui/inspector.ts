@@ -50,7 +50,7 @@ import {
   VALVE_52_SOLENOID_DOUBLE_TYPE,
   VALVE_53_SOLENOID_TYPE,
 } from '../components/solenoidValves';
-import { TEXT_ANNOTATION_TYPE } from '../components/textAnnotation';
+import { NOTE_STYLES, TEXT_ANNOTATION_TYPE } from '../components/textAnnotation';
 
 type FieldLabel = string | ((comp: Component) => string);
 
@@ -140,7 +140,24 @@ interface SilencerField {
   label: FieldLabel;
 }
 
+/** A plain snapshot key/value picked from a fixed list, e.g. a note's style. */
+interface SelectField {
+  kind: 'select';
+  key: string;
+  label: FieldLabel;
+  options: Array<{ value: string; label: string }>;
+}
+
+/** Free text over several lines, e.g. a note's own text. */
+interface MultilineTextField {
+  kind: 'multilineText';
+  key: string;
+  label: FieldLabel;
+}
+
 type InspectorField =
+  | SelectField
+  | MultilineTextField
   | NumberField
   | TextField
   | ReadonlyTextField
@@ -255,7 +272,15 @@ const INSPECTOR_FIELDS: Record<string, InspectorField[]> = {
     { kind: 'checkbox', key: 'showForce', label: 'Show force' },
     { kind: 'sensorList', arrayKey: 'sensors', min: 0, max: 100, step: 1 },
   ],
-  [TEXT_ANNOTATION_TYPE]: [{ kind: 'text', key: 'text', label: 'Text' }],
+  [TEXT_ANNOTATION_TYPE]: [
+    {
+      kind: 'select',
+      key: 'style',
+      label: 'Style',
+      options: Object.entries(NOTE_STYLES).map(([value, def]) => ({ value, label: def.label })),
+    },
+    { kind: 'multilineText', key: 'text', label: 'Text' },
+  ],
   [ELEC_CONTACT_TYPE]: [
     { kind: 'actuatorMode', label: 'Type', options: ELEC_CONTACT_MODES },
     { kind: 'text', key: 'key', label: 'Signal (relay coil or sensor, e.g. K1, A1)' },
@@ -319,6 +344,47 @@ function updateComponentField(comp: Component, key: string, value: unknown): voi
   comp.restore({ ...comp.snapshot(), [key]: value });
   redrawAllConnections();
   appState.markDirty();
+}
+
+function renderSelectField(
+  container: HTMLElement,
+  comp: Component,
+  field: SelectField,
+  snap: Record<string, unknown>,
+): void {
+  const row = document.createElement('label');
+  row.className = 'inspectorRow';
+  const span = document.createElement('span');
+  span.textContent = resolveLabel(field.label, comp);
+  const select = document.createElement('select');
+  for (const opt of field.options) {
+    const o = document.createElement('option');
+    o.value = opt.value;
+    o.textContent = opt.label;
+    select.appendChild(o);
+  }
+  select.value = String(snap[field.key] ?? field.options[0]?.value ?? '');
+  select.addEventListener('change', () => updateComponentField(comp, field.key, select.value));
+  row.append(span, select);
+  container.appendChild(row);
+}
+
+function renderMultilineTextField(
+  container: HTMLElement,
+  comp: Component,
+  field: MultilineTextField,
+  snap: Record<string, unknown>,
+): void {
+  const row = document.createElement('label');
+  row.className = 'inspectorRow inspectorRowStacked';
+  const span = document.createElement('span');
+  span.textContent = resolveLabel(field.label, comp);
+  const area = document.createElement('textarea');
+  area.rows = 4;
+  area.value = String(snap[field.key] ?? '');
+  area.addEventListener('change', () => updateComponentField(comp, field.key, area.value));
+  row.append(span, area);
+  container.appendChild(row);
 }
 
 function renderNumberOrTextField(
@@ -1038,6 +1104,9 @@ export function renderInspector(container: HTMLElement, projectBar: ProjectBarRe
       else if (field.kind === 'silencer') renderSilencerField(container, comp, field, snap);
       else if (field.kind === 'checkbox') renderCheckboxField(container, comp, field, snap);
       else if (field.kind === 'readonlyText') renderReadonlyTextField(container, comp, field, snap);
+      else if (field.kind === 'select') renderSelectField(container, comp, field, snap);
+      else if (field.kind === 'multilineText')
+        renderMultilineTextField(container, comp, field, snap);
       else renderNumberOrTextField(container, comp, field, snap);
     }
   }

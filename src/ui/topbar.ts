@@ -4,6 +4,62 @@ import { renderProjectBar, type ProjectBarRefs } from './projectBar';
 import { renderToolbar } from './toolbar';
 import { renderViewControls } from './viewControls';
 import { renderArrangeControls } from './arrangeControls';
+import { createSvgEl } from '../components/shared/svgHelpers';
+
+/** The app's mark and name, with the build version (yymmdd, see vite.config.ts) under it. The
+ * mark is a double-acting cylinder: barrel, piston and rod. */
+function renderBrand(container: HTMLElement): void {
+  const brand = document.createElement('div');
+  brand.className = 'brand';
+
+  const logo = createSvgEl('svg', {
+    class: 'brandLogo',
+    viewBox: '0 0 32 32',
+    width: 28,
+    height: 28,
+    'aria-hidden': 'true',
+  });
+  logo.append(
+    createSvgEl('rect', { x: 1, y: 1, width: 30, height: 30, rx: 7, fill: '#1d3b8b' }),
+    createSvgEl('rect', {
+      x: 5,
+      y: 10,
+      width: 15,
+      height: 12,
+      rx: 1.5,
+      fill: 'none',
+      stroke: '#fff',
+      'stroke-width': 2,
+    }),
+    createSvgEl('rect', { x: 10, y: 11, width: 3, height: 10, fill: '#5fa8ff' }),
+    createSvgEl('line', {
+      x1: 13,
+      y1: 16,
+      x2: 28,
+      y2: 16,
+      stroke: '#fff',
+      'stroke-width': 2.5,
+      'stroke-linecap': 'round',
+    }),
+  );
+
+  const text = document.createElement('div');
+  text.className = 'brandText';
+  const name = document.createElement('span');
+  name.className = 'brandName';
+  const pneu = document.createElement('span');
+  pneu.className = 'brandNameAccent';
+  pneu.textContent = 'Pneu';
+  name.append(pneu, 'Gineer');
+  const version = document.createElement('span');
+  version.className = 'brandVersion';
+  version.textContent = `v${__APP_VERSION__}`;
+  version.title = 'Version (build date, yymmdd)';
+  text.append(name, version);
+
+  brand.append(logo, text);
+  container.appendChild(brand);
+}
 
 /** Builds the application toolbar across the top of the window, grouped so related controls sit
  * together with a divider between groups: the project (name, save, load, export), the
@@ -22,6 +78,7 @@ export function renderTopbar(
   workspaceEl: HTMLElement,
 ): ProjectBarRefs {
   container.replaceChildren();
+  renderBrand(container);
 
   function section(label: string): HTMLElement {
     const el = document.createElement('div');

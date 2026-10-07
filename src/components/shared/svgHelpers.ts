@@ -29,6 +29,10 @@ export interface ComponentShell {
   /** null means "use the default name" - an empty/whitespace-only string is treated the same. */
   setCustomName(name: string | null): void;
   getCustomName(): string | null;
+  /** Changes the canvas size after creation, for a component whose artwork grows and shrinks
+   * (a text note). The bounds become the whole new canvas; the component stays centered on
+   * its position. */
+  resize(w: number, h: number): void;
 }
 
 export function buildComponentShell(
@@ -79,14 +83,15 @@ export function buildComponentShell(
   // the selection outline and getBounds() (obstacle avoidance, marquee hit-testing) read `box`,
   // so without this the selection rectangle would land flush against the artwork's own outline
   // (or a port dot right at the edge), reading as clipped rather than as a selection around it.
-  const rawBox = innerBounds ?? { x: 0, y: 0, w: svgW, h: svgH };
   const BOUNDS_INSET = 2;
-  const box = {
-    x: rawBox.x + BOUNDS_INSET,
-    y: rawBox.y + BOUNDS_INSET,
-    w: Math.max(0, rawBox.w - BOUNDS_INSET * 2),
-    h: Math.max(0, rawBox.h - BOUNDS_INSET * 2),
-  };
+  const box = { x: 0, y: 0, w: 0, h: 0 };
+  function setBox(rawBox: { x: number; y: number; w: number; h: number }): void {
+    box.x = rawBox.x + BOUNDS_INSET;
+    box.y = rawBox.y + BOUNDS_INSET;
+    box.w = Math.max(0, rawBox.w - BOUNDS_INSET * 2);
+    box.h = Math.max(0, rawBox.h - BOUNDS_INSET * 2);
+  }
+  setBox(innerBounds ?? { x: 0, y: 0, w: svgW, h: svgH });
 
   // Selection is highlighted on this box, not the outer .comp div - the div always spans the
   // full padded canvas (ports, labels, pilot stubs and all), so outlining it directly would
@@ -94,10 +99,13 @@ export function buildComponentShell(
   // `innerBounds` is. This one is sized/positioned to the same tight box getBounds() reports.
   const boundsEl = document.createElement('div');
   boundsEl.className = 'boundsBox';
-  boundsEl.style.left = `${box.x}px`;
-  boundsEl.style.top = `${box.y}px`;
-  boundsEl.style.width = `${box.w}px`;
-  boundsEl.style.height = `${box.h}px`;
+  function placeBoundsEl(): void {
+    boundsEl.style.left = `${box.x}px`;
+    boundsEl.style.top = `${box.y}px`;
+    boundsEl.style.width = `${box.w}px`;
+    boundsEl.style.height = `${box.h}px`;
+  }
+  placeBoundsEl();
   el.appendChild(boundsEl);
 
   let cx = x;
@@ -162,6 +170,14 @@ export function buildComponentShell(
       renderName();
     },
     getCustomName: () => customName,
+    resize: (w: number, h: number) => {
+      svgW = w;
+      svgH = h;
+      svg.setAttribute('width', String(w));
+      svg.setAttribute('height', String(h));
+      setBox({ x: 0, y: 0, w, h });
+      placeBoundsEl();
+    },
   };
 }
 

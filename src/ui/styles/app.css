@@ -69,6 +69,39 @@ body {
   padding-left: 0;
 }
 
+/* App name and version at the far left of the toolbar. */
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  padding-right: 12px;
+  margin-right: 4px;
+  border-right: 1px solid var(--line);
+}
+
+.brandText {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.1;
+}
+
+.brandName {
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.2px;
+}
+
+.brandNameAccent {
+  color: #1d3b8b;
+}
+
+.brandVersion {
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
 .topbarSection:last-child {
   border-right: none;
 }
@@ -550,26 +583,23 @@ svg.compSvg {
 
 .annotationText {
   position: absolute;
-  inset: 0;
+  top: 0;
+  left: 0;
+  min-width: 100%;
+  min-height: 100%;
   box-sizing: border-box;
-  padding: 8px 10px;
-  font-size: 13px;
-  line-height: 1.35;
-  color: #5c4f1e;
-  overflow: hidden;
-  word-break: break-word;
-  white-space: pre-wrap;
-  cursor: default;
-  user-select: none;
+  white-space: pre;
+  pointer-events: none;
 }
 
+/* The in-place editor laid over a note's SVG text while it's being edited (see
+   textAnnotation.ts). */
 .annotationText.editing {
   cursor: text;
   user-select: text;
+  pointer-events: auto;
   outline: 2px solid var(--port);
-  outline-offset: -2px;
-  background: #fffef5;
-  overflow: auto;
+  background: #fff;
 }
 
 .port {
@@ -870,6 +900,21 @@ rect.wireHandle.wireStubHandle {
 
 .inspectorRow input {
   width: 90px;
+}
+
+/* Label above a full-width control, for a multi-line text box. */
+.inspectorRowStacked {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.inspectorRowStacked textarea {
+  padding: 4px 6px;
+  border: 1px solid #bbb;
+  border-radius: 4px;
+  font: inherit;
+  resize: vertical;
 }
 
 .inspectorRow input[type='checkbox'] {
