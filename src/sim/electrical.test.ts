@@ -3,17 +3,18 @@ import { appState } from '../app/AppState';
 import { Modes } from '../app/modes';
 import { initWires, createConnection } from '../wires/connection';
 import { solveElectrical } from './electrical';
-import { resetSignals, getSignal } from './signals';
+import { resetSignals, getSignal, setSignal } from './signals';
 import {
   createElecRailPlus,
   createElecRailZero,
   createElecCoil,
+  createElecSolenoid,
   createElecContact,
   createElecLamp,
   createElecChangeover,
 } from '../components/electrical';
 import { createPlc } from '../components/plc';
-import { createElecPushButton } from '../components/electrical';
+import { createElecPushButton, ELEC_SOLENOID_TYPE } from '../components/electrical';
 import { createValve52Solenoid } from '../components/solenoidValves';
 import type { Component } from '../core/types';
 import type { ViewportAdapter } from '../ui/viewport';
@@ -58,7 +59,7 @@ describe('solveElectrical', () => {
     wire(coil, 'B', zero, 'P');
 
     solveElectrical(0);
-    expect(getSignal('Y1')).toBe(true);
+    expect(getSignal('K1')).toBe(true);
   });
 
   it('does not energize a coil that is only connected on one side', () => {
@@ -67,7 +68,7 @@ describe('solveElectrical', () => {
     wire(plus, 'P', coil, 'A');
 
     solveElectrical(0);
-    expect(getSignal('Y1')).toBe(false);
+    expect(getSignal('K1')).toBe(false);
   });
 
   it('a relay chain settles in one solve: K1 closes a contact that energizes the lamp', () => {
@@ -102,7 +103,7 @@ describe('solveElectrical', () => {
     wire(coil, 'B', zero, 'P');
 
     solveElectrical(0);
-    expect(getSignal('Y1')).toBe(true);
+    expect(getSignal('K1')).toBe(true);
   });
 
   it('a changeover contact feeds NC at rest and switches over to NO when its signal is on', () => {
@@ -141,10 +142,10 @@ describe('solveElectrical', () => {
     expect(getSignal('H2')).toBe(true);
   });
 
-  it('a solenoid valve shifts while the coil with its name is energized', () => {
+  it('a solenoid valve shifts while the solenoid with its name is energized', () => {
     const plus = add(createElecRailPlus(layer(), 0, 0));
     const zero = add(createElecRailZero(layer(), 0, 300));
-    const coil = add(createElecCoil(layer(), 0, 150));
+    const coil = add(createElecSolenoid(layer(), 0, 150));
     wire(plus, 'P', coil, 'A');
     wire(coil, 'B', zero, 'P');
     const valve = add(createValve52Solenoid(layer(), 400, 150));
@@ -175,7 +176,7 @@ describe('solveElectrical', () => {
     wire(plus, 'P', stop, 'A');
     wire(stop, 'B', plc, 'I0.1');
 
-    const coil = add(createElecCoil(layer(), 600, 400));
+    const coil = add(createElecSolenoid(layer(), 600, 400));
     wire(plc, 'Q0.0', coil, 'A');
     wire(coil, 'B', zero, 'P');
 
@@ -200,5 +201,91 @@ describe('solveElectrical', () => {
     solveElectrical(0);
     expect(getSignal('Y1')).toBe(false);
     appState.mode = Modes.STOP;
+  });
+});
+
+describe('electrical symbols', () => {
+  beforeEach(() => {
+    appState.components = [];
+    appState.connections = [];
+    resetSignals();
+  });
+
+  /** Blade tip: the line pivoting on the lower fixed contact that isn't the conductor below it. */
+  function bladeTip(c: Component): { x: number; y: number } {
+    const blade = Array.from(c.el.querySelectorAll('line')).find(
+      (l) =>
+        l.getAttribute('y1') === '66' &&
+        l.getAttribute('x1') === '30' &&
+        l.getAttribute('y2') !== '90',
+    );
+    return { x: Number(blade?.getAttribute('x2')), y: Number(blade?.getAttribute('y2')) };
+  }
+
+  it('an NC contact opens by swinging further away from its hook, the way an NO closes', () => {
+    const nc = add(createElecContact(layer(), 0, 0));
+    configure(nc, { key: 'K1', normallyClosed: true });
+    const no = add(createElecContact(layer(), 0, 0));
+    configure(no, { key: 'K1' });
+    const ncRest = bladeTip(nc);
+    const noRest = bladeTip(no);
+
+    setSignal('K1', true);
+    nc.recompute?.();
+    no.recompute?.();
+
+    // Both blades turn clockwise about their pivot: the tip moves right.
+    expect(bladeTip(nc).x).toBeGreaterThan(ncRest.x);
+    expect(bladeTip(no).x).toBeGreaterThan(noRest.x);
+    // ...and the NC tip drops below the hook (y = 34), leaving a gap.
+    expect(bladeTip(nc).y).toBeGreaterThan(34);
+  });
+
+  it('draws the solenoid with an oblique stroke and names it from the Y series', () => {
+    const relay = add(createElecCoil(layer(), 0, 0));
+    const sol = add(createElecSolenoid(layer(), 0, 0));
+    expect((relay.snapshot() as Record<string, unknown>).key).toBe('K1');
+    expect((sol.snapshot() as Record<string, unknown>).key).toBe('Y1');
+    expect(sol.type).toBe(ELEC_SOLENOID_TYPE);
+    const diagonal = (c: Component): boolean =>
+      Array.from(c.el.querySelectorAll('line')).some(
+        (l) =>
+          l.getAttribute('x1') !== l.getAttribute('x2') &&
+          l.getAttribute('y1') !== l.getAttribute('y2'),
+      );
+    expect(diagonal(sol)).toBe(true);
+    expect(diagonal(relay)).toBe(false);
+  });
+
+  it('puts the signal name to the left of the symbol', () => {
+    const contact = add(createElecContact(layer(), 0, 0));
+    configure(contact, { key: 'K1' });
+    const label = Array.from(contact.el.querySelectorAll('text')).find(
+      (t) => t.textContent === 'K1',
+    );
+    expect(label?.getAttribute('text-anchor')).toBe('end');
+    expect(Number(label?.getAttribute('x'))).toBeLessThan(30);
+  });
+
+  it('a detent push button stays put after a click and releases on the next one', () => {
+    const btn = add(createElecPushButton(layer(), 0, 0));
+    const svg = btn.el.querySelector('svg') as SVGSVGElement;
+    const mark = (): string | undefined =>
+      Array.from(btn.el.querySelectorAll('path')).find((p) => p.getAttribute('d')?.includes(' L '))
+        ?.style.display;
+    expect(mark()).toBe('none');
+    configure(btn, { detent: true });
+    expect(mark()).toBe('');
+
+    appState.mode = Modes.PLAY;
+    const click = (): void => {
+      svg.dispatchEvent(new MouseEvent('mousedown'));
+      window.dispatchEvent(new MouseEvent('mouseup'));
+    };
+    const closed = (): boolean => (btn.electrical?.closedEdges?.() ?? []).length > 0;
+    click();
+    expect(closed()).toBe(true);
+    click();
+    expect(closed()).toBe(false);
   });
 });

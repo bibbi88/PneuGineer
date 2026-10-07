@@ -38,7 +38,10 @@ export function toggleSelection(id: ComponentId): void {
   } else {
     appState.selectedComponents.add(id);
   }
+  // A wire and components are never selected together (see selectConnection).
+  appState.selectedConnectionId = null;
   applySelectedClasses();
+  applyConnectionSelectedClass();
   notifySelectionChange();
 }
 

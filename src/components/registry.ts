@@ -27,6 +27,7 @@ import {
   createElecPushButton,
   createElecChangeover,
   createElecCoil,
+  createElecSolenoid,
   createElecLamp,
   ELEC_RAIL_PLUS_TYPE,
   ELEC_RAIL_ZERO_TYPE,
@@ -34,6 +35,7 @@ import {
   ELEC_PUSH_BUTTON_TYPE,
   ELEC_CHANGEOVER_TYPE,
   ELEC_COIL_TYPE,
+  ELEC_SOLENOID_TYPE,
   ELEC_LAMP_TYPE,
 } from './electrical';
 import {
@@ -313,7 +315,16 @@ export const componentRegistry = new Map<string, RegistryEntry>([
     ELEC_COIL_TYPE,
     {
       factory: (ctx, x, y) => createElecCoil(ctx.compLayer, x, y),
-      label: 'Coil (relay / solenoid)',
+      label: 'Relay coil',
+      placeable: true,
+      category: ComponentCategory.ELECTRICAL,
+    },
+  ],
+  [
+    ELEC_SOLENOID_TYPE,
+    {
+      factory: (ctx, x, y) => createElecSolenoid(ctx.compLayer, x, y),
+      label: 'Solenoid (valve coil)',
       placeable: true,
       category: ComponentCategory.ELECTRICAL,
     },

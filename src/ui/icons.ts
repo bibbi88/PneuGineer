@@ -26,7 +26,15 @@ export type IconName =
   | 'rotateCcw'
   | 'flipHorizontal'
   | 'grid'
-  | 'tips';
+  | 'tips'
+  | 'alignLeft'
+  | 'alignCenter'
+  | 'alignRight'
+  | 'alignTop'
+  | 'alignMiddle'
+  | 'alignBottom'
+  | 'distributeH'
+  | 'distributeV';
 
 type Shape = [tag: string, attrs: Record<string, string | number>];
 
@@ -125,6 +133,48 @@ const ICONS: Record<IconName, Shape[]> = {
     ['path', { d: 'M9 14c-.2-1-.8-1.8-1.5-2.5A5.5 5.5 0 1 1 16.5 11.5c-.7.7-1.3 1.5-1.5 2.5' }],
     ['path', { d: 'M9 17h6' }],
     ['path', { d: 'M10 21h4' }],
+  ],
+  alignLeft: [
+    ['path', { d: 'M4 2v20' }],
+    ['rect', { x: 8, y: 5, width: 12, height: 5, rx: 1 }],
+    ['rect', { x: 8, y: 14, width: 7, height: 5, rx: 1 }],
+  ],
+  alignCenter: [
+    ['path', { d: 'M12 2v20' }],
+    ['rect', { x: 6, y: 5, width: 12, height: 5, rx: 1 }],
+    ['rect', { x: 8.5, y: 14, width: 7, height: 5, rx: 1 }],
+  ],
+  alignRight: [
+    ['path', { d: 'M20 2v20' }],
+    ['rect', { x: 4, y: 5, width: 12, height: 5, rx: 1 }],
+    ['rect', { x: 9, y: 14, width: 7, height: 5, rx: 1 }],
+  ],
+  alignTop: [
+    ['path', { d: 'M2 4h20' }],
+    ['rect', { x: 5, y: 8, width: 5, height: 12, rx: 1 }],
+    ['rect', { x: 14, y: 8, width: 5, height: 7, rx: 1 }],
+  ],
+  alignMiddle: [
+    ['path', { d: 'M2 12h20' }],
+    ['rect', { x: 5, y: 6, width: 5, height: 12, rx: 1 }],
+    ['rect', { x: 14, y: 8.5, width: 5, height: 7, rx: 1 }],
+  ],
+  alignBottom: [
+    ['path', { d: 'M2 20h20' }],
+    ['rect', { x: 5, y: 4, width: 5, height: 12, rx: 1 }],
+    ['rect', { x: 14, y: 9, width: 5, height: 7, rx: 1 }],
+  ],
+  distributeH: [
+    ['path', { d: 'M2 3v18' }],
+    ['path', { d: 'M22 3v18' }],
+    ['rect', { x: 6, y: 7, width: 4, height: 10, rx: 1 }],
+    ['rect', { x: 14, y: 7, width: 4, height: 10, rx: 1 }],
+  ],
+  distributeV: [
+    ['path', { d: 'M3 2h18' }],
+    ['path', { d: 'M3 22h18' }],
+    ['rect', { x: 7, y: 6, width: 10, height: 4, rx: 1 }],
+    ['rect', { x: 7, y: 14, width: 10, height: 4, rx: 1 }],
   ],
 };
 

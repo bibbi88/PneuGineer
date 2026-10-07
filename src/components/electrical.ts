@@ -11,6 +11,7 @@ export const ELEC_CONTACT_TYPE = 'elecContact';
 export const ELEC_PUSH_BUTTON_TYPE = 'elecPushButton';
 export const ELEC_CHANGEOVER_TYPE = 'elecChangeover';
 export const ELEC_COIL_TYPE = 'elecCoil';
+export const ELEC_SOLENOID_TYPE = 'elecSolenoid';
 export const ELEC_LAMP_TYPE = 'elecLamp';
 
 // Every two-terminal part (contacts, coil, lamp, push button) shares one canvas: terminals A
@@ -26,6 +27,8 @@ const CONTACT_TOP_Y = 34;
 const CONTACT_BOT_Y = 66;
 
 const STROKE = '#111';
+/** Blade colour while a contact's signal is acting on it (see drawContactSymbol). */
+const OPERATED_STROKE = '#1c6fd1';
 
 function line(x1: number, y1: number, x2: number, y2: number, width = 2): SVGLineElement {
   return createSvgEl('line', { x1, y1, x2, y2, stroke: STROKE, 'stroke-width': width });
@@ -59,11 +62,14 @@ function twoTerminalBase(
   x: number,
   y: number,
   label: string,
+  /** Where the drawn artwork starts on the left, for the selection outline and wire avoidance -
+   * the push button's bracket reaches further left than the other parts. */
+  left = 8,
 ): ElecBase {
   const shell = buildComponentShell(compLayer, type, x, y, TWO_TERMINAL_W, TWO_TERMINAL_H, label, {
-    x: 8,
+    x: left,
     y: 0,
-    w: TWO_TERMINAL_W - 16,
+    w: TWO_TERMINAL_W - 8 - left,
     h: TWO_TERMINAL_H,
   });
   const g = createSvgEl('g');
@@ -78,45 +84,64 @@ function twoTerminalPorts(g: SVGElement): Component['ports'] {
   };
 }
 
-/** IEC 60617 make/break contact drawn vertically: the blade pivots on the lower fixed contact.
- * NO (07-02-01): at rest the blade leans off to the left, short of the upper contact. NC
- * (07-02-03): the upper contact has a short hook to the right, and at rest the blade leans
- * right and rests against the hook. Actuated, an NO blade stands straight up onto the upper
- * contact and an NC blade swings clear of the hook, back to the NO rest position. */
-function drawContactSymbol(g: SVGElement, normallyClosed: boolean): {
-  setClosed(closed: boolean): void;
+/** IEC 60617 make/break contact drawn vertically: the blade pivots on the lower fixed contact and
+ * an actuator always swings it the same way, clockwise, as for a real contact block. NO
+ * (07-02-01): at rest the blade leans off to the left, short of the upper contact; operated it
+ * stands straight up onto it. NC (07-02-03): the upper contact has a short hook to the right
+ * and at rest the blade leans right and presses up against its end; operated it swings further
+ * right and down, leaving a clear gap below the hook. While operated the blade is drawn in
+ * {@link OPERATED_STROKE}, so it is obvious during a run which contacts their signal is
+ * acting on, whether that opens or closes them. */
+function drawContactSymbol(
+  g: SVGElement,
+  normallyClosed: boolean,
+): {
+  setOperated(operated: boolean): void;
   setNormallyClosed(nc: boolean): void;
-  /** Midpoint of the blade, where an actuator's mechanical link attaches. */
-  bladeMid(): { x: number; y: number };
+  /** Where the blade crosses height `y`, for attaching an actuator's mechanical link. */
+  bladeXAt(y: number): number;
 } {
   g.append(line(CX, TOP_Y, CX, CONTACT_TOP_Y), line(CX, CONTACT_BOT_Y, CX, BOT_Y));
-  const hook = line(CX, CONTACT_TOP_Y, CX + 10, CONTACT_TOP_Y);
+  const hook = line(CX, CONTACT_TOP_Y, CX + 12, CONTACT_TOP_Y);
   const blade = line(CX, CONTACT_BOT_Y, CX, CONTACT_TOP_Y);
+  blade.setAttribute('stroke-linecap', 'round');
   g.append(hook, blade);
 
   let nc = normallyClosed;
-  let closed = normallyClosed;
+  let operated = false;
   let end = { x: CX, y: CONTACT_TOP_Y };
   function apply(): void {
-    if (closed) end = nc ? { x: CX + 14, y: CONTACT_TOP_Y - 3 } : { x: CX, y: CONTACT_TOP_Y };
-    else end = { x: CX - 13, y: CONTACT_TOP_Y + 3 };
+    if (nc) {
+      end = operated ? { x: CX + 20, y: CONTACT_TOP_Y + 7 } : { x: CX + 14, y: CONTACT_TOP_Y - 3 };
+    } else {
+      end = operated ? { x: CX, y: CONTACT_TOP_Y } : { x: CX - 13, y: CONTACT_TOP_Y + 3 };
+    }
     blade.setAttribute('x2', String(end.x));
     blade.setAttribute('y2', String(end.y));
+    blade.setAttribute('stroke', operated ? OPERATED_STROKE : STROKE);
     hook.style.display = nc ? '' : 'none';
   }
   apply();
 
   return {
-    setClosed(v: boolean): void {
-      closed = v;
+    setOperated(v: boolean): void {
+      operated = v;
       apply();
     },
     setNormallyClosed(v: boolean): void {
       nc = v;
       apply();
     },
-    bladeMid: () => ({ x: (CX + end.x) / 2, y: (CONTACT_BOT_Y + end.y) / 2 }),
+    bladeXAt: (y: number) => CX + ((end.x - CX) * (CONTACT_BOT_Y - y)) / (CONTACT_BOT_Y - end.y),
   };
+}
+
+/** The signal / coil name beside a contact or coil: on the left of the symbol, level with its
+ * middle, right-aligned so it ends just short of the artwork. */
+function keyLabel(g: SVGElement, x = CX - 14): SVGTextElement {
+  const label = textEl(x, 54, 11, 'end');
+  g.appendChild(label);
+  return label;
 }
 
 function railComponent(
@@ -125,10 +150,10 @@ function railComponent(
   y: number,
   kind: 'plus' | 'zero',
 ): Component {
-  // Upright and narrow like FluidSIM's electrical connections, so it sits directly above (+24 V)
-  // or below (0 V) the current path it feeds. The port stays 20px off the canvas center, on grid.
-  const w = 40;
-  const h = 60;
+  // Lying on its side with the output to the right, so it feeds straight across into the
+  // current path beside it. The port stays 20px off the canvas center, on grid.
+  const w = 60;
+  const h = 40;
   const type = kind === 'plus' ? ELEC_RAIL_PLUS_TYPE : ELEC_RAIL_ZERO_TYPE;
   const shell = buildComponentShell(
     compLayer,
@@ -140,27 +165,27 @@ function railComponent(
     kind === 'plus' ? '+24 V supply' : '0 V supply',
     { x: 5, y: 0, w: w - 10, h },
   );
-  // IEC 60617 terminal (03-02-02, an open circle) with the conductor running to the port: the
-  // plus supply feeds down from above, the zero supply returns up from below. The voltage is
-  // written on the far side of the terminal, as in FluidSIM.
+  // IEC 60617 terminal (03-02-02, an open circle) with the conductor running right to the port.
+  // The voltage is written above the terminal.
   const TERM_R = 4;
-  const termY = kind === 'plus' ? 22 : 38;
-  const portY = kind === 'plus' ? 50 : 10;
+  const termX = 16;
+  const portX = 50;
+  const midY = h / 2;
   shell.svg.append(
-    line(w / 2, kind === 'plus' ? termY + TERM_R : termY - TERM_R, w / 2, portY),
+    line(termX + TERM_R, midY, portX, midY),
     createSvgEl('circle', {
-      cx: w / 2,
-      cy: termY,
+      cx: termX,
+      cy: midY,
       r: TERM_R,
       fill: '#fff',
       stroke: STROKE,
       'stroke-width': 2,
     }),
   );
-  const label = textEl(w / 2, kind === 'plus' ? termY - TERM_R - 4 : termY + TERM_R + 12, 11);
+  const label = textEl(termX, midY - TERM_R - 5, 11);
   label.textContent = kind === 'plus' ? '+24V' : '0V';
   shell.svg.appendChild(label);
-  const ports = { P: createPort(shell.svg, 'P', w / 2, portY, 'V', { electrical: true }) };
+  const ports = { P: createPort(shell.svg, 'P', portX, midY, 'H', { electrical: true }) };
 
   const comp: Component = {
     id: uid(),
@@ -211,9 +236,7 @@ export function createElecContact(compLayer: HTMLElement, x: number, y: number):
   let normallyClosed = false;
   let closed = false;
   const symbol = drawContactSymbol(g, normallyClosed);
-  // Above the NC hook / blade tip, beside the upper conductor.
-  const label = textEl(CX + 5, CONTACT_TOP_Y - 10, 11, 'start');
-  g.appendChild(label);
+  const label = keyLabel(g);
   const ports = twoTerminalPorts(g);
 
   function refreshLabel(): void {
@@ -240,7 +263,7 @@ export function createElecContact(compLayer: HTMLElement, x: number, y: number):
     recompute(): void {
       const sig = key ? getSignal(key) : false;
       closed = normallyClosed ? !sig : sig;
-      symbol.setClosed(closed);
+      symbol.setOperated(sig);
     },
     snapshot: () => ({
       key,
@@ -289,9 +312,9 @@ export function createElecChangeover(compLayer: HTMLElement, x: number, y: numbe
     line(NC_X, CONTACT_TOP_Y, NC_X + 10, CONTACT_TOP_Y),
   );
   const blade = line(CX, CONTACT_BOT_Y, CX, CONTACT_TOP_Y);
+  blade.setAttribute('stroke-linecap', 'round');
   g.appendChild(blade);
-  const label = textEl(CX + 5, CONTACT_TOP_Y - 10, 11, 'start');
-  g.appendChild(label);
+  const label = keyLabel(g);
   const ports: Component['ports'] = {
     NC: createPort(g, 'NC', NC_X, TOP_Y, 'V', { electrical: true }),
     NO: createPort(g, 'NO', CX, TOP_Y, 'V', { electrical: true }),
@@ -303,6 +326,7 @@ export function createElecChangeover(compLayer: HTMLElement, x: number, y: numbe
     // At rest the blade leans left past the NC hook; operated it stands up onto the NO contact.
     blade.setAttribute('x2', String(operated ? CX : NC_X + 6));
     blade.setAttribute('y2', String(operated ? CONTACT_TOP_Y : CONTACT_TOP_Y - 3));
+    blade.setAttribute('stroke', operated ? OPERATED_STROKE : STROKE);
   }
   refresh();
 
@@ -352,33 +376,54 @@ export function createElecChangeover(compLayer: HTMLElement, x: number, y: numbe
 }
 
 /** A manually operated contact: held closed (NO) or open (NC) while the mouse is pressed on it
- * during a run; Ctrl+click latches it, like the pneumatic push button. */
+ * during a run; Ctrl+click latches it, like the pneumatic push button. With `detent` set it is a
+ * latching (detent) push button instead: every click toggles it, staying put in between. */
 export function createElecPushButton(compLayer: HTMLElement, x: number, y: number): Component {
-  const { shell, g } = twoTerminalBase(compLayer, ELEC_PUSH_BUTTON_TYPE, x, y, 'Push button');
+  const HEAD_X = CX - 30;
+  const { shell, g } = twoTerminalBase(
+    compLayer,
+    ELEC_PUSH_BUTTON_TYPE,
+    x,
+    y,
+    'Push button',
+    HEAD_X - 2,
+  );
   let normallyClosed = false;
   let pressed = false;
   let latched = false;
+  let detent = false;
   const symbol = drawContactSymbol(g, normallyClosed);
   // IEC 60617 02-13-05 "operated by pushing": a "[" bracket on the left, joined to the blade by
-  // a dashed mechanical link (02-12-01). Pressing slides the bracket toward the contact.
-  const HEAD_X = CX - 20;
+  // a dashed mechanical link (02-12-01). The link is level and meets the bracket at its middle,
+  // so the bracket reads symmetric whichever way the blade leans. Pressing slides the bracket
+  // toward the contact.
   const HEAD_Y = 50;
-  const link = createSvgEl('line', {
-    x1: HEAD_X,
+  const linkAttrs = {
     y1: HEAD_Y,
-    x2: CX,
     y2: HEAD_Y,
     stroke: STROKE,
     'stroke-width': 1.5,
     'stroke-dasharray': '3 2',
-  });
+  };
+  // Two pieces so the link can break around the detent; without one the second stays hidden
+  // and the first runs the whole way.
+  const link = createSvgEl('line', linkAttrs);
+  const linkAfter = createSvgEl('line', linkAttrs);
   const head = createSvgEl('path', {
     d: `M ${HEAD_X + 4} ${HEAD_Y - 8} H ${HEAD_X} V ${HEAD_Y + 8} H ${HEAD_X + 4}`,
     fill: 'none',
     stroke: STROKE,
     'stroke-width': 2,
   });
-  g.append(link, head);
+  // Detent (latching), shown only when set: the link breaks and a small V notch hangs below the
+  // gap, its open side on the link's line.
+  const detentMark = createSvgEl('path', {
+    fill: 'none',
+    stroke: STROKE,
+    'stroke-width': 1.5,
+    'stroke-linejoin': 'round',
+  });
+  g.append(link, linkAfter, head, detentMark);
   const ports = twoTerminalPorts(g);
 
   function isClosed(): boolean {
@@ -386,14 +431,23 @@ export function createElecPushButton(compLayer: HTMLElement, x: number, y: numbe
   }
   function refresh(): void {
     symbol.setNormallyClosed(normallyClosed);
-    symbol.setClosed(isClosed());
+    symbol.setOperated(pressed);
     const shift = pressed ? 4 : 0;
     head.setAttribute('transform', shift ? `translate(${shift},0)` : '');
-    const mid = symbol.bladeMid();
-    link.setAttribute('x1', String(HEAD_X + shift));
-    link.setAttribute('x2', String(mid.x));
-    link.setAttribute('y1', String(mid.y));
-    link.setAttribute('y2', String(mid.y));
+    const bladeX = symbol.bladeXAt(HEAD_Y);
+    const startX = HEAD_X + shift;
+    const nx = (startX + bladeX) / 2;
+    const GAP = 5;
+    link.setAttribute('x1', String(startX));
+    link.setAttribute('x2', String(detent ? nx - GAP : bladeX));
+    linkAfter.setAttribute('x1', String(nx + GAP));
+    linkAfter.setAttribute('x2', String(bladeX));
+    linkAfter.style.display = detent ? '' : 'none';
+    detentMark.setAttribute(
+      'd',
+      `M ${nx - 4} ${HEAD_Y} L ${nx} ${HEAD_Y + 7} L ${nx + 4} ${HEAD_Y}`,
+    );
+    detentMark.style.display = detent ? '' : 'none';
   }
   refresh();
 
@@ -414,11 +468,17 @@ export function createElecPushButton(compLayer: HTMLElement, x: number, y: numbe
     conductivityRule: (): PortConnection[] => [],
     snapshot: () => ({
       normallyClosed,
+      detent,
       showName: shell.getNameVisible(),
       customName: shell.getCustomName(),
     }),
     restore(data: Record<string, unknown>): void {
       normallyClosed = Boolean(data.normallyClosed);
+      detent = Boolean(data.detent);
+      if (!detent && latched && pressed) {
+        latched = false;
+        pressed = false;
+      }
       shell.setNameVisible(Boolean(data.showName));
       shell.setCustomName((data.customName as string | null) ?? null);
       refresh();
@@ -449,7 +509,7 @@ export function createElecPushButton(compLayer: HTMLElement, x: number, y: numbe
       setPressed(false);
       return;
     }
-    if (e.ctrlKey) latched = true;
+    if (detent || e.ctrlKey) latched = true;
     setPressed(true);
   });
   window.addEventListener('mouseup', () => {
@@ -462,23 +522,43 @@ export function createElecPushButton(compLayer: HTMLElement, x: number, y: numbe
   return comp;
 }
 
-/** A relay or solenoid coil. While energized it publishes its name on the signal bus: contacts
- * with the same key follow it (a relay), and a solenoid valve with the same key shifts. */
-export function createElecCoil(compLayer: HTMLElement, x: number, y: number): Component {
-  const { shell, g } = twoTerminalBase(compLayer, ELEC_COIL_TYPE, x, y, 'Coil');
-  let key = nextFreeKey('Y', ELEC_COIL_TYPE);
+/** A relay coil (IEC 60617 07-15-01, a plain box) or a valve solenoid (the ISO 1219-1
+ * single-winding actuator, a box with one oblique stroke - the same symbol the solenoid valves
+ * carry). Either way, while energized it publishes its name on the signal bus: contacts with the
+ * same key follow it, and a solenoid valve with the same key shifts. The two only differ in
+ * their artwork and default name series (K for relays, Y for solenoids). */
+function coilComponent(
+  compLayer: HTMLElement,
+  x: number,
+  y: number,
+  kind: 'relay' | 'solenoid',
+): Component {
+  const type = kind === 'relay' ? ELEC_COIL_TYPE : ELEC_SOLENOID_TYPE;
+  const { shell, g } = twoTerminalBase(
+    compLayer,
+    type,
+    x,
+    y,
+    kind === 'relay' ? 'Relay coil' : 'Solenoid',
+  );
+  let key = kind === 'relay' ? nextFreeKey('K', type) : nextFreeKey('Y', type);
+  const BOX_TOP = 39;
+  const BOX_BOT = 61;
+  const BOX_W = 36;
   const body = createSvgEl('rect', {
-    x: CX - 14,
-    y: 30,
-    width: 28,
-    height: 40,
+    x: CX - BOX_W / 2,
+    y: BOX_TOP,
+    width: BOX_W,
+    height: BOX_BOT - BOX_TOP,
     fill: '#fff',
     stroke: STROKE,
     'stroke-width': 2,
   });
-  g.append(line(CX, TOP_Y, CX, 30), line(CX, 70, CX, BOT_Y), body);
-  const label = textEl(CX, 54, 11);
-  g.appendChild(label);
+  g.append(line(CX, TOP_Y, CX, BOX_TOP), line(CX, BOX_BOT, CX, BOT_Y), body);
+  if (kind === 'solenoid') {
+    g.appendChild(line(CX - BOX_W / 2, BOX_BOT, CX + BOX_W / 2, BOX_TOP));
+  }
+  const label = keyLabel(g, CX - BOX_W / 2 - 2);
   const ports = twoTerminalPorts(g);
 
   function refreshLabel(): void {
@@ -488,7 +568,7 @@ export function createElecCoil(compLayer: HTMLElement, x: number, y: number): Co
 
   const comp: Component = {
     id: uid(),
-    type: ELEC_COIL_TYPE,
+    type,
     el: shell.el,
     x,
     y,
@@ -529,6 +609,29 @@ export function createElecCoil(compLayer: HTMLElement, x: number, y: number): Co
     setSelected: shell.setSelected,
   };
   return comp;
+}
+
+/** A relay coil: contacts keyed to its name (default K1, K2, ...) follow it. */
+export function createElecCoil(compLayer: HTMLElement, x: number, y: number): Component {
+  return coilComponent(compLayer, x, y, 'relay');
+}
+
+/** A valve solenoid: the solenoid valve whose coil has the same name (default Y1, Y2, ...)
+ * shifts while it is energized. */
+export function createElecSolenoid(compLayer: HTMLElement, x: number, y: number): Component {
+  return coilComponent(compLayer, x, y, 'solenoid');
+}
+
+/** Before the dedicated solenoid existed, a valve was driven by a plain coil sharing its name.
+ * A saved coil whose name matches one of the project's solenoid valve coils (`solenoidKeys`,
+ * upper-cased) is loaded as a solenoid instead, so it gets the symbol it stands for. */
+export function upgradedCoilType(
+  type: string,
+  data: Record<string, unknown>,
+  solenoidKeys: Set<string>,
+): string {
+  if (type !== ELEC_COIL_TYPE || typeof data.key !== 'string') return type;
+  return solenoidKeys.has(data.key.trim().toUpperCase()) ? ELEC_SOLENOID_TYPE : type;
 }
 
 export function createElecLamp(compLayer: HTMLElement, x: number, y: number): Component {

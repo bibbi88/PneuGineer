@@ -596,6 +596,22 @@ svg.compSvg {
   stroke: var(--port);
 }
 
+/* A selected component shows all its port dots, wired or not, so you can see where every
+   connection actually lands. */
+.comp.compSelected .port.portConnected {
+  fill: #fff;
+  stroke: var(--port);
+}
+
+.comp.compSelected .port.portElectrical.portConnected {
+  stroke: #1d3b8b;
+}
+
+.comp.compSelected .port.portConnected.pressurized {
+  fill: var(--accent);
+  stroke: var(--accent);
+}
+
 /* A silenced port is physically occupied by the muffler attached to it (see
    shared/silencer.ts) - hidden the same way a wired port's dot is, but with no hover-reveal
    since pointer-events is also disabled on it (nothing to branch a wire from). */
@@ -810,6 +826,15 @@ rect.wireHandle.wireStubHandle {
 
 .ctxmenu button:hover {
   background: #f0f4ff;
+}
+
+/* The multi-selection Align section's icon buttons, wrapping onto a second row if the panel is
+   narrow. */
+.inspectorAlignRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin: 6px 0 10px;
 }
 
 .inspectorHint {

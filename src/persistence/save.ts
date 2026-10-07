@@ -1,4 +1,5 @@
 import { serializeProject } from './project';
+import { getLastProjectFile, setLastProjectFile } from './fileHandle';
 
 interface FileSystemWritableFileStreamLike {
   write(data: string): Promise<void>;
@@ -9,6 +10,8 @@ interface FileSystemFileHandleLike {
 }
 interface SaveFilePickerOptions {
   suggestedName?: string;
+  /** A file handle (its folder is used) or a well-known folder name. */
+  startIn?: unknown;
   types?: { description: string; accept: Record<string, string[]> }[];
 }
 type ShowSaveFilePicker = (opts: SaveFilePickerOptions) => Promise<FileSystemFileHandleLike>;
@@ -37,6 +40,9 @@ export async function saveProjectToFile(name: string): Promise<void> {
     try {
       handle = await showSaveFilePicker({
         suggestedName: filename,
+        // The folder of the file this project was opened from or last saved to; a new
+        // project starts in Downloads.
+        startIn: getLastProjectFile() ?? 'downloads',
         types: [{ description: 'PneuGineer project', accept: { 'application/json': ['.pgcl'] } }],
       });
     } catch (err) {
@@ -60,6 +66,7 @@ export async function saveProjectToFile(name: string): Promise<void> {
       const writable = await handle.createWritable();
       await writable.write(json);
       await writable.close();
+      setLastProjectFile(handle);
       return;
     } catch (err) {
       // createWritable() truncates the picked file to empty as soon as it opens, before write()

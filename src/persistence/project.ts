@@ -14,6 +14,8 @@ import { resetCylinderLetters } from '../components/shared/letters';
 import { renderPageFrame } from '../ui/pageFrame';
 import { getDeviceId } from '../app/deviceId';
 import { CURRENT_SCHEMA_VERSION, type ProjectFileV1 } from './schema';
+import { upgradedCoilType } from '../components/electrical';
+import { SOLENOID_KEY_FIELDS, SOLENOID_VALVE_TYPES } from '../components/solenoidValves';
 
 export function serializeProject(name: string): ProjectFileV1 {
   // origin is only ever set once per project - a fresh one (never loaded from/saved to a file
@@ -92,9 +94,20 @@ export function loadProject(
     appState.projectOriginDeviceId = file.origin ?? null;
     appState.projectLastSavedDeviceId = file.lastSaved ?? null;
 
+    const solenoidKeys = new Set<string>();
+    for (const snap of file.comps) {
+      if (!SOLENOID_VALVE_TYPES.has(snap.type)) continue;
+      const data = snap.data as Record<string, unknown>;
+      for (const field of SOLENOID_KEY_FIELDS) {
+        const value = data[field];
+        if (typeof value === 'string' && value.trim()) solenoidKeys.add(value.trim().toUpperCase());
+      }
+    }
+
     const idMap = new Map<number, number>();
     for (const snap of file.comps) {
-      const comp = spawnComponent(snap.type, ctx, viewport, snap.x, snap.y);
+      const type = upgradedCoilType(snap.type, snap.data as Record<string, unknown>, solenoidKeys);
+      const comp = spawnComponent(type, ctx, viewport, snap.x, snap.y);
       comp.restore(snap.data);
       if (snap.rot) setComponentRotation(comp, snap.rot);
       if (snap.mirror) setComponentMirrored(comp, true);

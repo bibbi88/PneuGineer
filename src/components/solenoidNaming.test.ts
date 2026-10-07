@@ -5,7 +5,7 @@ import {
   createValve52SolenoidDouble,
   createValve53Solenoid,
 } from './solenoidValves';
-import { createElecCoil } from './electrical';
+import { createElecSolenoid } from './electrical';
 import type { Component } from '../core/types';
 
 function layer(): HTMLElement {
@@ -80,11 +80,11 @@ describe('solenoid valves get their own coil names', () => {
     expect(keys(third)).toEqual(['Y2']);
   });
 
-  it('does not skip past a valve when naming an electrical coil', () => {
+  it('does not skip past a valve when naming an electrical solenoid', () => {
     // The coil that drives a valve is meant to share its name - allocating them from one pool
     // would hand the first coil Y2 and leave the first valve with nothing driving it.
     const valve = place(() => createValve52Solenoid(layer(), 0, 0));
-    const coil = place(() => createElecCoil(layer(), 300, 0));
+    const coil = place(() => createElecSolenoid(layer(), 300, 0));
 
     expect(keys(valve)).toEqual(['Y1']);
     expect((coil.snapshot() as Record<string, unknown>).key).toBe('Y1');
@@ -170,10 +170,10 @@ describe('duplicate coil labels are flagged', () => {
     expect(flagged(b)).toEqual(['y1']);
   });
 
-  it('does not flag a valve merely because an electrical coil shares its name', () => {
+  it('does not flag a valve merely because an electrical solenoid shares its name', () => {
     // That pairing is the mechanism - the coil is what drives the valve.
     const valve = place(() => createValve52Solenoid(layer(), 0, 0));
-    place(() => createElecCoil(layer(), 300, 0));
+    place(() => createElecSolenoid(layer(), 300, 0));
     appState.markDirty();
 
     expect(flagged(valve)).toEqual([]);

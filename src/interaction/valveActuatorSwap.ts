@@ -9,6 +9,7 @@ import {
   removeComponentAndConnections,
 } from '../wires/connection';
 import { selectOnly } from './selection';
+import { ELEC_COIL_TYPE, ELEC_SOLENOID_TYPE } from '../components/electrical';
 
 let ctxRef: ComponentFactoryContext | null = null;
 let viewportRef: ViewportAdapter | null = null;
@@ -36,8 +37,12 @@ export function initValveActuatorSwap(
 export function swapComponentType(comp: Component, newType: string): void {
   if (!ctxRef || !viewportRef) return;
   const { x, y } = comp;
-  // Contact <-> push button keeps its NO/NC choice; other swaps have no such field.
-  const normallyClosed = (comp.snapshot() as Record<string, unknown>).normallyClosed;
+  // Contact <-> push button keeps its NO/NC choice, relay coil <-> solenoid keeps its name;
+  // other swaps have no such fields.
+  const { normallyClosed, key } = comp.snapshot() as Record<string, unknown>;
+  const keepsKey =
+    (comp.type === ELEC_COIL_TYPE || comp.type === ELEC_SOLENOID_TYPE) &&
+    (newType === ELEC_COIL_TYPE || newType === ELEC_SOLENOID_TYPE);
 
   const related = appState.connections
     .filter((c) => c.from.id === comp.id || c.to.id === comp.id)
@@ -53,6 +58,7 @@ export function swapComponentType(comp: Component, newType: string): void {
     removeComponentAndConnections(comp.id);
     const next = spawnComponent(newType, ctxRef!, viewportRef!, x, y);
     if (normallyClosed !== undefined) next.restore({ ...next.snapshot(), normallyClosed });
+    if (keepsKey && typeof key === 'string') next.restore({ ...next.snapshot(), key });
 
     for (const saved of related) {
       const fromMoved = saved.from.id === comp.id;

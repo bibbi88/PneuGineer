@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { autoRouteAStar } from './autoRoute';
-import { worldPortAnchor } from './connectionGeometry';
+import { alignJunctionAnchor, worldPortAnchor } from './connectionGeometry';
 import { completeGuides, guideCorners, type Point, type PortAnchor } from './routing';
 import type { Component } from '../core/types';
 import type { ViewportAdapter } from '../ui/viewport';
@@ -144,5 +144,19 @@ describe('junction', () => {
     const loaded = createJunction(layer(), 0, 0);
     loaded.restore(saved);
     expect(loaded.ports.P?.entryOrientation).toBe('V');
+  });
+});
+
+describe('alignJunctionAnchor', () => {
+  const junction: PortAnchor = { pos: { x: 200, y: 100 }, entryOrientation: 'V' };
+
+  it('lets a wire from dead level with the dot come straight in sideways', () => {
+    const supply: PortAnchor = { pos: { x: 50, y: 100 }, entryOrientation: 'H', pilotDir: 1 };
+    expect(alignJunctionAnchor(junction, supply).entryOrientation).toBe('H');
+  });
+
+  it('keeps the dot’s own axis when the other end is off to one side', () => {
+    const offset: PortAnchor = { pos: { x: 50, y: 130 }, entryOrientation: 'H', pilotDir: 1 };
+    expect(alignJunctionAnchor(junction, offset)).toBe(junction);
   });
 });

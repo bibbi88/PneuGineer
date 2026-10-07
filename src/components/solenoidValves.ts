@@ -17,7 +17,7 @@ export const VALVE_52_SOLENOID_TYPE = 'valve52Solenoid';
 export const VALVE_52_SOLENOID_DOUBLE_TYPE = 'valve52SolenoidDouble';
 export const VALVE_53_SOLENOID_TYPE = 'valve53Solenoid';
 
-const SOLENOID_VALVE_TYPES = new Set<string>([
+export const SOLENOID_VALVE_TYPES = new Set<string>([
   VALVE_52_SOLENOID_TYPE,
   VALVE_52_SOLENOID_DOUBLE_TYPE,
   VALVE_53_SOLENOID_TYPE,
@@ -25,14 +25,14 @@ const SOLENOID_VALVE_TYPES = new Set<string>([
 
 /** Every snapshot field these valves keep a coil name in - one ('key') on the single-solenoid
  * valve, two ('key14'/'key12') on the double-ended ones. */
-const SOLENOID_KEY_FIELDS = ['key', 'key14', 'key12'] as const;
+export const SOLENOID_KEY_FIELDS = ['key', 'key14', 'key12'] as const;
 
 /**
  * The next `count` coil names not already used by a solenoid valve on the canvas, so dropping a
  * second valve doesn't silently give it the same coil as the first - both would then shift
  * together off one signal, which is rarely what's wanted and is invisible until you run it.
  *
- * Scoped to these valves on purpose. Electrical coils allocate their own names from the same Y
+ * Scoped to these valves on purpose. Electrical solenoids allocate their own names from the same Y
  * series (see nextFreeKey in electrical.ts) *without* looking here, so the first coil placed
  * comes out as Y1 and drives the first valve placed - the pairing you'd want - rather than
  * skipping past it to Y2. Matching names across the two is the mechanism, not a collision.

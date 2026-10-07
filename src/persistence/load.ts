@@ -2,6 +2,7 @@ import type { ComponentFactoryContext } from '../components/registry';
 import type { ViewportAdapter } from '../ui/viewport';
 import { migrate } from './migrations';
 import { loadProject } from './project';
+import { setLastProjectFile } from './fileHandle';
 
 interface FileSystemFileHandleLike {
   getFile(): Promise<File>;
@@ -44,7 +45,12 @@ function loadViaFileInput(
         resolve(undefined);
         return;
       }
-      void file.text().then((text) => resolve(applyLoadedText(text, ctx, viewport, onBeforeApply)));
+      void file.text().then((text) => {
+        const name = applyLoadedText(text, ctx, viewport, onBeforeApply);
+        // A plain file input gives no handle to reopen its folder with.
+        setLastProjectFile(null);
+        resolve(name);
+      });
     });
     input.click();
   });
@@ -80,7 +86,9 @@ export async function loadProjectFromPicker(
 
     try {
       const file = await handle.getFile();
-      return applyLoadedText(await file.text(), ctx, viewport, onBeforeApply);
+      const name = applyLoadedText(await file.text(), ctx, viewport, onBeforeApply);
+      setLastProjectFile(handle);
+      return name;
     } catch (err) {
       // A file *was* picked here - reading it, parsing its JSON, or applying it then failed for
       // some other reason (not valid JSON, a project this build doesn't understand, etc).

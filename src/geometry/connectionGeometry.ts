@@ -4,6 +4,7 @@ import { appState } from '../app/AppState';
 import { componentRotation, portGlobalPosition, rotateQuarter } from './coords';
 import { routeWithGuides, type Point, type PortAnchor } from './routing';
 import { autoRouteAStar } from './autoRoute';
+import { JUNCTION_TYPE } from '../components/junction';
 
 interface CacheEntry {
   topologyVersion: number;
@@ -80,7 +81,28 @@ export function computeConnectionAnchors(
   const fromAnchor = worldPortAnchor(viewport, workspaceEl, fromComp, conn.from.port);
   const toAnchor = worldPortAnchor(viewport, workspaceEl, toComp, conn.to.port);
   if (!fromAnchor || !toAnchor) return null;
-  return { fromAnchor, toAnchor };
+  return {
+    fromAnchor:
+      fromComp.type === JUNCTION_TYPE ? alignJunctionAnchor(fromAnchor, toAnchor) : fromAnchor,
+    toAnchor: toComp.type === JUNCTION_TYPE ? alignJunctionAnchor(toAnchor, fromAnchor) : toAnchor,
+  };
+}
+
+/**
+ * A junction dot's port axis is only a default - set across the line it was dropped on, so a
+ * branch made there leaves at a right angle. A wire whose other end lies dead level with the
+ * dot (or dead in line above/below it) enters along that line instead; held to the default
+ * axis, a supply wired straight across to a junction on a vertical branch would jog down and
+ * back up to meet it from below.
+ */
+export function alignJunctionAnchor(junction: PortAnchor, other: PortAnchor): PortAnchor {
+  const sameRow = Math.abs(junction.pos.y - other.pos.y) < 0.5;
+  const sameColumn = Math.abs(junction.pos.x - other.pos.x) < 0.5;
+  if (sameRow === sameColumn) return junction;
+  const entryOrientation = sameRow ? 'H' : 'V';
+  return entryOrientation === junction.entryOrientation
+    ? junction
+    : { ...junction, entryOrientation };
 }
 
 export function computeConnectionGeometry(

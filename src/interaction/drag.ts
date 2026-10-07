@@ -3,7 +3,7 @@ import type { ViewportAdapter } from '../ui/viewport';
 import { appState } from '../app/AppState';
 import { canEdit } from '../app/modes';
 import { snap } from '../core/grid';
-import { getSelectedComponents, selectOnly } from './selection';
+import { getSelectedComponents, selectOnly, toggleSelection } from './selection';
 import { redrawAllConnections } from '../wires/connection';
 import { computePortSnapCorrection } from './portSnap';
 
@@ -46,6 +46,15 @@ export function makeDraggable(comp: Component, viewport: ViewportAdapter): void 
         ?.dispatchEvent(
           new MouseEvent('click', { bubbles: true, clientX: e.clientX, clientY: e.clientY }),
         );
+      return;
+    }
+
+    // Ctrl/Cmd+click adds the component to the selection, or takes it back out, without
+    // dragging anything. Only while editing: during a run Ctrl+click latches push buttons.
+    if ((e.ctrlKey || e.metaKey) && canEdit(appState.mode)) {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleSelection(comp.id);
       return;
     }
 

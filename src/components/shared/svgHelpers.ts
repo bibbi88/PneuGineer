@@ -145,6 +145,8 @@ export function buildComponentShell(
       const mirrored = el.dataset.mirror === '1';
       boundsEl.style.left = `${mirrored ? svgW - box.x - box.w : box.x}px`;
       boundsEl.classList.toggle('selected', sel);
+      // Lets CSS bring back the port dots a wire or silencer otherwise hides (see app.css).
+      el.classList.toggle('compSelected', sel);
     },
     setDefaultName: (text: string) => {
       defaultName = text;

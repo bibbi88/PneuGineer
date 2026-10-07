@@ -10,6 +10,7 @@ import {
 import {
   computeConnectionAnchors,
   computeConnectionGeometry,
+  worldPortAnchor,
 } from '../geometry/connectionGeometry';
 import {
   completeGuides,
@@ -18,12 +19,17 @@ import {
   seedGuidesFromPoints,
   stubPoint,
   type Point,
+  type PortAnchor,
 } from '../geometry/routing';
 import { WIRE_STUB } from '../sim/constants';
 import { snap } from '../core/grid';
 import { makeDraggable } from './drag';
 import { wireUpPortLinking, getPendingPort } from './linking';
 import { wireUpComponentContextMenu } from './componentContextMenu';
+
+/** How far along the wire (world px) a drop may miss the point straight across from the port
+ * the new wire starts at and still be pulled onto it, so the branch runs straight. */
+const ALIGN_TOLERANCE = 40;
 
 function clampToSegment(v: number, a: number, b: number): number {
   return Math.max(Math.min(a, b), Math.min(Math.max(a, b), v));
@@ -36,6 +42,25 @@ function projectOntoSegment(p: Point, a: Point, b: Point): Point {
   }
   const y = Math.max(Math.min(a.y, b.y), Math.min(Math.max(a.y, b.y), p.y));
   return { x: a.x, y };
+}
+
+/**
+ * Where a junction dropped at `dropped` on the wire segment `a`-`b` should go so the new
+ * branch from port `from` runs straight. If that port points across the segment and sits
+ * opposite it within {@link ALIGN_TOLERANCE} of the drop, the junction moves to the point
+ * exactly opposite the port; otherwise the drop stands. Without this, a drop that misses by a
+ * grid step or two gives the branch a sideways jog it doesn't need.
+ */
+export function alignJunctionToPort(dropped: Point, a: Point, b: Point, from: PortAnchor): Point {
+  const lineHorizontal = a.y === b.y;
+  // The branch leaves the junction across the line, so the port has to point across it too.
+  if (from.entryOrientation !== (lineHorizontal ? 'V' : 'H')) return dropped;
+  const along = lineHorizontal ? from.pos.x : from.pos.y;
+  const lo = lineHorizontal ? Math.min(a.x, b.x) : Math.min(a.y, b.y);
+  const hi = lineHorizontal ? Math.max(a.x, b.x) : Math.max(a.y, b.y);
+  const at = lineHorizontal ? dropped.x : dropped.y;
+  if (along <= lo || along >= hi || Math.abs(along - at) > ALIGN_TOLERANCE) return dropped;
+  return lineHorizontal ? { x: along, y: dropped.y } : { x: dropped.x, y: along };
 }
 
 /**
@@ -110,6 +135,12 @@ export function initWireSplitting(
     // branch then leaves it at a right angle - a clean T rather than a wire that may set off
     // along the very line it's joining.
     const branchOrientation: 'H' | 'V' = lineHorizontal ? 'V' : 'H';
+
+    // Line the junction up with the port the new wire starts from, if it's close, so the
+    // branch runs straight over (see alignJunctionToPort).
+    const pendingComp = appState.findComponent(pending.compId);
+    const from = pendingComp && worldPortAnchor(viewport, workspaceEl, pendingComp, pending.port);
+    if (from) Object.assign(junctionPos, alignJunctionToPort(junctionPos, a, b, from));
 
     const junction = createJunction(compLayer, junctionPos.x, junctionPos.y, branchOrientation);
     appState.addComponent(junction);

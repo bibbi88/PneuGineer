@@ -1,7 +1,15 @@
 import type { Component } from '../core/types';
 import type { ProjectBarRefs } from './projectBar';
 import { openTipsDialog } from './tipsDialog';
-import { createIcon } from './icons';
+import { createIcon, type IconName } from './icons';
+import { iconButton } from './iconButton';
+import { canEdit } from '../app/modes';
+import {
+  alignComponents,
+  distributeComponents,
+  type AlignMode,
+  type DistributeAxis,
+} from '../interaction/align';
 import { appState } from '../app/AppState';
 import { getSelectedComponents, onSelectionChange } from '../interaction/selection';
 import { redrawAllConnections } from '../wires/connection';
@@ -33,6 +41,7 @@ import { PLC_TYPE } from '../components/plc';
 import {
   ELEC_CONTACT_TYPE,
   ELEC_COIL_TYPE,
+  ELEC_SOLENOID_TYPE,
   ELEC_PUSH_BUTTON_TYPE,
   ELEC_CHANGEOVER_TYPE,
 } from '../components/electrical';
@@ -154,6 +163,11 @@ const ELEC_CONTACT_MODES: Array<{ type: string; label: string }> = [
   { type: ELEC_PUSH_BUTTON_TYPE, label: 'Push button' },
 ];
 
+const ELEC_COIL_MODES: Array<{ type: string; label: string }> = [
+  { type: ELEC_COIL_TYPE, label: 'Relay coil' },
+  { type: ELEC_SOLENOID_TYPE, label: 'Solenoid (valve coil)' },
+];
+
 const VALVE_52_MODES: Array<{ type: string; label: string }> = [
   { type: VALVE_52_TYPE, label: 'Pneumatic, bistable (double pilot)' },
   { type: VALVE_52_MONO_TYPE, label: 'Pneumatic, monostable (spring return)' },
@@ -250,6 +264,7 @@ const INSPECTOR_FIELDS: Record<string, InspectorField[]> = {
   [ELEC_PUSH_BUTTON_TYPE]: [
     { kind: 'actuatorMode', label: 'Type', options: ELEC_CONTACT_MODES },
     { kind: 'checkbox', key: 'normallyClosed', label: 'Normally closed (NC)' },
+    { kind: 'checkbox', key: 'detent', label: 'Detent (latching)' },
   ],
   [ELEC_CHANGEOVER_TYPE]: [
     { kind: 'text', key: 'key', label: 'Signal (relay coil or sensor, e.g. K1, A1)' },
@@ -261,7 +276,14 @@ const INSPECTOR_FIELDS: Record<string, InspectorField[]> = {
       label: 'Program (double-click the PLC to edit)',
     },
   ],
-  [ELEC_COIL_TYPE]: [{ kind: 'text', key: 'key', label: 'Name (e.g. Y1, K1)' }],
+  [ELEC_COIL_TYPE]: [
+    { kind: 'actuatorMode', label: 'Type', options: ELEC_COIL_MODES },
+    { kind: 'text', key: 'key', label: 'Name (e.g. K1)' },
+  ],
+  [ELEC_SOLENOID_TYPE]: [
+    { kind: 'actuatorMode', label: 'Type', options: ELEC_COIL_MODES },
+    { kind: 'text', key: 'key', label: 'Name - same as the valve coil it drives (e.g. Y1)' },
+  ],
   [VALVE_52_SOLENOID_TYPE]: [
     { kind: 'actuatorMode', label: 'Operation', options: VALVE_52_MODES },
     { kind: 'text', key: 'key', label: 'Solenoid coil name' },
@@ -925,6 +947,46 @@ function renderTipsSection(container: HTMLElement): void {
   container.appendChild(section);
 }
 
+const ALIGN_BUTTONS: Array<{ icon: IconName; label: string; mode: AlignMode }> = [
+  { icon: 'alignLeft', label: 'Align left edges', mode: 'left' },
+  { icon: 'alignCenter', label: 'Align centers in a column', mode: 'center' },
+  { icon: 'alignRight', label: 'Align right edges', mode: 'right' },
+  { icon: 'alignTop', label: 'Align top edges', mode: 'top' },
+  { icon: 'alignMiddle', label: 'Align centers in a row', mode: 'middle' },
+  { icon: 'alignBottom', label: 'Align bottom edges', mode: 'bottom' },
+];
+
+const DISTRIBUTE_BUTTONS: Array<{ icon: IconName; label: string; axis: DistributeAxis }> = [
+  { icon: 'distributeH', label: 'Space evenly left to right', axis: 'horizontal' },
+  { icon: 'distributeV', label: 'Space evenly top to bottom', axis: 'vertical' },
+];
+
+/** Shown while several components are selected: line them up, or space them evenly (that one
+ * needs three, so there's something between the outer two to move). Disabled while the
+ * simulation runs, like every other edit. */
+function renderAlignSection(container: HTMLElement, selected: Component[]): void {
+  const heading = document.createElement('div');
+  heading.className = 'inspectorSectionHeading';
+  heading.textContent = 'Align';
+  container.appendChild(heading);
+
+  const editable = canEdit(appState.mode);
+  const row = document.createElement('div');
+  row.className = 'inspectorAlignRow';
+  for (const { icon, label, mode } of ALIGN_BUTTONS) {
+    const btn = iconButton(icon, label, () => alignComponents(getSelectedComponents(), mode));
+    btn.disabled = !editable;
+    row.appendChild(btn);
+  }
+  for (const { icon, label, axis } of DISTRIBUTE_BUTTONS) {
+    const btn = iconButton(icon, label, () => distributeComponents(getSelectedComponents(), axis));
+    btn.disabled = !editable || selected.length < 3;
+    if (selected.length < 3) btn.title = `${label} (select three or more)`;
+    row.appendChild(btn);
+  }
+  container.appendChild(row);
+}
+
 export function renderInspector(container: HTMLElement, projectBar: ProjectBarRefs): void {
   // Split from refresh() so the tips section below can always be appended last, whichever of
   // this function's several early exits the body took.
@@ -936,6 +998,8 @@ export function renderInspector(container: HTMLElement, projectBar: ProjectBarRe
       // space with (or look like part of) whatever's actually being edited.
       if (selected.length === 0) {
         renderProjectInfoSection(container, projectBar);
+      } else {
+        renderAlignSection(container, selected);
       }
 
       const hint = document.createElement('p');
@@ -985,6 +1049,8 @@ export function renderInspector(container: HTMLElement, projectBar: ProjectBarRe
   }
 
   onSelectionChange(refresh);
+  // The Align buttons are only usable while editing.
+  appState.onModeChange(refresh);
   // Also catches edits that don't go through this panel's own fields, e.g. saving a PLC's
   // program from its graphical editor dialog - that only calls appState.markDirty(), so its
   // read-only program preview here needs the general change notification to pick it up.

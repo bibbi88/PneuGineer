@@ -21,7 +21,7 @@ export function initMarquee(workspaceEl: HTMLElement, connLayer: SVGSVGElement):
     // across the screen while the view slides under it.
     if (e.altKey) return;
 
-    const additive = e.shiftKey;
+    const additive = e.shiftKey || e.ctrlKey || e.metaKey;
     if (!additive) clearSelection();
 
     const startX = e.clientX;
