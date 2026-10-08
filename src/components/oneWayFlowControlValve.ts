@@ -17,9 +17,8 @@ export const ONE_WAY_FLOW_CONTROL_VALVE_TYPE = 'oneWayFlowControlValve';
 //
 // All of the tunable numbers live in `OneWayFlowGeometry` / `ONE_WAY_FLOW_DEFAULT_GEOMETRY`
 // below, and `drawOneWayFlowControlValveBody` (the only place that actually draws) takes them
-// as a parameter rather than reading module constants directly - both so the real component
-// and the symbol-lab dev tool (tools/symbol-lab.html) render from the exact same code, and so
-// tweaking a shape never means hand-copying numbers between two divergent implementations.
+// as a parameter rather than reading module constants directly, so tweaking a shape means
+// changing one number in one place.
 export interface OneWayFlowGeometry {
   localW: number;
   localH: number;

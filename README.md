@@ -66,7 +66,3 @@ npm run lint     # eslint + prettier check
 - **`dist/index.html`** — the output of `npm run build`: `index.html` with the compiled
   JavaScript and CSS inlined into it (via `vite-plugin-singlefile`). This is the file that is
   deployed to GitHub Pages and that can be run offline.
-- **`symbol-lab.html`** — a developer tool for tuning the geometry of the component symbols.
-  Open it at `http://localhost:5173/symbol-lab.html` while `npm run dev` is running; saving
-  writes the tuned values straight back into the component's source file under
-  `src/components`.

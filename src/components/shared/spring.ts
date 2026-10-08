@@ -5,9 +5,8 @@ import { createSvgEl } from './svgHelpers';
  * have to fit on the body's end face beside a pilot - hence the compact proportions, which the
  * other valves then adopted rather than each keeping their own.
  *
- * Each valve still owns its copy of these four numbers in its own geometry object (so the
- * symbol lab can tune them per symbol), and passes that object straight in - the fields are
- * named to match.
+ * Each valve still owns its copy of these four numbers in its own geometry object (so they can
+ * be tuned per symbol), and passes that object straight in - the fields are named to match.
  */
 export interface SpringGeometry {
   /** Total reach of the spring, from its anchor to its far end. */

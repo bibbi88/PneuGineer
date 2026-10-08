@@ -43,8 +43,8 @@ export const SLIDING_VALVE_32_DEFAULT_GEOMETRY: SlidingValve32Geometry = {
 
 // Every variant (push button, air-piloted, limit valve, time delay) positions its own
 // actuator-specific extras (spring, roller, pilot triangle, clock) relative to these - derived
-// from the shared geometry above (rather than duplicated literals) so tuning the shared body via
-// the symbol lab keeps every variant's actuator artwork lined up with it.
+// from the shared geometry above (rather than duplicated literals) so tuning the shared body
+// keeps every variant's actuator artwork lined up with it.
 export const SLIDING_VALVE_W = SLIDING_VALVE_32_DEFAULT_GEOMETRY.bodyW;
 export const SLIDING_VALVE_H = SLIDING_VALVE_32_DEFAULT_GEOMETRY.bodyH;
 export const SLIDING_VALVE_OFFSET_X = SLIDING_VALVE_32_DEFAULT_GEOMETRY.offsetX;

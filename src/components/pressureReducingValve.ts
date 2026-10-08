@@ -101,7 +101,7 @@ function addArrow(
 }
 
 /** Draws the symbol into `g` and returns the port positions that resulted. Pure with respect to
- * `g`'s own contents, so the symbol lab can call it repeatedly against a cleared group. */
+ * `g`'s own contents, so it can be called repeatedly against a cleared group. */
 export function drawPressureReducingValveBody(
   g: SVGElement,
   geo: PressureReducingValveGeometry,
