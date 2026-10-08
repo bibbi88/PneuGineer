@@ -6,6 +6,8 @@ simulation with a live pressure overlay.
 
 **▶ Try it in your browser: [bibbi88.github.io/PneuGineer](https://bibbi88.github.io/PneuGineer/)**
 
+![PneuGineer editor with an A+B+C+C-B-A- cylinder sequence circuit](docs/screenshot.png)
+
 This is an educational project focused on flow _logic_, not flow _calculations_ — pressure is
 modeled as a simple pressurized/not-pressurized graph, not real fluid dynamics.
 
