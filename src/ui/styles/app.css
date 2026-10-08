@@ -650,6 +650,12 @@ svg.compSvg {
   stroke: transparent;
 }
 
+/* Port dots are only a wiring aid, so they disappear entirely while simulating (see
+   refreshSimulatingClass in main.ts) - selected, pressurized or not. */
+.workspace.simulating .port {
+  visibility: hidden;
+}
+
 .wireHandle {
   fill: #fff;
   stroke: var(--accent);

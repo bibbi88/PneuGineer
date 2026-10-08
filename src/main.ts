@@ -157,6 +157,14 @@ function refreshLibraryEnabled(): void {
 appState.onModeChange(refreshLibraryEnabled);
 refreshLibraryEnabled();
 
+// Port dots are a wiring aid; while the simulation runs (or is paused) nothing can be wired,
+// so they're hidden to let the circuit read like a clean drawing.
+function refreshSimulatingClass(): void {
+  workspaceEl.classList.toggle('simulating', !canEdit(appState.mode));
+}
+appState.onModeChange(refreshSimulatingClass);
+refreshSimulatingClass();
+
 renderInspector(inspectorEl, projectBar);
 initPageFrame(frameLayer, projectBar, viewport, workspaceEl);
 startSimLoop();
