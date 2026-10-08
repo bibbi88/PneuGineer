@@ -1,18 +1,13 @@
-# PneuGineerCL
+# PneuGineer
 
 A browser-based pneumatic circuit editor and simulator. Drag components — valves, cylinders,
 pressure sources, sensors — onto a canvas, wire their ports together, and run a play/pause/step
 simulation with a live pressure overlay.
 
-**▶ Try it in your browser: [bibbi88.github.io/PneuGineerCL](https://bibbi88.github.io/PneuGineerCL/)**
+**▶ Try it in your browser: [bibbi88.github.io/PneuGineer](https://bibbi88.github.io/PneuGineer/)**
 
-This is a from-scratch TypeScript + Vite rewrite of the original [PneuGineer](https://github.com/bibbi88/PneuGineer),
-aimed at a cleaner architecture (a real `Component` interface instead of type-switching, a
-cached simulation engine, a grid-based A* wire router) plus a few new components.
-
-Like the original, this is an educational project focused on flow _logic_, not flow
-_calculations_ — pressure is modeled as a simple pressurized/not-pressurized graph, not real
-fluid dynamics.
+This is an educational project focused on flow _logic_, not flow _calculations_ — pressure is
+modeled as a simple pressurized/not-pressurized graph, not real fluid dynamics.
 
 ## Components
 
