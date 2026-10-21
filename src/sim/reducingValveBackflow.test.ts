@@ -6,6 +6,7 @@ import { createSource } from '../components/source';
 import { createValve52Mono } from '../components/valve52Mono';
 import { createCylinderDouble } from '../components/cylinderDouble';
 import { createPressureReducingValve } from '../components/pressureReducingValve';
+import { createCheckValve } from '../components/checkValve';
 import type { Component } from '../core/types';
 import type { ViewportAdapter } from '../ui/viewport';
 
@@ -78,5 +79,28 @@ describe('pressure reducing valve does not let air back through', () => {
     appState.components = [];
     appState.connections = [];
     expect(run('supply', 'retract')).toBeGreaterThan(0);
+  });
+
+  it('exhausts back past the reducing valve through a check valve fitted in parallel', () => {
+    // Reducing valve in cylinder port A's line with a bypass check valve whose IN is on the
+    // cylinder side: supply flows forward through the reducer, exhaust returns via the check.
+    // The check valve's IN is never pressurized while the chamber exhausts, so its edge must
+    // not depend on that.
+    const source = add(createSource(layer(), 0, 0));
+    const valve = add(createValve52Mono(layer(), 0, 0));
+    const cyl = add(createCylinderDouble(layer(), 0, 0));
+    const reducer = add(createPressureReducingValve(layer(), 0, 0));
+    const check = add(createCheckValve(layer(), 0, 0));
+    cyl.restore({ ...cyl.snapshot(), pos: 1 });
+
+    wire(source, 'OUT', valve, '1');
+    wire(valve, '4', reducer, 'IN');
+    wire(reducer, 'OUT', cyl, 'A');
+    wire(check, 'IN', reducer, 'OUT');
+    wire(check, 'OUT', reducer, 'IN');
+    wire(valve, '2', cyl, 'B');
+
+    for (let i = 0; i < 5; i++) stepSimulation(0.05);
+    expect(pos(cyl)).toBeLessThan(1);
   });
 });

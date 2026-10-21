@@ -137,8 +137,12 @@ export function createCheckValve(compLayer: HTMLElement, x: number, y: number): 
     gy: geo.gy,
     ports,
 
-    conductivityRule(ctx): PortConnection[] {
-      return ctx.isPressurized('IN') ? [{ a: 'IN', b: 'OUT', directed: true }] : [];
+    // Always open IN -> OUT, not only while IN is pressurized: an exhausting chamber upstream is
+    // never "pressurized" (nothing traces it back to a source), yet its air must still get out
+    // through here - e.g. a check valve bypassing a pressure reducing valve on the return stroke.
+    // The edge being directed is what keeps OUT -> IN blocked.
+    conductivityRule(): PortConnection[] {
+      return [{ a: 'IN', b: 'OUT', directed: true }];
     },
 
     snapshot(): Record<string, unknown> {
