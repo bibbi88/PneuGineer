@@ -19,7 +19,11 @@ import { THROTTLE_VALVE_TYPE } from '../components/throttleValve';
 import { PRESSURE_REDUCING_VALVE_TYPE } from '../components/pressureReducingValve';
 import { SOURCE_PRESSURE } from '../sim/constants';
 import { QUICK_EXHAUST_VALVE_TYPE } from '../components/quickExhaustValve';
-import { TIME_DELAY_VALVE_NO_TYPE, TIME_DELAY_VALVE_TYPE } from '../components/timeDelayValve';
+import {
+  TIME_DELAY_VALVE_NO_TYPE,
+  TIME_DELAY_VALVE_OFF_TYPE,
+  TIME_DELAY_VALVE_TYPE,
+} from '../components/timeDelayValve';
 import { PRESSURE_SEQUENCE_VALVE_TYPE } from '../components/pressureSequenceValve';
 import { LIMIT_VALVE_32_TYPE } from '../components/limitValve32';
 import { PUSH_BUTTON_32_TYPE } from '../components/pushButton32';
@@ -239,6 +243,10 @@ const INSPECTOR_FIELDS: Record<string, InspectorField[]> = {
     { kind: 'silencer', key: 'silencer3', port: '3', label: 'Port 3 silencer' },
   ],
   [TIME_DELAY_VALVE_NO_TYPE]: [
+    { kind: 'number', key: 'delaySec', label: 'Delay (s)', min: 0, max: 30, step: 0.1 },
+    { kind: 'silencer', key: 'silencer3', port: '3', label: 'Port 3 silencer' },
+  ],
+  [TIME_DELAY_VALVE_OFF_TYPE]: [
     { kind: 'number', key: 'delaySec', label: 'Delay (s)', min: 0, max: 30, step: 0.1 },
     { kind: 'silencer', key: 'silencer3', port: '3', label: 'Port 3 silencer' },
   ],

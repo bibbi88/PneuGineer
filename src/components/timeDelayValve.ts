@@ -17,6 +17,16 @@ export const TIME_DELAY_VALVE_TYPE = 'timeDelayValve';
 /** The same valve with its 3/2 valve normally open: output on at once, off after the delay - a
  * "pulse valve" (one-shot), used to shorten a signal that would otherwise hold a pilot on. */
 export const TIME_DELAY_VALVE_NO_TYPE = 'timeDelayValveNO';
+/** Off-delay: output on as soon as 12 is, and held on for the delay after 12 goes away. */
+export const TIME_DELAY_VALVE_OFF_TYPE = 'timeDelayValveOff';
+
+export type TimeDelayVariant = 'NC' | 'NO' | 'OFF';
+
+const VARIANTS: Record<TimeDelayVariant, { type: string; name: string }> = {
+  NC: { type: TIME_DELAY_VALVE_TYPE, name: 'Time delay valve, on-delay' },
+  NO: { type: TIME_DELAY_VALVE_NO_TYPE, name: 'Time delay valve, normally open' },
+  OFF: { type: TIME_DELAY_VALVE_OFF_TYPE, name: 'Time delay valve, off-delay' },
+};
 
 /** Room added on each side of the canvas for the pilot circuit drawn left of the valve. Equal on
  * both sides, so the canvas center - which is what the component's position is - stays put and
@@ -102,15 +112,20 @@ function seg(x1: number, y1: number, x2: number, y2: number, width = 2): SVGElem
 /**
  * Draws the ISO 1219 time delay valve's pilot circuit, spring and frame into the mover: port 12
  * feeds the valve's air pilot through a one-way flow control valve - an adjustable throttle,
- * with a check valve in a bypass that lets the pilot vent freely the other way - and a small
- * reservoir hanging off the pilot line. Filling the reservoir through the throttle is what takes
- * the time; the check valve is why it resets at once. Everything sits inside the dash-dot frame
- * that marks the parts as one assembled unit. Coordinates are local to the mover.
+ * with a check valve in a bypass - and a small reservoir hanging off the pilot line. Everything
+ * sits inside the dash-dot frame that marks the parts as one assembled unit. Coordinates are
+ * local to the mover.
+ *
+ * Which way the check valve faces is what decides the timing. On-delay (`delayOn`): it lets the
+ * pilot vent freely, so the reservoir fills slowly through the throttle (the delay) and empties
+ * at once (instant reset). Off-delay: turned round, it fills the reservoir at once (instant
+ * switch) and makes it empty slowly through the throttle (the delay).
  */
 export function drawTimeDelayValveActuator(
   mover: SVGGElement,
   svg: SVGSVGElement,
   geo: TimeDelayValveGeometry,
+  delayOn = true,
 ): { port12: ReturnType<typeof createPort> } {
   const cy = SLIDING_VALVE_H / 2;
   const parts = createSvgEl('g');
@@ -156,13 +171,16 @@ export function drawTimeDelayValveActuator(
     }),
   );
 
-  // Check valve in the bypass above: free flow back toward port 12 only (reservoir venting).
+  // Check valve in the bypass above: free flow back toward port 12 for an on-delay (reservoir
+  // vents at once), free flow from it for an off-delay (reservoir fills at once).
   const by = cy - geo.bypassRise;
-  const check = drawBallCheckSymbol(parts, tx, by, 'horizontal', -1, 0.45);
+  const check = drawBallCheckSymbol(parts, tx, by, 'horizontal', delayOn ? -1 : 1, 0.45);
+  const leftEnd = delayOn ? check.outPoint.x : check.inPoint.x;
+  const rightEnd = delayOn ? check.inPoint.x : check.outPoint.x;
   parts.append(
     seg(fcLeft, cy, fcLeft, by),
-    seg(fcLeft, by, check.outPoint.x, by),
-    seg(check.inPoint.x, by, fcRight, by),
+    seg(fcLeft, by, leftEnd, by),
+    seg(rightEnd, by, fcRight, by),
     seg(fcRight, by, fcRight, cy),
   );
 
@@ -212,24 +230,26 @@ export function drawTimeDelayValveActuator(
  *
  * Normally closed (the default) it's an on-delay: 2 comes on `delaySec` after 12 does. Normally
  * open it's the reverse: 2 is on at once and goes off after `delaySec` - with 1 and 12 fed from
- * the same signal, that turns a held signal into a pulse of that length.
+ * the same signal, that turns a held signal into a pulse of that length. The off-delay variant
+ * switches the moment 12 is pressurized and holds 2 on for `delaySec` after 12 goes away.
  */
 export function createTimeDelayValve(
   compLayer: HTMLElement,
   x: number,
   y: number,
-  variant: 'NC' | 'NO' = 'NC',
+  variant: TimeDelayVariant = 'NC',
 ): Component {
   const geo = TIME_DELAY_VALVE_DEFAULT_GEOMETRY;
   const fixedNormallyOpen = variant === 'NO';
+  const offDelay = variant === 'OFF';
   const shell = buildComponentShell(
     compLayer,
-    fixedNormallyOpen ? TIME_DELAY_VALVE_NO_TYPE : TIME_DELAY_VALVE_TYPE,
+    VARIANTS[variant].type,
     x,
     y,
     SVG_W,
     SVG_H,
-    fixedNormallyOpen ? 'Time delay valve, normally open' : 'Time delay valve',
+    VARIANTS[variant].name,
     {
       x: GEOMETRY.offsetX - geo.framePadLeft,
       y: GEOMETRY.offsetY - geo.framePadY,
@@ -238,7 +258,7 @@ export function createTimeDelayValve(
     },
   );
   const valve = buildSlidingValve32Body(shell.svg, `arrow-delay-${uid()}`, GEOMETRY);
-  const { port12 } = drawTimeDelayValveActuator(valve.mover, shell.svg, geo);
+  const { port12 } = drawTimeDelayValveActuator(valve.mover, shell.svg, geo, !offDelay);
 
   // Not part of the mover (doesn't slide) - positioned in canvas-absolute coordinates instead.
   const delayLabel = createSvgEl('text', {
@@ -274,7 +294,7 @@ export function createTimeDelayValve(
 
   const comp: Component = {
     id: uid(),
-    type: fixedNormallyOpen ? TIME_DELAY_VALVE_NO_TYPE : TIME_DELAY_VALVE_TYPE,
+    type: VARIANTS[variant].type,
     el: shell.el,
     x,
     y,
@@ -289,7 +309,18 @@ export function createTimeDelayValve(
     },
 
     step(dt: number, ctx: SimStepContext): void {
-      if (ctx.isPressurized('12')) {
+      const signal = ctx.isPressurized('12');
+      if (offDelay) {
+        // Switches with the signal; holds for delaySec after it goes, and a signal back before
+        // then restarts the wait.
+        if (signal) {
+          active = true;
+          timer = 0;
+        } else if (active) {
+          timer += dt;
+          if (timer >= delaySec) active = false;
+        }
+      } else if (signal) {
         timer += dt;
         if (timer >= delaySec) active = true;
       } else {

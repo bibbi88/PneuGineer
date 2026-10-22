@@ -16,6 +16,7 @@ import { createPressureSequenceValve, PRESSURE_SEQUENCE_VALVE_TYPE } from './pre
 import {
   createTimeDelayValve,
   TIME_DELAY_VALVE_NO_TYPE,
+  TIME_DELAY_VALVE_OFF_TYPE,
   TIME_DELAY_VALVE_TYPE,
 } from './timeDelayValve';
 import { createQuickExhaustValve, QUICK_EXHAUST_VALVE_TYPE } from './quickExhaustValve';
@@ -220,7 +221,8 @@ export const componentRegistry = new Map<string, RegistryEntry>([
     TIME_DELAY_VALVE_TYPE,
     {
       factory: (ctx, x, y) => createTimeDelayValve(ctx.compLayer, x, y),
-      label: 'Time delay valve',
+      label: 'Time delay valve, on-delay',
+      keywords: ['time delay valve', 'on delay', 'TON'],
       placeable: true,
       category: ComponentCategory.FLOW,
     },
@@ -231,6 +233,16 @@ export const componentRegistry = new Map<string, RegistryEntry>([
       factory: (ctx, x, y) => createTimeDelayValve(ctx.compLayer, x, y, 'NO'),
       label: 'Time delay valve, normally open',
       keywords: ['pulse valve', 'impulse valve', 'one-shot', 'pulskretsventil'],
+      placeable: true,
+      category: ComponentCategory.FLOW,
+    },
+  ],
+  [
+    TIME_DELAY_VALVE_OFF_TYPE,
+    {
+      factory: (ctx, x, y) => createTimeDelayValve(ctx.compLayer, x, y, 'OFF'),
+      label: 'Time delay valve, off-delay',
+      keywords: ['off delay', 'release delay', 'TOF'],
       placeable: true,
       category: ComponentCategory.FLOW,
     },
