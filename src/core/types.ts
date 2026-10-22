@@ -127,6 +127,9 @@ export interface Component<TSnapshot = Record<string, unknown>> {
    * in the inspector - otherwise its kind's default applies (see sim/flowRatings.ts). Saved,
    * undone and copied along with the component's snapshot. */
   flowRating?: number;
+  /** Flow mode: this component's own critical pressure ratio b (ISO 6358), if set in the
+   * inspector - otherwise its kind's default. Saved alongside `flowRating`. */
+  flowCriticalRatio?: number;
 
   conductivityRule(ctx: ConductivityContext): PortConnection[];
   flowMultiplier?(fromPort: PortKey, toPort: PortKey): number;

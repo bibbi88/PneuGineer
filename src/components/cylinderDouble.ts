@@ -4,7 +4,7 @@ import { buildComponentShell, createSvgEl, createPort } from './shared/svgHelper
 import { nextCylinderLetter, isCylinderLetterInUse } from './shared/letters';
 import { BASE_CYL_SPEED } from '../sim/constants';
 import type { FlowDevice } from '../sim/flowNetwork';
-import { flowRatingOf } from '../sim/flowRatings';
+import { criticalRatioOf, flowRatingOf } from '../sim/flowRatings';
 import {
   atRest,
   P_ATM,
@@ -268,6 +268,7 @@ export function createCylinderDouble(compLayer: HTMLElement, x: number, y: numbe
           kind: 'node',
           pressure: netPressure(port),
           conductance: flowRatingOf(comp),
+          b: criticalRatioOf(comp),
         });
         const q = stepCylinder(flow, spec, node('A'), node('B'), h);
         frameFlow.A += q.qA * h;

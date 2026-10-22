@@ -12,10 +12,14 @@ import {
 } from '../interaction/align';
 import { appState } from '../app/AppState';
 import {
+  defaultCriticalRatio,
   defaultFlowRating,
   hasFlowRating,
+  MAX_CRITICAL_RATIO,
   MAX_FLOW_RATING,
+  MIN_CRITICAL_RATIO,
   MIN_FLOW_RATING,
+  setCriticalRatio,
   setFlowRating,
 } from '../sim/flowRatings';
 import { getSelectedComponents, onSelectionChange } from '../interaction/selection';
@@ -383,31 +387,65 @@ function updateComponentField(comp: Component, key: string, value: unknown): voi
   appState.markDirty();
 }
 
-/** The component's flow rating C (see sim/flowRatings.ts): its own value if set, otherwise left
- * empty with its kind's typical value shown as the placeholder - clearing the field goes back to
- * that default. Only flow simulation mode uses it. */
+/** The component's flow rating C and critical ratio b (see sim/flowRatings.ts): its own values
+ * if set, otherwise left empty with its kind's typical value shown as the placeholder - clearing
+ * a field goes back to that default. Only flow simulation mode uses them. */
 function renderFlowRatingField(container: HTMLElement, comp: Component, refresh: () => void): void {
-  const row = document.createElement('label');
-  row.className = 'inspectorRow';
-  row.title =
-    'Sonic conductance C (ISO 6358): how much air this component can pass. Used in Flow simulation; empty uses the typical value.';
-  const span = document.createElement('span');
-  span.textContent = 'Flow rating C (dm³/s·bar)';
-  const input = document.createElement('input');
-  input.type = 'number';
-  input.className = 'flowRatingInput';
-  input.min = String(MIN_FLOW_RATING);
-  input.max = String(MAX_FLOW_RATING);
-  input.step = '0.05';
-  input.placeholder = String(defaultFlowRating(comp.type));
-  input.value = comp.flowRating === undefined ? '' : String(comp.flowRating);
-  input.addEventListener('change', () => {
-    setFlowRating(comp, input.value.trim() === '' ? null : Number(input.value));
-    appState.markDirty();
-    refresh();
-  });
-  row.append(span, input);
-  container.appendChild(row);
+  const row = (
+    label: string,
+    title: string,
+    className: string,
+    attrs: { min: number; max: number; step: number; typical: number; value: number | undefined },
+    apply: (v: number | null) => void,
+  ): void => {
+    const el = document.createElement('label');
+    el.className = 'inspectorRow';
+    el.title = title;
+    const span = document.createElement('span');
+    span.textContent = label;
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.className = className;
+    input.min = String(attrs.min);
+    input.max = String(attrs.max);
+    input.step = String(attrs.step);
+    input.placeholder = String(attrs.typical);
+    input.value = attrs.value === undefined ? '' : String(attrs.value);
+    input.addEventListener('change', () => {
+      apply(input.value.trim() === '' ? null : Number(input.value));
+      appState.markDirty();
+      refresh();
+    });
+    el.append(span, input);
+    container.appendChild(el);
+  };
+
+  row(
+    'Flow rating C (dm³/s·bar)',
+    'Sonic conductance C (ISO 6358): how much air this component can pass. Used in Flow simulation; empty uses the typical value.',
+    'flowRatingInput',
+    {
+      min: MIN_FLOW_RATING,
+      max: MAX_FLOW_RATING,
+      step: 0.05,
+      typical: defaultFlowRating(comp.type),
+      value: comp.flowRating,
+    },
+    (v) => setFlowRating(comp, v),
+  );
+  row(
+    'Critical ratio b',
+    'Critical pressure ratio b (ISO 6358): below this downstream/upstream pressure ratio the flow is choked. Used in Flow simulation; empty uses the typical value.',
+    'criticalRatioInput',
+    {
+      min: MIN_CRITICAL_RATIO,
+      max: MAX_CRITICAL_RATIO,
+      step: 0.05,
+      typical: defaultCriticalRatio(comp.type),
+      value: comp.flowCriticalRatio,
+    },
+    (v) => setCriticalRatio(comp, v),
+  );
 }
 
 function renderSelectField(

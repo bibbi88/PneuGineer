@@ -23,7 +23,7 @@ import { appState } from '../app/AppState';
 import { SOURCE_PRESSURE } from './constants';
 import { isoMassFlow, P_ATM, BAR, fromGaugeBar } from './flowModel';
 import { portKey, type FrameGraph, type PortKeyStr } from './pressure';
-import { flowRatingOf } from './flowRatings';
+import { criticalRatioOf, flowRatingOf } from './flowRatings';
 
 /** Bore of the tubing a wire stands for (4 mm), m². */
 const TUBE_AREA = Math.PI * 0.002 ** 2;
@@ -191,6 +191,8 @@ interface Edge {
   cBA: number;
   /** A pressure reducing valve's set pressure (absolute, Pa) on the a -> b direction. */
   capAB: number | null;
+  /** The component's critical pressure ratio b. */
+  criticalRatio: number;
 }
 
 function buildEdges(
@@ -209,6 +211,7 @@ function buildEdges(
           : graph.pressurized.has(portKey(c.id, p)),
     });
     const rating = flowRatingOf(c);
+    const criticalRatio = criticalRatioOf(c);
     for (const rule of rules) {
       const a = topo.netOf.get(portKey(c.id, rule.a));
       const b = topo.netOf.get(portKey(c.id, rule.b));
@@ -220,6 +223,7 @@ function buildEdges(
         cAB: rating * (c.flowMultiplier?.(rule.a, rule.b) ?? 1),
         cBA: rule.directed ? 0 : rating * (c.flowMultiplier?.(rule.b, rule.a) ?? 1),
         capAB: cap === null || cap === undefined ? null : fromGaugeBar(cap),
+        criticalRatio,
       });
     }
   }
@@ -233,11 +237,11 @@ function edgeFlow(e: Edge, pa: number, pb: number): number {
       // A regulator: open while the outlet is below its setting, closing over the last bit.
       c *= Math.min(1, Math.max(0, (e.capAB - pb) / (REGULATOR_BAND * BAR)));
     }
-    return isoMassFlow(pa, pb, c);
+    return isoMassFlow(pa, pb, c, e.criticalRatio);
   }
   // Backwards through a regulator is blocked (a plain, non-relieving one).
   if (e.capAB !== null) return 0;
-  return isoMassFlow(pa, pb, e.cBA);
+  return isoMassFlow(pa, pb, e.cBA, e.criticalRatio);
 }
 
 /**

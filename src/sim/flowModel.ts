@@ -76,14 +76,14 @@ function flowFactor(r: number, b: number): number {
 /** How a cylinder port is connected this instant, as far as the flow model is concerned. */
 export type PortFeed =
   /** To the supply, at absolute pressure `pressure` (Pa), through conductance `conductance`. */
-  | { kind: 'supply'; pressure: number; conductance: number }
+  | { kind: 'supply'; pressure: number; conductance: number; b?: number }
   /** Out to atmosphere through conductance `conductance`. */
-  | { kind: 'exhaust'; conductance: number }
+  | { kind: 'exhaust'; conductance: number; b?: number }
   /** Shut off: no air in or out. */
   | { kind: 'closed' }
   /** Joined to a line at absolute pressure `pressure` (Pa) through `conductance` - air flows
    * whichever way the pressures say (flow mode's network, see sim/flowNetwork.ts). */
-  | { kind: 'node'; pressure: number; conductance: number };
+  | { kind: 'node'; pressure: number; conductance: number; b?: number };
 
 export interface CylinderSpec {
   /** Piston area on the A (cap) side, m². */
@@ -128,10 +128,10 @@ function chamberFlow(p: number, feed: PortFeed): number {
   if (feed.kind === 'supply') {
     // The supply holds its pressure; air only flows in from it, never back up the line (a
     // chamber above supply pressure just stops filling - it doesn't drive the supply).
-    return Math.max(0, isoMassFlow(feed.pressure, p, feed.conductance));
+    return Math.max(0, isoMassFlow(feed.pressure, p, feed.conductance, feed.b));
   }
-  if (feed.kind === 'exhaust') return isoMassFlow(p, P_ATM, feed.conductance) * -1;
-  if (feed.kind === 'node') return isoMassFlow(feed.pressure, p, feed.conductance);
+  if (feed.kind === 'exhaust') return isoMassFlow(p, P_ATM, feed.conductance, feed.b) * -1;
+  if (feed.kind === 'node') return isoMassFlow(feed.pressure, p, feed.conductance, feed.b);
   return 0;
 }
 

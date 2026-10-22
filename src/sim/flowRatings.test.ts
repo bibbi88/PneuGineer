@@ -4,6 +4,9 @@ import { initWires, createConnection } from '../wires/connection';
 import { stepSimulation } from './engine';
 import { resetFlowNetwork } from './flowNetwork';
 import {
+  criticalRatioOf,
+  defaultCriticalRatio,
+  setCriticalRatio,
   defaultFlowRating,
   flowRatingOf,
   hasFlowRating,
@@ -72,13 +75,44 @@ describe('flow ratings', () => {
     expect(copy.flowRating).toBe(1.2);
   });
 
+  it('gives each component its kind’s typical critical ratio b until one is set', () => {
+    const c = createCheckValve(layer(), 0, 0);
+    expect(criticalRatioOf(c)).toBe(defaultCriticalRatio('checkValve'));
+    setCriticalRatio(c, 0.5);
+    expect(criticalRatioOf(c)).toBe(0.5);
+    setCriticalRatio(c, null);
+    expect(criticalRatioOf(c)).toBe(defaultCriticalRatio('checkValve'));
+  });
+
+  it('keeps b a ratio below 1', () => {
+    const c = createCheckValve(layer(), 0, 0);
+    setCriticalRatio(c, 1.5);
+    expect(c.flowCriticalRatio).toBeLessThan(1);
+    setCriticalRatio(c, -0.2);
+    expect(c.flowCriticalRatio).toBe(0);
+  });
+
+  it('carries b with the snapshot alongside C', () => {
+    const c = createCheckValve(layer(), 0, 0);
+    setCriticalRatio(c, 0.42);
+    const data = snapshotWithFlowRating(c);
+    expect(data).toMatchObject({ flowB: 0.42 });
+    expect(data).not.toHaveProperty('flowC');
+    const copy = createCheckValve(layer(), 0, 0);
+    restoreFlowRating(copy, data);
+    expect(copy.flowCriticalRatio).toBe(0.42);
+    expect(copy.flowRating).toBeUndefined();
+  });
+
   it('is saved with the project and restored on load', () => {
     const c = createCheckValve(layer(), 0, 0);
     appState.addComponent(c);
     setFlowRating(c, 0.33);
+    setCriticalRatio(c, 0.55);
     const file = serializeProject('test');
     loadProject(file, { compLayer: layer() }, viewport);
     expect(appState.components[0]?.flowRating).toBe(0.33);
+    expect(appState.components[0]?.flowCriticalRatio).toBe(0.55);
   });
 });
 
@@ -92,7 +126,7 @@ describe('flow ratings in the simulation', () => {
     appState.simulationMode = 'logic';
   });
 
-  function strokeTime(valveRating: number | null): number {
+  function strokeTime(valveRating: number | null, valveB: number | null = null): number {
     appState.components = [];
     appState.connections = [];
     resetFlowNetwork();
@@ -103,6 +137,7 @@ describe('flow ratings in the simulation', () => {
     const source = add(createSource(layer(), 0, 0));
     const valve = add(createValve52Mono(layer(), 0, 0));
     setFlowRating(valve, valveRating);
+    setCriticalRatio(valve, valveB);
     const cyl = add(createCylinderDouble(layer(), 0, 0));
     createConnection({ id: source.id, port: 'OUT' }, { id: valve.id, port: '1' });
     createConnection({ id: valve.id, port: '4' }, { id: cyl.id, port: 'A' });
@@ -115,6 +150,13 @@ describe('flow ratings in the simulation', () => {
     }
     return Infinity;
   }
+
+  it('fills a cylinder sooner through a valve with a higher critical ratio', () => {
+    // A higher b keeps the flow near its choked maximum down to a smaller pressure drop.
+    const low = strokeTime(0.3, 0.05);
+    const high = strokeTime(0.3, 0.7);
+    expect(high).toBeLessThan(low);
+  });
 
   it('makes a cylinder slower behind a smaller valve', () => {
     const typical = strokeTime(null);
@@ -154,7 +196,24 @@ describe('flow rating in the inspector', () => {
     expect(valve.flowRating).toBeUndefined();
   });
 
+  it('sets and clears the component’s own critical ratio b', () => {
+    const valve = createValve52Mono(layer(), 0, 0);
+    const el = inspectorFor(valve);
+    const input = el.querySelector<HTMLInputElement>('.criticalRatioInput') as HTMLInputElement;
+    expect(input.placeholder).toBe(String(defaultCriticalRatio('valve52Mono')));
+    input.value = '0.45';
+    input.dispatchEvent(new Event('change'));
+    expect(valve.flowCriticalRatio).toBe(0.45);
+
+    const again = el.querySelector<HTMLInputElement>('.criticalRatioInput') as HTMLInputElement;
+    again.value = '';
+    again.dispatchEvent(new Event('change'));
+    expect(valve.flowCriticalRatio).toBeUndefined();
+  });
+
   it('is not offered for components without air paths', () => {
-    expect(ratingInput(inspectorFor(createJunction(layer(), 0, 0)))).toBeNull();
+    const el = inspectorFor(createJunction(layer(), 0, 0));
+    expect(ratingInput(el)).toBeNull();
+    expect(el.querySelector('.criticalRatioInput')).toBeNull();
   });
 });
