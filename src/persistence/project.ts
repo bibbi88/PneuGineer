@@ -93,7 +93,8 @@ export function loadProject(
     appState.pageFrameSize = file.pageFrame?.size ?? 'none';
     appState.pageFrameX = file.pageFrame?.x ?? 0;
     appState.pageFrameY = file.pageFrame?.y ?? 0;
-    appState.simulationMode = file.simulation?.mode === 'flow' ? 'flow' : 'logic';
+    // Flow is the default; only a project saved in logic mode opens in it.
+    appState.simulationMode = file.simulation?.mode === 'logic' ? 'logic' : 'flow';
     appState.projectOriginDeviceId = file.origin ?? null;
     appState.projectLastSavedDeviceId = file.lastSaved ?? null;
 

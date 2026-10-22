@@ -2,7 +2,7 @@
 
 Work branch: `flow-calculations`. Goal: realistic behaviour **for teaching** (believable
 speeds, pressures that build up and fall, throttles and loads that matter), not data-sheet
-accuracy. The original **logic mode stays** and is the default; the toolbar's Logic | Flow
+accuracy. **Flow mode is the default**, and the original **logic mode stays**; the toolbar's Logic | Flow
 switch picks the model, and the choice is saved with the project (`simulation.mode`).
 
 ## Done

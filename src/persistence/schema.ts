@@ -45,7 +45,8 @@ export interface PageFrame {
   y: number;
 }
 
-/** How the simulation treats air - see AppState.simulationMode. Omitted means 'logic'. */
+/** How the simulation treats air - see AppState.simulationMode. Omitted (a project saved before
+ * the choice existed) means 'flow', the default. */
 export interface SimulationSettings {
   mode: 'logic' | 'flow';
 }

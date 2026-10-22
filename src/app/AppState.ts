@@ -20,10 +20,10 @@ class AppState {
    * doc) - 'none' draws nothing. x/y are its world-space center, meaningless while size is
    * 'none'. */
   pageFrameSize: 'none' | 'a4' | 'a3' = 'none';
-  /** How the simulation treats air: 'logic' (a line has air or not - the original model) or
-   * 'flow' (pressures build up and fall, flow is limited by restrictions - see sim/flowModel.ts).
-   * Saved with the project, so a circuit opens in the mode it was built for. */
-  simulationMode: 'logic' | 'flow' = 'logic';
+  /** How the simulation treats air: 'flow' (the default - pressures build up and fall, flow is
+   * limited by restrictions, see sim/flowModel.ts) or 'logic' (a line has air or not - the
+   * original model). Saved with the project, so a circuit opens in the mode it was built for. */
+  simulationMode: 'logic' | 'flow' = 'flow';
   pageFrameX = 0;
   pageFrameY = 0;
   /** A random per-browser ID (see app/deviceId.ts) - null until the project's first save, then

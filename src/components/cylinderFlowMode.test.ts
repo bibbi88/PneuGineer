@@ -153,10 +153,18 @@ describe('simulation mode in the project file', () => {
     expect(appState.simulationMode).toBe('flow');
   });
 
-  it('defaults to logic for a project saved before flow mode existed', () => {
-    appState.simulationMode = 'flow';
+  it('opens a project saved before the choice existed in flow mode, the default', () => {
+    appState.simulationMode = 'logic';
     const file = serializeProject('test');
     delete file.simulation;
+    loadProject(file, { compLayer: layer() }, viewport);
+    expect(appState.simulationMode).toBe('flow');
+  });
+
+  it('opens a project saved in logic mode in logic mode', () => {
+    appState.simulationMode = 'logic';
+    const file = serializeProject('test');
+    appState.simulationMode = 'flow';
     loadProject(file, { compLayer: layer() }, viewport);
     expect(appState.simulationMode).toBe('logic');
   });

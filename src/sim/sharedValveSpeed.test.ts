@@ -65,6 +65,8 @@ function run(side: 'A' | 'B', meterIn: boolean, stroke: 'extend' | 'retract') {
 
 describe('two cylinders on one valve, only one of them speed-controlled', () => {
   beforeEach(() => {
+    // These pin down the logic model's behaviour; flow mode (the default) is tested elsewhere.
+    appState.simulationMode = 'logic';
     appState.components = [];
     appState.connections = [];
     initWires(document.createElementNS('http://www.w3.org/2000/svg', 'svg'), viewport, layer());

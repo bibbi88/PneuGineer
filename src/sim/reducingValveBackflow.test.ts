@@ -61,6 +61,8 @@ function run(placement: 'inLine' | 'supply', stroke: 'extend' | 'retract'): numb
 
 describe('pressure reducing valve does not let air back through', () => {
   beforeEach(() => {
+    // These pin down the logic model's behaviour; flow mode (the default) is tested elsewhere.
+    appState.simulationMode = 'logic';
     appState.components = [];
     appState.connections = [];
     initWires(document.createElementNS('http://www.w3.org/2000/svg', 'svg'), viewport, layer());

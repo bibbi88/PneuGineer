@@ -26,6 +26,8 @@ function wire(fromId: number, fromPort: string, toId: number, toPort: string): C
 
 describe('stepSimulation - edge-triggered state changes take effect the same frame', () => {
   beforeEach(() => {
+    // These pin down the logic model's behaviour; flow mode (the default) is tested elsewhere.
+    appState.simulationMode = 'logic';
     appState.components = [];
     appState.connections = [];
   });
