@@ -51,5 +51,57 @@ export function renderToolbar(container: HTMLElement): void {
   onHistoryChange(updateUndoRedoButtons);
   updateUndoRedoButtons();
 
-  container.append(playStopBtn, pauseBtn, stepBtn, undoBtn, redoBtn);
+  container.append(playStopBtn, pauseBtn, stepBtn, renderSimulationModeSwitch(), undoBtn, redoBtn);
+}
+
+/** Logic / Flow switch: which model the simulation runs (see AppState.simulationMode). Only
+ * changeable while stopped - switching models mid-run would leave each half-way through the
+ * other's state. */
+function renderSimulationModeSwitch(): HTMLElement {
+  const group = document.createElement('div');
+  group.className = 'simModeSwitch';
+  group.setAttribute('role', 'radiogroup');
+  group.setAttribute('aria-label', 'Simulation model');
+
+  const options: Array<{ mode: 'logic' | 'flow'; label: string; title: string }> = [
+    { mode: 'logic', label: 'Logic', title: 'Logic: a line has air or it has not' },
+    {
+      mode: 'flow',
+      label: 'Flow',
+      title: 'Flow: pressures build up and fall, throttles and loads set the speed',
+    },
+  ];
+  const buttons = options.map(({ mode, label, title }) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'simModeBtn';
+    btn.textContent = label;
+    btn.title = title;
+    btn.setAttribute('role', 'radio');
+    btn.dataset.mode = mode;
+    btn.addEventListener('click', () => {
+      if (appState.mode !== Modes.STOP || appState.simulationMode === mode) return;
+      appState.simulationMode = mode;
+      appState.markDirty();
+      update();
+    });
+    group.appendChild(btn);
+    return btn;
+  });
+
+  function update(): void {
+    const stopped = appState.mode === Modes.STOP;
+    for (const btn of buttons) {
+      const active = btn.dataset.mode === appState.simulationMode;
+      btn.classList.toggle('simModeBtn--active', active);
+      btn.setAttribute('aria-checked', String(active));
+      btn.disabled = !stopped && !active;
+    }
+    group.classList.toggle('simModeSwitch--locked', !stopped);
+  }
+  update();
+  appState.onModeChange(update);
+  // A loaded project brings its own mode with it.
+  appState.onChange(update);
+  return group;
 }

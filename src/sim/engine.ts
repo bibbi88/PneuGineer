@@ -49,6 +49,7 @@ export function stepSimulation(dt: number): FrameGraph {
     if (!c.step) continue;
     const ctx: SimStepContext = {
       dt,
+      flowMode: appState.simulationMode === 'flow',
       isPressurized: (p) => graph.pressurized.has(portKey(c.id, p)),
       flowMultiplierToNearestSource: (p) => flowMultiplierToNearestSource(graph, portKey(c.id, p)),
       flowMultiplierToOpenExhaust: (p) => flowMultiplierToOpenExhaust(graph, portKey(c.id, p)),

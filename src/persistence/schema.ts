@@ -45,11 +45,17 @@ export interface PageFrame {
   y: number;
 }
 
+/** How the simulation treats air - see AppState.simulationMode. Omitted means 'logic'. */
+export interface SimulationSettings {
+  mode: 'logic' | 'flow';
+}
+
 export interface ProjectFileV1 {
   schemaVersion: 1;
   name: string;
   meta?: ProjectMeta;
   pageFrame?: PageFrame;
+  simulation?: SimulationSettings;
   /** A random per-browser ID (see app/deviceId.ts) - not shown anywhere in the app's own UI, just
    * carried in the saved file itself. `origin` is stamped on this project's very first save and
    * frozen from then on; `lastSaved` is overwritten on every save. Comparing the two is a weak

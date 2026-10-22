@@ -50,6 +50,10 @@ export interface ConductivityContext {
 
 export interface SimStepContext {
   dt: number;
+  /** True in flow simulation mode (see AppState.simulationMode): components that model flow
+   * physically (a cylinder's chamber pressures and piston) do so; otherwise everything behaves
+   * as the logic model always has. */
+  flowMode?: boolean;
   isPressurized(port: PortKey): boolean;
   flowMultiplierToNearestSource(port: PortKey): number;
   /** Companion to `flowMultiplierToNearestSource` for the port on the opposite (venting) side -

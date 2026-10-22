@@ -43,6 +43,7 @@ export function serializeProject(name: string): ProjectFileV1 {
       x: appState.pageFrameX,
       y: appState.pageFrameY,
     },
+    simulation: { mode: appState.simulationMode },
     comps: appState.components.map((c) => ({
       id: c.id,
       type: c.type,
@@ -91,6 +92,7 @@ export function loadProject(
     appState.pageFrameSize = file.pageFrame?.size ?? 'none';
     appState.pageFrameX = file.pageFrame?.x ?? 0;
     appState.pageFrameY = file.pageFrame?.y ?? 0;
+    appState.simulationMode = file.simulation?.mode === 'flow' ? 'flow' : 'logic';
     appState.projectOriginDeviceId = file.origin ?? null;
     appState.projectLastSavedDeviceId = file.lastSaved ?? null;
 
