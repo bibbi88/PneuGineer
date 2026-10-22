@@ -45,6 +45,11 @@ const TIP_SECTIONS: TipSection[] = [
         'pressure reducing valve or 3/2 valve onto an existing wire (it highlights green when ' +
         'close enough) to splice it in, instead of dropping it unconnected on top. A 3/2 valve ' +
         'turns to put port 1 toward the supply and port 2 toward the consumer.',
+      'R turns the selected components a quarter clockwise, Shift+R counter-clockwise. It ' +
+        'works while dragging too - a component coming out of the library or one already on the ' +
+        'canvas - and so does a right-click with the left button still held. A valve dropped ' +
+        'onto a wire goes in the way you turned it (along the wire), so a 3/2 valve can be ' +
+        'turned to choose which side is the supply. Escape cancels a drag from the library.',
       'Right-click a component for Rotate, Copy, and Delete.',
       'Right-click a port to add a pressure source to it, or a silencer on an exhaust port ' +
         '(right-click the silencer itself to change it again).',

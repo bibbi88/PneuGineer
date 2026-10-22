@@ -1862,3 +1862,16 @@ rect.wireHandle.wireStubHandle {
   font-variant-numeric: tabular-nums;
   color: var(--ink);
 }
+
+/* The component being dragged out of the library (interaction/libraryDrag.ts): the real symbol,
+   see-through, following the pointer - it can be turned with R or a right-click before it's
+   dropped. Never a target itself, so the drop lands on whatever is underneath. */
+.comp.dragGhost {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+body.libraryDragging,
+body.libraryDragging * {
+  cursor: grabbing !important;
+}

@@ -186,9 +186,11 @@ function spliceQuickExhaust(
   splitPoint: Point,
   viewport: ViewportAdapter,
   workspaceEl: HTMLElement,
+  rotation: number | undefined,
 ): void {
   const { conn, bestIdx, guides } = hit;
   const outletOnTo = !(isCylinder(conn.from.id) && !isCylinder(conn.to.id));
+  if (rotation !== undefined) setComponentRotation(comp, rotation);
 
   // Port 1 sits exactly on the wire line at the drop point.
   const p1 = portGlobalPosition(viewport, workspaceEl, comp, '1');
@@ -240,6 +242,9 @@ function supplyIsOnFrom(conn: Connection): boolean {
  * shifted so port 1 sits exactly on the wire at the drop point - port 2 then lands on the same
  * line, since the two are collinear. The supply half keeps its exact path; the outlet half
  * auto-routes from port 2 (which sits a valve-length further along than the drop point).
+ *
+ * A `rotation` along the wire, turned in by the user while dragging, wins over that guess: the
+ * valve goes in that way round and the side port 2 points to is taken as the consumer side.
  */
 function spliceThreeTwo(
   comp: Component,
@@ -247,10 +252,9 @@ function spliceThreeTwo(
   splitPoint: Point,
   viewport: ViewportAdapter,
   workspaceEl: HTMLElement,
+  rotation: number | undefined,
 ): void {
   const { conn, a, b, bestIdx, guides } = hit;
-  const supplyOnFrom = supplyIsOnFrom(conn);
-  const supplyEnd = supplyOnFrom ? a : b;
   const dist = (p: Point, q: Point): number => Math.hypot(p.x - q.x, p.y - q.y);
 
   const placeAt = (rot: number): void => {
@@ -259,10 +263,20 @@ function spliceThreeTwo(
     comp.setPos(comp.x + splitPoint.x - p1.x, comp.y + splitPoint.y - p1.y);
   };
   const [first, second] = a.y === b.y ? [90, 270] : [0, 180];
-  placeAt(first);
-  const p2 = portGlobalPosition(viewport, workspaceEl, comp, '2');
-  // Port 1 is at the split point, so port 2 should be the one farther from the supply end.
-  if (dist(p2, supplyEnd) < dist(splitPoint, supplyEnd)) placeAt(second);
+  let supplyOnFrom: boolean;
+  if (rotation === first || rotation === second) {
+    placeAt(rotation);
+    // Port 1 is at the split point: the supply is on whichever side port 2 points away from.
+    const p2 = portGlobalPosition(viewport, workspaceEl, comp, '2');
+    supplyOnFrom = dist(p2, a) > dist(splitPoint, a);
+  } else {
+    supplyOnFrom = supplyIsOnFrom(conn);
+    const supplyEnd = supplyOnFrom ? a : b;
+    placeAt(first);
+    const p2 = portGlobalPosition(viewport, workspaceEl, comp, '2');
+    // Port 1 is at the split point, so port 2 should be the one farther from the supply end.
+    if (dist(p2, supplyEnd) < dist(splitPoint, supplyEnd)) placeAt(second);
+  }
 
   const { from: originalFrom, to: originalTo, stubStartLen, stubEndLen } = conn;
   removeConnection(conn.id);
@@ -296,6 +310,10 @@ function spliceThreeTwo(
  * path, and the component is rotated to match the wire's own direction (horizontal or vertical)
  * so both ports land exactly on the original line with no added kink.
  *
+ * `rotation`, when the user turned the component while dragging it (see libraryDrag.ts), is
+ * kept if it runs along the wire - choosing which way round the component goes in; across the
+ * wire it can't splice straight, so the usual orientation is used instead.
+ *
  * Returns the new component, or null if nothing was spliced (wrong type, or nothing close
  * enough) - callers should fall back to a normal unconnected placement in that case.
  */
@@ -305,6 +323,7 @@ export function trySpliceOntoWire(
   viewport: ViewportAdapter,
   workspaceEl: HTMLElement,
   worldPoint: Point,
+  rotation?: number,
 ): Component | null {
   setWireInsertHighlight(null);
   if (!isWireInsertableType(type)) return null;
@@ -319,14 +338,15 @@ export function trySpliceOntoWire(
 
   const comp = spawnComponent(type, ctx, viewport, splitPoint.x, splitPoint.y);
   if (type === QUICK_EXHAUST_VALVE_TYPE) {
-    spliceQuickExhaust(comp, hit, splitPoint, viewport, workspaceEl);
+    spliceQuickExhaust(comp, hit, splitPoint, viewport, workspaceEl, rotation);
     return comp;
   }
   if (THREE_TWO_TYPES.has(type)) {
-    spliceThreeTwo(comp, hit, splitPoint, viewport, workspaceEl);
+    spliceThreeTwo(comp, hit, splitPoint, viewport, workspaceEl, rotation);
     return comp;
   }
-  if (horizontal) setComponentRotation(comp, 90);
+  const [usual, reversed] = horizontal ? [90, 270] : [0, 180];
+  setComponentRotation(comp, rotation === reversed ? reversed : usual);
 
   // Which physical port (IN or OUT) actually ended up on `a`'s side (the original wire's "from"
   // side) depends on the rotation just applied - rather than re-deriving that by hand, measure
