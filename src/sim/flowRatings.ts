@@ -84,11 +84,11 @@ export function hasFlowRating(type: string): boolean {
 }
 
 /** Scale on the typical ratings above, for teaching: at their real-world values a training
- * cylinder strokes in a fifth of a second - too fast to follow what's happening. 0.075 slows the
- * defaults so a 32 x 100 mm cylinder on a 5/2 valve takes 2-3 s each way (2.2 s out, 2.8 s back;
- * see flowRatings.test.ts).
+ * cylinder strokes in a fifth of a second - too fast to follow what's happening. 0.15 slows the
+ * defaults so a 32 x 100 mm cylinder on a 5/2 valve takes about 1-1.5 s each way (1.1 s out,
+ * 1.4 s back; see flowRatings.test.ts).
  * Ratings the user enters - as C or as Nl/min from a data sheet - are used as entered. */
-let defaultFlowScale = 0.075;
+let defaultFlowScale = 0.15;
 /** Kinds left at their full rating: a flow meter should barely restrict what it measures. */
 const UNSCALED = new Set(['flowMeter']);
 

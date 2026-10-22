@@ -311,7 +311,7 @@ describe('the teaching default', () => {
     appState.simulationMode = 'logic';
   });
 
-  it('strokes a 32 x 100 mm cylinder on a 5/2 valve in 2-3 s each way', () => {
+  it('strokes a 32 x 100 mm cylinder on a 5/2 valve in about 1-1.5 s each way', () => {
     const add = <T extends Component>(c: T): T => {
       appState.addComponent(c);
       return c;
@@ -334,8 +334,8 @@ describe('the teaching default', () => {
         break;
       }
     }
-    expect(out).toBeGreaterThan(1.8);
-    expect(out).toBeLessThan(3);
+    expect(out).toBeGreaterThan(0.9);
+    expect(out).toBeLessThan(1.3);
 
     // Back again once the pilot is taken away - a little slower, as the larger full-bore chamber
     // now has to empty through the valve's exhaust.
@@ -350,7 +350,7 @@ describe('the teaching default', () => {
       }
     }
     expect(back).toBeGreaterThan(out);
-    expect(back).toBeLessThan(3);
+    expect(back).toBeLessThan(1.7);
   });
 
   it('leaves a flow meter at its full rating, so it still barely restricts the line', () => {
