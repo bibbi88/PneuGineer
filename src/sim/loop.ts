@@ -4,6 +4,7 @@ import { stepSimulation } from './engine';
 import { applyToDom } from './render';
 import { emptyFrameGraph } from './pressure';
 import { clearElectrical } from './electrical';
+import { resetFlowNetwork } from './flowNetwork';
 import { MAX_DT } from './constants';
 import { redrawAllConnections } from '../wires/connection';
 
@@ -30,6 +31,7 @@ function tick(now: number): void {
     stepOnce = false;
   } else if (appState.mode === Modes.STOP) {
     clearElectrical();
+    resetFlowNetwork();
     applyToDom(emptyFrameGraph());
   }
 

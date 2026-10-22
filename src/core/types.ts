@@ -1,3 +1,4 @@
+import type { FlowDevice } from '../sim/flowNetwork';
 export type ComponentId = number;
 export type PortKey = string;
 
@@ -172,6 +173,11 @@ export interface Component<TSnapshot = Record<string, unknown>> {
   /** Extra type-specific entries spliced into this component's right-click menu, alongside the
    * generic rotate/delete every component gets. */
   contextMenuItems?(): ContextMenuAction[];
+
+  /** In flow simulation mode, a component that holds air of its own (a cylinder's chambers)
+   * returns how it exchanges that air with the lines at its ports - see sim/flowNetwork.ts.
+   * null (or omitted) otherwise. */
+  flowDevice?(): FlowDevice | null;
 
   recompute?(): void;
   onPressureChange?(ctx: ConductivityContext): void;

@@ -64,7 +64,10 @@ export type PortFeed =
   /** Out to atmosphere through conductance `conductance`. */
   | { kind: 'exhaust'; conductance: number }
   /** Shut off: no air in or out. */
-  | { kind: 'closed' };
+  | { kind: 'closed' }
+  /** Joined to a line at absolute pressure `pressure` (Pa) through `conductance` - air flows
+   * whichever way the pressures say (flow mode's network, see sim/flowNetwork.ts). */
+  | { kind: 'node'; pressure: number; conductance: number };
 
 export interface CylinderSpec {
   /** Piston area on the A (cap) side, m². */
@@ -112,6 +115,7 @@ function chamberFlow(p: number, feed: PortFeed): number {
     return Math.max(0, isoMassFlow(feed.pressure, p, feed.conductance));
   }
   if (feed.kind === 'exhaust') return isoMassFlow(p, P_ATM, feed.conductance) * -1;
+  if (feed.kind === 'node') return isoMassFlow(feed.pressure, p, feed.conductance);
   return 0;
 }
 

@@ -7,6 +7,7 @@ import { createValve52Mono } from './valve52Mono';
 import { createCylinderDouble } from './cylinderDouble';
 import { createOneWayFlowControlValve } from './oneWayFlowControlValve';
 import { serializeProject, loadProject } from '../persistence/project';
+import { resetFlowNetwork } from '../sim/flowNetwork';
 import type { Component } from '../core/types';
 import type { ViewportAdapter } from '../ui/viewport';
 
@@ -66,6 +67,7 @@ describe('double-acting cylinder in flow mode', () => {
     appState.components = [];
     appState.connections = [];
     appState.simulationMode = 'flow';
+    resetFlowNetwork();
     initWires(document.createElementNS('http://www.w3.org/2000/svg', 'svg'), viewport, layer());
   });
   afterEach(() => {

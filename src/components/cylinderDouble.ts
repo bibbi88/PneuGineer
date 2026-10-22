@@ -3,10 +3,9 @@ import { uid } from '../core/ids';
 import { buildComponentShell, createSvgEl, createPort } from './shared/svgHelpers';
 import { nextCylinderLetter, isCylinderLetterInUse } from './shared/letters';
 import { BASE_CYL_SPEED } from '../sim/constants';
+import type { FlowDevice } from '../sim/flowNetwork';
 import {
   atRest,
-  DEFAULT_PATH_CONDUCTANCE,
-  fromGaugeBar,
   P_ATM,
   stepCylinder,
   toGaugeBar,
@@ -36,6 +35,9 @@ export const CYLINDER_DOUBLE_TYPE = 'cylinderDouble';
 function formatBar(bar: number): string {
   return `${(Math.abs(bar) < 0.05 ? 0 : bar).toFixed(1)} bar`;
 }
+
+/** Flow capacity of a cylinder port's fitting, dm³/(s·bar). */
+const PORT_CONDUCTANCE = 0.8;
 
 /** Flow-mode defaults: a short training-rig cylinder, carrying nothing in particular. */
 const DEFAULT_STROKE_MM = 100;
@@ -238,45 +240,60 @@ export function createCylinderDouble(compLayer: HTMLElement, x: number, y: numbe
       stroke,
       mass: Math.max(massKg, 0.05),
       load: loadN,
-      // 10 mm worth of bore at each end plus a metre of 4 mm tubing to the valve.
-      deadVolume: areaA * 0.01 + 12.5e-6,
+      // 10 mm worth of bore at each end (the tubing to the valve is the line's own volume).
+      deadVolume: areaA * 0.01 + 1e-6,
       // Seal friction grows with the bore; a few percent of the force at 6 bar.
       friction: 0.03 * areaA * 6e5 + 5,
       damping: 50,
     };
   }
 
-  /** What a chamber's port is connected to right now, for the flow model: the supply (at the
-   * pressure actually reaching it, through however restricted a path), out to atmosphere, or
-   * nothing. The topology - which valve paths are open - still comes from the logic graph. */
-  function feed(ctx: SimStepContext, port: 'A' | 'B'): PortFeed {
-    if (ctx.isPressurized(port)) {
-      return {
-        kind: 'supply',
-        pressure: fromGaugeBar(ctx.pressureAt(port)),
-        conductance: DEFAULT_PATH_CONDUCTANCE * ctx.flowMultiplierToNearestSource(port),
-      };
-    }
-    const out = ctx.flowMultiplierToOpenExhaust(port);
-    return out > 0
-      ? { kind: 'exhaust', conductance: DEFAULT_PATH_CONDUCTANCE * out }
-      : { kind: 'closed' };
-  }
+  // Flow through each port over the current frame, summed across the network's substeps, so
+  // step() can tell which way air is streaming (see flowDevice / stepFlow).
+  let frameFlow = { A: 0, B: 0, time: 0 };
 
-  function stepFlow(dt: number, ctx: SimStepContext): void {
+  /** The cylinder's part in flow mode's network (sim/flowNetwork.ts): each chamber is joined to
+   * the line at its port through the port's own fitting, and the piston moves with whatever
+   * pressures result. */
+  function flowDevice(): FlowDevice | null {
+    if (appState.simulationMode !== 'flow') return null;
     const spec = flowSpec();
     if (!flowStarted) {
       flow = atRest(pos * spec.stroke);
       flowStarted = true;
     }
-    const q = stepCylinder(flow, spec, feed(ctx, 'A'), feed(ctx, 'B'), dt);
+    frameFlow = { A: 0, B: 0, time: 0 };
+    return {
+      ports: ['A', 'B'],
+      substep(h, netPressure) {
+        const node = (port: 'A' | 'B'): PortFeed => ({
+          kind: 'node',
+          pressure: netPressure(port),
+          conductance: PORT_CONDUCTANCE,
+        });
+        const q = stepCylinder(flow, spec, node('A'), node('B'), h);
+        frameFlow.A += q.qA * h;
+        frameFlow.B += q.qB * h;
+        frameFlow.time += h;
+        return { A: q.qA, B: q.qB };
+      },
+    };
+  }
+
+  /** Flow mode's per-frame update, after the network has already moved the piston (see
+   * flowDevice): show where it is, the chamber pressures and force, and drive the sensors. */
+  function stepFlow(ctx: SimStepContext): void {
+    const spec = flowSpec();
     pos = spec.stroke > 0 ? flow.x / spec.stroke : 0;
     updateVisual();
 
     // Air streams through a port while its chamber is filling or emptying noticeably.
     const TINY = 1e-6; // kg/s - about 0.05 l/min
-    fillingNow = q.qA > TINY ? 'A' : q.qB > TINY ? 'B' : null;
-    ventingNow = q.qA < -TINY ? 'A' : q.qB < -TINY ? 'B' : null;
+    const t = frameFlow.time || 1;
+    const qA = frameFlow.A / t;
+    const qB = frameFlow.B / t;
+    fillingNow = qA > TINY ? 'A' : qB > TINY ? 'B' : null;
+    ventingNow = qA < -TINY ? 'A' : qB < -TINY ? 'B' : null;
 
     pressureLabels.A.textContent = formatBar(toGaugeBar(flow.pA));
     pressureLabels.B.textContent = formatBar(toGaugeBar(flow.pB));
@@ -328,7 +345,7 @@ export function createCylinderDouble(compLayer: HTMLElement, x: number, y: numbe
 
     step(dt: number, ctx: SimStepContext): void {
       if (ctx.flowMode) {
-        stepFlow(dt, ctx);
+        stepFlow(ctx);
         return;
       }
       flowStarted = false;
@@ -455,6 +472,7 @@ export function createCylinderDouble(compLayer: HTMLElement, x: number, y: numbe
     },
     getBounds: shell.getBounds,
     setSelected: shell.setSelected,
+    flowDevice,
     currentlyVenting: () => (ventingNow ? [ventingNow] : []),
     currentlyFilling: () => (fillingNow ? [fillingNow] : []),
 

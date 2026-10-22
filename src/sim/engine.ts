@@ -13,6 +13,7 @@ import {
 } from './pressure';
 import { getSignal, setSignal } from './signals';
 import { solveElectrical } from './electrical';
+import { flowPressureAt, stepFlowNetwork } from './flowNetwork';
 
 export function stepSimulation(dt: number): FrameGraph {
   // First, so solenoid valves/contacts see this frame's coil states when pneumatics is computed.
@@ -45,15 +46,22 @@ export function stepSimulation(dt: number): FrameGraph {
     graph = computeFrameGraph(appState.components, appState.connections, appState.topologyVersion);
   }
 
+  // Flow mode: move air through the lines and cylinders for this frame first, so every step()
+  // below reads the pressures that resulted.
+  const flowMode = appState.simulationMode === 'flow';
+  if (flowMode) stepFlowNetwork(appState.components, graph, dt);
+  const portPressure = (key: string): number =>
+    flowMode ? Math.max(0, flowPressureAt(key) ?? 0) : pressureAt(graph, key);
+
   for (const c of appState.components) {
     if (!c.step) continue;
     const ctx: SimStepContext = {
       dt,
-      flowMode: appState.simulationMode === 'flow',
+      flowMode,
       isPressurized: (p) => graph.pressurized.has(portKey(c.id, p)),
       flowMultiplierToNearestSource: (p) => flowMultiplierToNearestSource(graph, portKey(c.id, p)),
       flowMultiplierToOpenExhaust: (p) => flowMultiplierToOpenExhaust(graph, portKey(c.id, p)),
-      pressureAt: (p) => pressureAt(graph, portKey(c.id, p)),
+      pressureAt: (p) => portPressure(portKey(c.id, p)),
       emitSignal: setSignal,
       readSignal: getSignal,
     };
