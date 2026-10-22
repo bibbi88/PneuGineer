@@ -1805,3 +1805,40 @@ rect.wireHandle.wireStubHandle {
   pointer-events: none;
   user-select: none;
 }
+
+/* A flow meter's live reading (flow mode), beside its symbol. */
+.flowMeterReading {
+  position: absolute;
+  top: 50%;
+  left: calc(50% + 22px);
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 2px 5px;
+  border: 1px solid #c7d2fe;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.92);
+  font-size: 11px;
+  line-height: 1.2;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+.flowMeterRate {
+  color: #1d4ed8;
+  font-weight: 600;
+}
+
+.flowMeterTotal {
+  color: var(--muted);
+}
+
+/* A source's air consumption: wider than the source symbol itself, so let it overhang. */
+.consumptionLabel {
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}

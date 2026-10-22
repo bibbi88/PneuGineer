@@ -44,10 +44,14 @@ switch picks the model, and the choice is saved with the project (`simulation.mo
    0.5 for a quick-exhaust valve). Saved as `flowC` / `flowB` in the component's data, so they
    survive save/load, undo and copy/paste.
 
+7. **Flow meter** (`src/components/flowMeter.ts`): an inline component (IN/OUT, splices onto a
+   line) showing the flow through it in l/min ANR (negative when OUT -> IN) and the total since
+   the simulation started, in litres - air per cycle. High flow rating (C 2, b 0.5) so it barely
+   restricts the line. Reads `flowThrough()`, the network's per-path flow.
+
 ## Still open
 
-7. Flow readouts on more components (l/min through a throttle or valve path).
-8. The supply is ideal (unlimited flow at 6 bar); a supply/service-unit rating would make
+7. The supply is ideal (unlimited flow at 6 bar); a supply/service-unit rating would make
    pressure sag when many cylinders move at once.
-9. Still decided by the logic graph rather than pressure: AND/OR (two-pressure/shuttle) valves
+8. Still decided by the logic graph rather than pressure: AND/OR (two-pressure/shuttle) valves
    and the quick-exhaust valve's switching; valves switch instantly (no switching time).

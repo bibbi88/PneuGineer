@@ -25,6 +25,7 @@ import {
   ONE_WAY_FLOW_CONTROL_VALVE_TYPE,
 } from './oneWayFlowControlValve';
 import { createThrottleValve, THROTTLE_VALVE_TYPE } from './throttleValve';
+import { createFlowMeter, FLOW_METER_TYPE } from './flowMeter';
 import { createPressureReducingValve, PRESSURE_REDUCING_VALVE_TYPE } from './pressureReducingValve';
 import {
   createElecRailPlus,
@@ -243,6 +244,16 @@ export const componentRegistry = new Map<string, RegistryEntry>([
       factory: (ctx, x, y) => createTimeDelayValve(ctx.compLayer, x, y, 'OFF'),
       label: 'Time delay valve, off-delay',
       keywords: ['off delay', 'release delay', 'TOF'],
+      placeable: true,
+      category: ComponentCategory.FLOW,
+    },
+  ],
+  [
+    FLOW_METER_TYPE,
+    {
+      factory: (ctx, x, y) => createFlowMeter(ctx.compLayer, x, y),
+      label: 'Flow meter',
+      keywords: ['flowmeter', 'air consumption', 'l/min', 'flödesmätare'],
       placeable: true,
       category: ComponentCategory.FLOW,
     },

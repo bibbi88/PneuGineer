@@ -69,6 +69,9 @@ let pressures = new Map<string, number>();
 let portPressure = new Map<PortKeyStr, number>();
 /** Air drawn from the supply over the last frame, kg/s, at every port of a supply net. */
 let supplyRate = new Map<PortKeyStr, number>();
+/** Average mass flow over the last frame along each component path, kg/s, keyed like
+ * `Edge.path` (positive in the a -> b direction). */
+let pathRate = new Map<string, number>();
 
 /** Forget all pressures - every line back to atmospheric. Called when the simulation stops. */
 export function resetFlowNetwork(): void {
@@ -76,6 +79,17 @@ export function resetFlowNetwork(): void {
   pressures = new Map();
   portPressure = new Map();
   supplyRate = new Map();
+  pathRate = new Map();
+}
+
+/** Air flowing through component `id` from its port `from` to its port `to` over the last flow
+ * step, kg/s (negative: the other way) - or null if no such path was open, or outside flow mode.
+ * What a flow meter reads. */
+export function flowThrough(id: number, from: PortKey, to: PortKey): number | null {
+  const forward = pathRate.get(`${id}:${from}>${to}`);
+  if (forward !== undefined) return forward;
+  const backward = pathRate.get(`${id}:${to}>${from}`);
+  return backward === undefined ? null : -backward;
 }
 
 /** Air drawn from the supply at a source's port over the last flow step, kg/s - its air
@@ -193,6 +207,9 @@ interface Edge {
   capAB: number | null;
   /** The component's critical pressure ratio b. */
   criticalRatio: number;
+  /** Which component path this is - `${componentId}:${portA}>${portB}` - for reporting the flow
+   * through it (see `flowThrough`). */
+  path: string;
 }
 
 function buildEdges(
@@ -224,6 +241,7 @@ function buildEdges(
         cBA: rule.directed ? 0 : rating * (c.flowMultiplier?.(rule.b, rule.a) ?? 1),
         capAB: cap === null || cap === undefined ? null : fromGaugeBar(cap),
         criticalRatio,
+        path: `${c.id}:${rule.a}>${rule.b}`,
       });
     }
   }
@@ -275,6 +293,8 @@ export function stepFlowNetwork(
   const h = dt / steps;
   const massIn = new Map<Net, number>();
   const drawn = new Map<Net, number>();
+  const passed = new Map<string, number>();
+  for (const e of edges) passed.set(e.path, 0);
   for (let s = 0; s < steps; s++) {
     massIn.clear();
     const add = (net: Net, q: number): void => {
@@ -295,6 +315,7 @@ export function stepFlowNetwork(
       }
       add(e.a, -q);
       add(e.b, q);
+      passed.set(e.path, (passed.get(e.path) ?? 0) + q * h);
     }
     for (const { comp, device } of devices) {
       const flows = device.substep(h, (port) => {
@@ -315,6 +336,8 @@ export function stepFlowNetwork(
 
   portPressure = new Map();
   supplyRate = new Map();
+  pathRate = new Map();
+  for (const [path, mass] of passed) pathRate.set(path, mass / dt);
   for (const net of topo.nets) {
     const bar = (pressureOf(net) - P_ATM) / BAR;
     for (const p of net.ports) portPressure.set(p, bar);

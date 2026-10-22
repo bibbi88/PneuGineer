@@ -33,6 +33,8 @@ export const DEFAULT_FLOW_RATINGS: Readonly<Record<string, number>> = {
   timeDelayValveNO: 0.4,
   timeDelayValveOff: 0.4,
   pressureSequenceValve: 0.4,
+  // Measuring: a flow meter barely restricts the line it measures
+  flowMeter: 2,
   // Actuators - the port fittings
   cylinderDouble: 0.8,
   cylinderSingle: 0.8,
@@ -61,6 +63,7 @@ export const DEFAULT_CRITICAL_RATIOS: Readonly<Record<string, number>> = {
   timeDelayValveNO: 0.35,
   timeDelayValveOff: 0.35,
   pressureSequenceValve: 0.35,
+  flowMeter: 0.5,
   cylinderDouble: 0.4,
   cylinderSingle: 0.4,
 };

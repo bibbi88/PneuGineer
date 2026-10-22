@@ -25,6 +25,7 @@ import { QUICK_EXHAUST_VALVE_TYPE } from '../components/quickExhaustValve';
 import { CYLINDER_SINGLE_TYPE } from '../components/cylinderSingle';
 import { CYLINDER_DOUBLE_TYPE } from '../components/cylinderDouble';
 import { THROTTLE_VALVE_TYPE } from '../components/throttleValve';
+import { FLOW_METER_TYPE } from '../components/flowMeter';
 import { PRESSURE_REDUCING_VALVE_TYPE } from '../components/pressureReducingValve';
 import { ONE_WAY_FLOW_CONTROL_VALVE_TYPE } from '../components/oneWayFlowControlValve';
 import { SOURCE_TYPE } from '../components/source';
@@ -62,6 +63,7 @@ const WIRE_INSERTABLE_TYPES = new Set<string>([
   QUICK_EXHAUST_VALVE_TYPE,
   CHECK_VALVE_TYPE,
   THROTTLE_VALVE_TYPE,
+  FLOW_METER_TYPE,
   ONE_WAY_FLOW_CONTROL_VALVE_TYPE,
   PRESSURE_REDUCING_VALVE_TYPE,
   ...THREE_TWO_TYPES,
