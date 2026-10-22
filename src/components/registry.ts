@@ -12,6 +12,7 @@ import { createAirValve32, AIR_VALVE_32_TYPE } from './airValve32';
 import { createCylinderDouble, CYLINDER_DOUBLE_TYPE } from './cylinderDouble';
 import { createCylinderSingle, CYLINDER_SINGLE_TYPE } from './cylinderSingle';
 import { createJunction, JUNCTION_TYPE } from './junction';
+import { createPressureSequenceValve, PRESSURE_SEQUENCE_VALVE_TYPE } from './pressureSequenceValve';
 import {
   createTimeDelayValve,
   TIME_DELAY_VALVE_NO_TYPE,
@@ -230,6 +231,16 @@ export const componentRegistry = new Map<string, RegistryEntry>([
       factory: (ctx, x, y) => createTimeDelayValve(ctx.compLayer, x, y, 'NO'),
       label: 'Time delay valve, normally open',
       keywords: ['pulse valve', 'impulse valve', 'one-shot', 'pulskretsventil'],
+      placeable: true,
+      category: ComponentCategory.FLOW,
+    },
+  ],
+  [
+    PRESSURE_SEQUENCE_VALVE_TYPE,
+    {
+      factory: (ctx, x, y) => createPressureSequenceValve(ctx.compLayer, x, y),
+      label: 'Pressure sequence valve',
+      keywords: ['sequence valve', 'pressure switch valve', 'sekvensventil'],
       placeable: true,
       category: ComponentCategory.FLOW,
     },
