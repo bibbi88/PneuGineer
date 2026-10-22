@@ -41,8 +41,11 @@ switch picks the model, and the choice is saved with the project (`simulation.mo
    valve 0.8, quick exhaust 1.5, cylinder port fittings 0.8 dm³/(s·bar)) until one is set in the
    inspector ("Flow rating C"; clearing it returns to typical). Likewise its critical pressure
    ratio b ("Critical ratio b", 0-0.99; typical 0.2 for a throttle, 0.3 for spool valves, up to
-   0.5 for a quick-exhaust valve). Saved as `flowC` / `flowB` in the component's data, so they
-   survive save/load, undo and copy/paste.
+   0.5 for a quick-exhaust valve). The rating can instead be given as a **standard nominal flow
+   in Nl/min** (6 -> 5 bar, as data sheets quote it; the inspector's "Flow rating given as"
+   choice is remembered per browser): qn = C · 7 bar · φ(6/7, b) · 60, so C is derived from qn and
+   the component's b, and the entered qn stays fixed if b changes. Saved as `flowC` or `flowQn`,
+   and `flowB`, in the component's data, so they survive save/load, undo and copy/paste.
 
 7. **Flow meter** (`src/components/flowMeter.ts`): an inline component (IN/OUT, splices onto a
    line) showing the flow through it in l/min ANR (negative when OUT -> IN) and the total since

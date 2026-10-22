@@ -4,6 +4,10 @@ import { initWires, createConnection } from '../wires/connection';
 import { stepSimulation } from './engine';
 import { resetFlowNetwork } from './flowNetwork';
 import {
+  conductanceFromNominal,
+  nominalFlowOf,
+  nominalFromConductance,
+  setNominalFlow,
   criticalRatioOf,
   defaultCriticalRatio,
   setCriticalRatio,
@@ -116,6 +120,52 @@ describe('flow ratings', () => {
   });
 });
 
+describe('flow rating as a standard nominal flow (Nl/min)', () => {
+  it('converts C by the ISO 6358 relation at 6 bar in, 5 bar out', () => {
+    // q = C · 7 bar · φ(6/7, b) · 60; for b = 0.3, φ = √(1 - ((6/7 - 0.3)/0.7)²).
+    const phi = Math.sqrt(1 - ((6 / 7 - 0.3) / 0.7) ** 2);
+    expect(nominalFromConductance(0.6, 0.3)).toBeCloseTo(0.6 * 7 * phi * 60, 6);
+    expect(conductanceFromNominal(nominalFromConductance(0.6, 0.3), 0.3)).toBeCloseTo(0.6, 9);
+  });
+
+  it('gives a component its C from a figure entered in Nl/min', () => {
+    const c = createCheckValve(layer(), 0, 0);
+    setNominalFlow(c, 300);
+    expect(c.flowRating).toBeUndefined();
+    expect(flowRatingOf(c)).toBeCloseTo(conductanceFromNominal(300, criticalRatioOf(c)), 9);
+    expect(nominalFlowOf(c)).toBe(300);
+  });
+
+  it('keeps the entered Nl/min figure when b is changed, deriving a new C', () => {
+    const c = createCheckValve(layer(), 0, 0);
+    setNominalFlow(c, 300);
+    const before = flowRatingOf(c);
+    setCriticalRatio(c, 0.1);
+    expect(nominalFlowOf(c)).toBe(300);
+    expect(flowRatingOf(c)).not.toBeCloseTo(before, 3);
+  });
+
+  it('replaces one way of giving the rating with the other', () => {
+    const c = createCheckValve(layer(), 0, 0);
+    setNominalFlow(c, 300);
+    setFlowRating(c, 1);
+    expect(c.flowNominal).toBeUndefined();
+    setNominalFlow(c, 200);
+    expect(c.flowRating).toBeUndefined();
+  });
+
+  it('is saved as entered', () => {
+    const c = createCheckValve(layer(), 0, 0);
+    setNominalFlow(c, 250);
+    const data = snapshotWithFlowRating(c);
+    expect(data).toMatchObject({ flowQn: 250 });
+    expect(data).not.toHaveProperty('flowC');
+    const copy = createCheckValve(layer(), 0, 0);
+    restoreFlowRating(copy, data);
+    expect(copy.flowNominal).toBe(250);
+  });
+});
+
 describe('flow ratings in the simulation', () => {
   beforeEach(() => {
     appState.simulationMode = 'flow';
@@ -209,6 +259,30 @@ describe('flow rating in the inspector', () => {
     again.value = '';
     again.dispatchEvent(new Event('change'));
     expect(valve.flowCriticalRatio).toBeUndefined();
+  });
+
+  it('takes the rating in Nl/min once that unit is chosen, and remembers the choice', () => {
+    localStorage.removeItem('pneugineer.flowRatingUnit');
+    const valve = createValve52Mono(layer(), 0, 0);
+    const el = inspectorFor(valve);
+    const unit = el.querySelector<HTMLSelectElement>('.flowRatingUnit') as HTMLSelectElement;
+    expect(unit.value).toBe('C');
+    unit.value = 'Nl/min';
+    unit.dispatchEvent(new Event('change'));
+
+    const input = ratingInput(el) as HTMLInputElement;
+    expect(Number(input.placeholder)).toBeGreaterThan(100);
+    input.value = '400';
+    input.dispatchEvent(new Event('change'));
+    expect(valve.flowNominal).toBe(400);
+    expect(localStorage.getItem('pneugineer.flowRatingUnit')).toBe('Nl/min');
+
+    // Switching back shows the same rating as C.
+    const unitAgain = el.querySelector<HTMLSelectElement>('.flowRatingUnit') as HTMLSelectElement;
+    unitAgain.value = 'C';
+    unitAgain.dispatchEvent(new Event('change'));
+    expect(Number((ratingInput(el) as HTMLInputElement).value)).toBeCloseTo(flowRatingOf(valve), 2);
+    localStorage.removeItem('pneugineer.flowRatingUnit');
   });
 
   it('is not offered for components without air paths', () => {

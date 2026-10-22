@@ -7,6 +7,7 @@
  * the small valves and fittings on a training rig.
  */
 import type { Component } from '../core/types';
+import { flowFactor } from './flowModel';
 
 /** Typical C per component type, dm³/(s·bar). Types not listed have no air paths to rate. */
 export const DEFAULT_FLOW_RATINGS: Readonly<Record<string, number>> = {
@@ -86,9 +87,58 @@ export function defaultFlowRating(type: string): number {
   return DEFAULT_FLOW_RATINGS[type] ?? FALLBACK;
 }
 
-/** The C flow mode uses for `comp`: its own setting if it has one, else its kind's default. */
+/** Bounds the inspector accepts for a standard nominal flow, Nl/min. */
+export const MIN_NOMINAL_FLOW = 1;
+export const MAX_NOMINAL_FLOW = 100_000;
+
+/**
+ * Standard nominal flow qn (Nl/min) per unit of C (dm³/(s·bar)) for a component with critical
+ * ratio `b`: the flow at 6 bar inlet and 5 bar outlet (gauge) - how valve data sheets usually
+ * quote flow - by the same ISO 6358 relation the simulation uses: q = C · p1 · φ(p2/p1, b), with
+ * p1 = 7 bar and p2 = 6 bar absolute, times 60 for per-minute.
+ */
+export function nominalFlowPerConductance(b: number): number {
+  return 7 * flowFactor(6 / 7, b) * 60;
+}
+
+export function nominalFromConductance(c: number, b: number): number {
+  return c * nominalFlowPerConductance(b);
+}
+
+export function conductanceFromNominal(qn: number, b: number): number {
+  return qn / nominalFlowPerConductance(b);
+}
+
+/** The C flow mode uses for `comp`: its own C if set, or derived from its own standard nominal
+ * flow if that's how it was given, else its kind's default. */
 export function flowRatingOf(comp: Component): number {
-  return comp.flowRating ?? defaultFlowRating(comp.type);
+  if (comp.flowRating !== undefined) return comp.flowRating;
+  if (comp.flowNominal !== undefined) {
+    return conductanceFromNominal(comp.flowNominal, criticalRatioOf(comp));
+  }
+  return defaultFlowRating(comp.type);
+}
+
+/** The standard nominal flow (Nl/min) `comp` has: its own figure if given that way, else what
+ * its C and b come to. */
+export function nominalFlowOf(comp: Component): number {
+  return comp.flowNominal ?? nominalFromConductance(flowRatingOf(comp), criticalRatioOf(comp));
+}
+
+/** The standard nominal flow its kind's typical C and b come to, Nl/min. */
+export function defaultNominalFlow(type: string): number {
+  return nominalFromConductance(defaultFlowRating(type), defaultCriticalRatio(type));
+}
+
+/** Sets (or, with null, clears back to the default) a component's own rating given as a
+ * standard nominal flow, Nl/min. Replaces any C it had. */
+export function setNominalFlow(comp: Component, value: number | null): void {
+  delete comp.flowRating;
+  if (value === null || !Number.isFinite(value)) {
+    delete comp.flowNominal;
+    return;
+  }
+  comp.flowNominal = Math.max(MIN_NOMINAL_FLOW, Math.min(MAX_NOMINAL_FLOW, value));
 }
 
 export function defaultCriticalRatio(type: string): number {
@@ -111,6 +161,7 @@ export function setCriticalRatio(comp: Component, value: number | null): void {
 
 /** Sets (or, with null, clears back to the default) a component's own flow rating. */
 export function setFlowRating(comp: Component, value: number | null): void {
+  delete comp.flowNominal;
   if (value === null || !Number.isFinite(value)) {
     delete comp.flowRating;
     return;
@@ -124,12 +175,14 @@ export function setFlowRating(comp: Component, value: number | null): void {
 export function snapshotWithFlowRating(comp: Component): Record<string, unknown> {
   const data = { ...(comp.snapshot() as Record<string, unknown>) };
   if (comp.flowRating !== undefined) data.flowC = comp.flowRating;
+  if (comp.flowNominal !== undefined) data.flowQn = comp.flowNominal;
   if (comp.flowCriticalRatio !== undefined) data.flowB = comp.flowCriticalRatio;
   return data;
 }
 
 /** The other half of `snapshotWithFlowRating`, after `comp.restore(data)`. */
 export function restoreFlowRating(comp: Component, data: Record<string, unknown>): void {
-  setFlowRating(comp, typeof data.flowC === 'number' ? data.flowC : null);
+  if (typeof data.flowQn === 'number') setNominalFlow(comp, data.flowQn);
+  else setFlowRating(comp, typeof data.flowC === 'number' ? data.flowC : null);
   setCriticalRatio(comp, typeof data.flowB === 'number' ? data.flowB : null);
 }

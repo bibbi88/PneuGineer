@@ -127,6 +127,10 @@ export interface Component<TSnapshot = Record<string, unknown>> {
    * in the inspector - otherwise its kind's default applies (see sim/flowRatings.ts). Saved,
    * undone and copied along with the component's snapshot. */
   flowRating?: number;
+  /** Flow mode: the same rating given instead as a standard nominal flow, Nl/min (6 -> 5 bar),
+   * if the user entered it that way - C is then derived from it and the component's b. Only one
+   * of `flowRating` / `flowNominal` is ever set. */
+  flowNominal?: number;
   /** Flow mode: this component's own critical pressure ratio b (ISO 6358), if set in the
    * inspector - otherwise its kind's default. Saved alongside `flowRating`. */
   flowCriticalRatio?: number;

@@ -14,14 +14,21 @@ import { appState } from '../app/AppState';
 import {
   defaultCriticalRatio,
   defaultFlowRating,
+  defaultNominalFlow,
+  flowRatingOf,
   hasFlowRating,
   MAX_CRITICAL_RATIO,
   MAX_FLOW_RATING,
+  MAX_NOMINAL_FLOW,
   MIN_CRITICAL_RATIO,
   MIN_FLOW_RATING,
+  MIN_NOMINAL_FLOW,
+  nominalFlowOf,
   setCriticalRatio,
   setFlowRating,
+  setNominalFlow,
 } from '../sim/flowRatings';
+import { loadFlowRatingUnit, saveFlowRatingUnit } from '../app/flowUnitPreference';
 import { getSelectedComponents, onSelectionChange } from '../interaction/selection';
 import { redrawAllConnections } from '../wires/connection';
 import { setPageFrameSize, renderPageFrame, type PageFrameSize } from './pageFrame';
@@ -387,10 +394,31 @@ function updateComponentField(comp: Component, key: string, value: unknown): voi
   appState.markDirty();
 }
 
-/** The component's flow rating C and critical ratio b (see sim/flowRatings.ts): its own values
+/** The component's flow rating and critical ratio b (see sim/flowRatings.ts): its own values
  * if set, otherwise left empty with its kind's typical value shown as the placeholder - clearing
- * a field goes back to that default. Only flow simulation mode uses them. */
+ * a field goes back to that default. The rating can be given either as the sonic conductance C
+ * or as the standard nominal flow in Nl/min (the unit choice is remembered); whichever is
+ * entered is what's kept. Only flow simulation mode uses them. */
 function renderFlowRatingField(container: HTMLElement, comp: Component, refresh: () => void): void {
+  const unitRow = document.createElement('label');
+  unitRow.className = 'inspectorRow';
+  const unitSpan = document.createElement('span');
+  unitSpan.textContent = 'Flow rating given as';
+  const unitSelect = document.createElement('select');
+  unitSelect.className = 'flowRatingUnit';
+  unitSelect.append(
+    new Option('C (dm³/s·bar)', 'C'),
+    new Option('Standard flow (Nl/min)', 'Nl/min'),
+  );
+  const unit = loadFlowRatingUnit();
+  unitSelect.value = unit;
+  unitSelect.addEventListener('change', () => {
+    saveFlowRatingUnit(unitSelect.value === 'Nl/min' ? 'Nl/min' : 'C');
+    refresh();
+  });
+  unitRow.append(unitSpan, unitSelect);
+  container.appendChild(unitRow);
+
   const row = (
     label: string,
     title: string,
@@ -420,19 +448,36 @@ function renderFlowRatingField(container: HTMLElement, comp: Component, refresh:
     container.appendChild(el);
   };
 
-  row(
-    'Flow rating C (dm³/s·bar)',
-    'Sonic conductance C (ISO 6358): how much air this component can pass. Used in Flow simulation; empty uses the typical value.',
-    'flowRatingInput',
-    {
-      min: MIN_FLOW_RATING,
-      max: MAX_FLOW_RATING,
-      step: 0.05,
-      typical: defaultFlowRating(comp.type),
-      value: comp.flowRating,
-    },
-    (v) => setFlowRating(comp, v),
-  );
+  const hasOwn = comp.flowRating !== undefined || comp.flowNominal !== undefined;
+  if (unit === 'Nl/min') {
+    row(
+      'Standard flow (Nl/min)',
+      'Standard nominal flow at 6 bar in, 5 bar out - as valve data sheets quote it. Used in Flow simulation; empty uses the typical value.',
+      'flowRatingInput',
+      {
+        min: MIN_NOMINAL_FLOW,
+        max: MAX_NOMINAL_FLOW,
+        step: 5,
+        typical: Math.round(defaultNominalFlow(comp.type)),
+        value: hasOwn ? Math.round(nominalFlowOf(comp) * 10) / 10 : undefined,
+      },
+      (v) => setNominalFlow(comp, v),
+    );
+  } else {
+    row(
+      'Flow rating C (dm³/s·bar)',
+      'Sonic conductance C (ISO 6358): how much air this component can pass. Used in Flow simulation; empty uses the typical value.',
+      'flowRatingInput',
+      {
+        min: MIN_FLOW_RATING,
+        max: MAX_FLOW_RATING,
+        step: 0.05,
+        typical: defaultFlowRating(comp.type),
+        value: hasOwn ? Math.round(flowRatingOf(comp) * 1000) / 1000 : undefined,
+      },
+      (v) => setFlowRating(comp, v),
+    );
+  }
   row(
     'Critical ratio b',
     'Critical pressure ratio b (ISO 6358): below this downstream/upstream pressure ratio the flow is choked. Used in Flow simulation; empty uses the typical value.',

@@ -65,7 +65,7 @@ const LINEAR_BAND = 0.02;
 
 /** ISO 6358 flow factor for pressure ratio `r` (downstream/upstream): 1 when choked, falling to
  * 0 at r = 1 - linear over the last LINEAR_BAND. */
-function flowFactor(r: number, b: number): number {
+export function flowFactor(r: number, b: number): number {
   const curve = (x: number): number =>
     x <= b ? 1 : Math.sqrt(Math.max(0, 1 - ((x - b) / (1 - b)) ** 2));
   const edge = 1 - LINEAR_BAND;
