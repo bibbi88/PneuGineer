@@ -31,7 +31,13 @@ switch picks the model, and the choice is saved with the project (`simulation.mo
    the one-way flow control instead of a timer, switching at 3 bar; the throttle is calibrated so
    the set delay holds at 6 bar supply (a lower supply takes longer).
 
+5. **Air consumption**: each source shows the air drawn from it in l/min (ANR), smoothed over
+   0.15 s. Near equilibrium the ISO 6358 curve is linearised over the last 2 % of pressure ratio
+   and a path never moves more air in one step than would level its two sides - otherwise lines
+   overshoot and sit oscillating above supply pressure.
+
 ## Next steps, in order
 
-5. **Per-component flow ratings** (C values, optionally editable) and **air consumption** /
-   flow (l/min) readouts.
+6. **Per-component flow ratings** (C values, optionally editable in the inspector) instead of
+   one default for every valve path.
+7. Flow-mode readouts on more components (flow through a throttle, l/min on a valve path).

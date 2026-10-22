@@ -70,6 +70,24 @@ describe('flow network', () => {
     expect(bar(valve, '1')).toBeCloseTo(6, 5);
   });
 
+  it('never pushes a line above the supply pressure filling it', () => {
+    // Close to equilibrium the flow formula is very steep; stepped naively, a line overshoots
+    // and then sits above supply pressure, oscillating around it.
+    const source = add(createSource(layer(), 0, 0));
+    const valve = add(createValve52Mono(layer(), 0, 0));
+    const cyl = add(createCylinderDouble(layer(), 0, 0));
+    wire(source, 'OUT', valve, '1');
+    wire(valve, '4', cyl, 'A');
+    wire(valve, '2', cyl, 'B');
+    let highest = 0;
+    for (let i = 0; i < 150; i++) {
+      stepSimulation(0.02);
+      highest = Math.max(highest, bar(cyl, 'B'), bar(valve, '2'));
+    }
+    expect(highest).toBeLessThanOrEqual(6 + 1e-6);
+    expect(bar(cyl, 'B')).toBeCloseTo(6, 3);
+  });
+
   it('fills the line to a retracted cylinder’s rod side, and leaves the other empty', () => {
     const { cyl } = cylinderCircuit();
     expect(bar(cyl, 'B')).toBeGreaterThan(5.9);
@@ -271,5 +289,37 @@ describe('time delay valve in flow mode', () => {
     const t = timeUntil(valve, false);
     expect(t).toBeGreaterThan(0.8);
     expect(t).toBeLessThan(1.4);
+  });
+});
+
+describe('air consumption in flow mode', () => {
+  function consumption(source: Component): string {
+    return source.el.querySelector('.consumptionLabel')?.textContent ?? '';
+  }
+
+  it('shows the air a cylinder draws while it moves, and none once it has stopped', () => {
+    const { source, valve, cyl } = cylinderCircuit();
+    for (let i = 0; i < 50; i++) stepSimulation(0.02);
+    expect(consumption(source)).toBe('0 l/min');
+
+    wire(source, 'OUT', valve, '14');
+    let peak = 0;
+    for (let i = 0; i < 40 && pos(cyl) < 1; i++) {
+      stepSimulation(0.01);
+      peak = Math.max(peak, parseFloat(consumption(source)));
+    }
+    // A 32 mm cylinder making a 0.2 s stroke at 6 bar draws air at a few hundred l/min.
+    expect(peak).toBeGreaterThan(50);
+    for (let i = 0; i < 100; i++) stepSimulation(0.02);
+    expect(consumption(source)).toBe('0 l/min');
+  });
+
+  it('shows nothing in logic mode', () => {
+    appState.simulationMode = 'logic';
+    const { source } = cylinderCircuit();
+    stepSimulation(0.02);
+    expect((source.el.querySelector('.consumptionLabel') as HTMLElement).style.display).toBe(
+      'none',
+    );
   });
 });

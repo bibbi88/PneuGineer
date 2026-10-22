@@ -1,6 +1,13 @@
-import type { Component, PortConnection } from '../core/types';
+import type { Component, PortConnection, SimStepContext } from '../core/types';
 import { uid } from '../core/ids';
 import { buildComponentShell, createSvgEl, createPort } from './shared/svgHelpers';
+import { flowSupplyRate } from '../sim/flowNetwork';
+import { toNormalLitresPerMinute } from '../sim/flowModel';
+import { portKey } from '../sim/pressure';
+
+/** Seconds over which the air consumption readout settles, so it doesn't flicker frame to
+ * frame. */
+const CONSUMPTION_SMOOTHING = 0.15;
 
 export const SOURCE_TYPE = 'source';
 
@@ -97,6 +104,13 @@ export function createSource(compLayer: HTMLElement, x: number, y: number): Comp
 
   const port = createPort(g, 'OUT', cx, portY, 'V');
 
+  // Flow mode: the air being drawn from this supply, smoothed so the figure is readable.
+  const consumptionEl = document.createElement('div');
+  consumptionEl.className = 'forceLabel consumptionLabel';
+  consumptionEl.style.display = 'none';
+  shell.el.appendChild(consumptionEl);
+  let smoothed = 0;
+
   const comp: Component = {
     id: uid(),
     type: SOURCE_TYPE,
@@ -124,7 +138,21 @@ export function createSource(compLayer: HTMLElement, x: number, y: number): Comp
       shell.setNameVisible(Boolean(data.showName));
       shell.setCustomName((data.customName as string | null) ?? null);
     },
-    reset(): void {},
+    step(dt: number, ctx: SimStepContext): void {
+      if (!ctx.flowMode) {
+        consumptionEl.style.display = 'none';
+        return;
+      }
+      const rate = flowSupplyRate(portKey(comp.id, 'OUT')) ?? 0;
+      smoothed += (rate - smoothed) * Math.min(1, dt / CONSUMPTION_SMOOTHING);
+      const lpm = Math.max(0, toNormalLitresPerMinute(smoothed));
+      consumptionEl.textContent = `${lpm < 0.5 ? 0 : lpm.toFixed(0)} l/min`;
+      consumptionEl.style.display = '';
+    },
+    reset(): void {
+      smoothed = 0;
+      consumptionEl.style.display = 'none';
+    },
 
     setPos(nx: number, ny: number): void {
       comp.x = nx;

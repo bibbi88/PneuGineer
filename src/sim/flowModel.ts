@@ -51,10 +51,26 @@ export function isoMassFlow(
   if (conductance <= 0 || p1 === p2) return 0;
   if (p2 > p1) return -isoMassFlow(p2, p1, conductance, b);
   const r = p2 / p1;
-  const phi = r <= b ? 1 : Math.sqrt(Math.max(0, 1 - ((r - b) / (1 - b)) ** 2));
+  const phi = flowFactor(r, b);
   // C in m³/(s·Pa): 1 dm³/(s·bar) = 1e-3 m³/s per 1e5 Pa.
   const cSi = conductance * 1e-8;
   return cSi * p1 * RHO_ANR * phi;
+}
+
+/** Below this pressure difference (as a share of the upstream pressure), flow is taken to be
+ * proportional to the difference - the near-laminar region close to equilibrium. The ISO 6358
+ * curve itself is infinitely steep there, which a time-stepped simulation can only follow by
+ * overshooting back and forth around the equilibrium for ever. */
+const LINEAR_BAND = 0.02;
+
+/** ISO 6358 flow factor for pressure ratio `r` (downstream/upstream): 1 when choked, falling to
+ * 0 at r = 1 - linear over the last LINEAR_BAND. */
+function flowFactor(r: number, b: number): number {
+  const curve = (x: number): number =>
+    x <= b ? 1 : Math.sqrt(Math.max(0, 1 - ((x - b) / (1 - b)) ** 2));
+  const edge = 1 - LINEAR_BAND;
+  if (r <= edge) return curve(r);
+  return (curve(edge) * (1 - r)) / LINEAR_BAND;
 }
 
 /** How a cylinder port is connected this instant, as far as the flow model is concerned. */

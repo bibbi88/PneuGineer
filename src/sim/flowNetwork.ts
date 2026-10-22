@@ -53,6 +53,8 @@ interface Net {
   volume: number;
   /** null: free (its pressure follows the air in it); a number: held at that pressure, Pa. */
   fixed: number | null;
+  /** Held at supply pressure by a source (rather than open to atmosphere). */
+  supply: boolean;
 }
 
 interface Topology {
@@ -66,12 +68,21 @@ let topology: Topology | null = null;
 let pressures = new Map<string, number>();
 /** The latest pressure at every port, gauge bar - what the rest of the app reads. */
 let portPressure = new Map<PortKeyStr, number>();
+/** Air drawn from the supply over the last frame, kg/s, at every port of a supply net. */
+let supplyRate = new Map<PortKeyStr, number>();
 
 /** Forget all pressures - every line back to atmospheric. Called when the simulation stops. */
 export function resetFlowNetwork(): void {
   topology = null;
   pressures = new Map();
   portPressure = new Map();
+  supplyRate = new Map();
+}
+
+/** Air drawn from the supply at a source's port over the last flow step, kg/s - its air
+ * consumption - or null outside flow mode. */
+export function flowSupplyRate(key: PortKeyStr): number | null {
+  return supplyRate.get(key) ?? null;
 }
 
 /** Gauge pressure (bar) at a port as of the last flow step, or null if flow mode hasn't
@@ -147,6 +158,7 @@ function buildTopology(components: Component[]): Topology {
       volume:
         (wireLength.get(root) ?? 0) * METRES_PER_PX * TUBE_AREA + FITTING_VOLUME * ports.length,
       fixed: hasSource ? fromGaugeBar(SOURCE_PRESSURE) : open ? P_ATM : null,
+      supply: hasSource,
     };
     nets.push(net);
     for (const p of ports) netOf.set(p, net);
@@ -258,13 +270,25 @@ export function stepFlowNetwork(
   const steps = Math.max(1, Math.ceil(dt / SUBSTEP));
   const h = dt / steps;
   const massIn = new Map<Net, number>();
+  const drawn = new Map<Net, number>();
   for (let s = 0; s < steps; s++) {
     massIn.clear();
     const add = (net: Net, q: number): void => {
       if (net.fixed === null) massIn.set(net, (massIn.get(net) ?? 0) + q);
+      else if (net.supply) drawn.set(net, (drawn.get(net) ?? 0) - q * h);
     };
     for (const e of edges) {
-      const q = edgeFlow(e, pressureOf(e.a), pressureOf(e.b));
+      const pa = pressureOf(e.a);
+      const pb = pressureOf(e.b);
+      let q = edgeFlow(e, pa, pb);
+      // Never move more air in one step than would bring the two sides level (half of it, as
+      // other paths may be filling or emptying the same line at the same time).
+      const give =
+        (e.a.fixed === null ? 1 / e.a.volume : 0) + (e.b.fixed === null ? 1 / e.b.volume : 0);
+      if (give > 0) {
+        const level = Math.abs(pa - pb) / (RT * give) / h;
+        q = Math.max(-0.5 * level, Math.min(0.5 * level, q));
+      }
       add(e.a, -q);
       add(e.b, q);
     }
@@ -286,8 +310,15 @@ export function stepFlowNetwork(
   }
 
   portPressure = new Map();
+  supplyRate = new Map();
   for (const net of topo.nets) {
     const bar = (pressureOf(net) - P_ATM) / BAR;
     for (const p of net.ports) portPressure.set(p, bar);
+    if (net.supply) {
+      // Shared between the net's sources - several sources on one line split its draw.
+      const sources = net.ports.filter((p) => graph.sourceKeys.has(p)).length || 1;
+      const rate = (drawn.get(net) ?? 0) / dt / sources;
+      for (const p of net.ports) supplyRate.set(p, rate);
+    }
   }
 }
