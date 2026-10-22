@@ -19,6 +19,8 @@ export function getDraggedComponentType(): string | null {
 export interface SidebarItemSpec {
   type: string;
   label: string;
+  /** Other names the filter matches, e.g. a common alternative name for the component. */
+  keywords?: string[];
   onClick: () => void;
 }
 
@@ -37,7 +39,7 @@ const PARENT_OF: Record<string, string> = {
 
 function createCategoryDetails(
   category: string,
-  itemCount: number
+  itemCount: number,
 ): { details: HTMLDetailsElement; count: HTMLSpanElement } {
   const details = document.createElement('details');
   // All categories start collapsed so the library stays scannable at a glance.
@@ -65,7 +67,7 @@ export function renderComponentLibrary(container: HTMLElement, groups: SidebarGr
 
   const groupEntries: Array<{
     details: HTMLDetailsElement;
-    tiles: Array<{ el: HTMLButtonElement; label: string }>;
+    tiles: Array<{ el: HTMLButtonElement; label: string; search: string }>;
   }> = [];
 
   const parentEntries = new Map<
@@ -85,13 +87,15 @@ export function renderComponentLibrary(container: HTMLElement, groups: SidebarGr
     const grid = document.createElement('div');
     grid.className = group.items.length === 1 ? 'libGrid libGrid--single' : 'libGrid';
 
-    const tiles: Array<{ el: HTMLButtonElement; label: string }> = [];
+    const tiles: Array<{ el: HTMLButtonElement; label: string; search: string }> = [];
     for (const item of group.items) {
       const tile = document.createElement('button');
       tile.type = 'button';
       tile.className = 'libTile';
       tile.id = `add-${item.type}`;
-      tile.title = item.label;
+      tile.title = item.keywords?.length
+        ? `${item.label} (also: ${item.keywords.join(', ')})`
+        : item.label;
       tile.appendChild(renderComponentIcon(item.type));
 
       const label = document.createElement('span');
@@ -115,7 +119,11 @@ export function renderComponentLibrary(container: HTMLElement, groups: SidebarGr
         draggedType = null;
       });
       grid.appendChild(tile);
-      tiles.push({ el: tile, label: item.label });
+      tiles.push({
+        el: tile,
+        label: item.label,
+        search: [item.label, ...(item.keywords ?? [])].join('\n').toLowerCase(),
+      });
     }
 
     details.appendChild(grid);
@@ -153,7 +161,7 @@ export function renderComponentLibrary(container: HTMLElement, groups: SidebarGr
     for (const group of groupEntries) {
       let anyMatch = false;
       for (const tile of group.tiles) {
-        const match = query === '' || tile.label.toLowerCase().includes(query);
+        const match = query === '' || tile.search.includes(query);
         tile.el.hidden = !match;
         anyMatch = anyMatch || match;
       }

@@ -12,7 +12,11 @@ import { createAirValve32, AIR_VALVE_32_TYPE } from './airValve32';
 import { createCylinderDouble, CYLINDER_DOUBLE_TYPE } from './cylinderDouble';
 import { createCylinderSingle, CYLINDER_SINGLE_TYPE } from './cylinderSingle';
 import { createJunction, JUNCTION_TYPE } from './junction';
-import { createTimeDelayValve, TIME_DELAY_VALVE_TYPE } from './timeDelayValve';
+import {
+  createTimeDelayValve,
+  TIME_DELAY_VALVE_NO_TYPE,
+  TIME_DELAY_VALVE_TYPE,
+} from './timeDelayValve';
 import { createQuickExhaustValve, QUICK_EXHAUST_VALVE_TYPE } from './quickExhaustValve';
 import {
   createOneWayFlowControlValve,
@@ -76,6 +80,8 @@ export interface RegistryEntry {
   factory: ComponentFactory;
   /** Sidebar tile label. */
   label: string;
+  /** Other names the library filter should find it by. */
+  keywords?: string[];
   /** False for types only ever created programmatically (e.g. junction, via wire-splitting). */
   placeable: boolean;
   /** Sidebar group; only meaningful when placeable. */
@@ -214,6 +220,16 @@ export const componentRegistry = new Map<string, RegistryEntry>([
     {
       factory: (ctx, x, y) => createTimeDelayValve(ctx.compLayer, x, y),
       label: 'Time delay valve',
+      placeable: true,
+      category: ComponentCategory.FLOW,
+    },
+  ],
+  [
+    TIME_DELAY_VALVE_NO_TYPE,
+    {
+      factory: (ctx, x, y) => createTimeDelayValve(ctx.compLayer, x, y, 'NO'),
+      label: 'Time delay valve, normally open',
+      keywords: ['pulse valve', 'impulse valve', 'one-shot', 'pulskretsventil'],
       placeable: true,
       category: ComponentCategory.FLOW,
     },
@@ -418,7 +434,7 @@ const CATEGORY_ORDER: ComponentCategoryName[] = [
 
 export interface ComponentGroup {
   category: ComponentCategoryName;
-  items: Array<{ type: string; label: string }>;
+  items: Array<{ type: string; label: string; keywords?: string[] }>;
 }
 
 /** Placeable component types grouped for the sidebar, in a fixed category order matching how a
@@ -430,6 +446,6 @@ export function placeableComponentsByCategory(): ComponentGroup[] {
     category,
     items: entries
       .filter(([, entry]) => entry.category === category)
-      .map(([type, entry]) => ({ type, label: entry.label })),
+      .map(([type, entry]) => ({ type, label: entry.label, keywords: entry.keywords })),
   })).filter((group) => group.items.length > 0);
 }

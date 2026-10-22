@@ -137,9 +137,10 @@ renderComponentLibrary(
   sidebarButtons,
   placeableComponentsByCategory().map((group) => ({
     category: group.category,
-    items: group.items.map(({ type, label }) => ({
+    items: group.items.map(({ type, label, keywords }) => ({
       type,
       label,
+      keywords,
       onClick: () => addComponentAtViewCenter(type),
     })),
   })),
