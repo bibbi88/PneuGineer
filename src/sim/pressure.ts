@@ -241,6 +241,10 @@ export function computeFrameGraph(
   components: Component[],
   connections: Connection[],
   topologyVersion: number,
+  /** Flow mode: whether a pilot port has enough pressure to actuate, from the flow network's
+   * real line pressures - used instead of mere connection to a supply for every port flagged
+   * `isPilot`. Omitted in logic mode. */
+  pilotActuated?: (key: PortKeyStr) => boolean,
 ): FrameGraph {
   const wireAdjacency = getWireAdjacency(connections, topologyVersion);
 
@@ -266,7 +270,12 @@ export function computeFrameGraph(
   while (changed) {
     const sizeBefore = pressurized.size;
     for (const c of components) {
-      const edges = c.conductivityRule({ isPressurized: (p) => pressurized.has(portKey(c.id, p)) });
+      const edges = c.conductivityRule({
+        isPressurized: (p) =>
+          pilotActuated && c.ports[p]?.isPilot
+            ? pilotActuated(portKey(c.id, p))
+            : pressurized.has(portKey(c.id, p)),
+      });
       for (const edge of edges) {
         const a = portKey(c.id, edge.a);
         const b = portKey(c.id, edge.b);

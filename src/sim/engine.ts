@@ -1,4 +1,9 @@
-import type { ConductivityContext, FlowVisualContext, SimStepContext } from '../core/types';
+import type {
+  Component,
+  ConductivityContext,
+  FlowVisualContext,
+  SimStepContext,
+} from '../core/types';
 import { appState } from '../app/AppState';
 import {
   computeFrameGraph,
@@ -15,25 +20,40 @@ import { getSignal, setSignal } from './signals';
 import { solveElectrical } from './electrical';
 import { flowPressureAt, stepFlowNetwork } from './flowNetwork';
 
+/** Lowest pilot pressure, bar, that actuates an air-piloted valve in flow mode - a typical
+ * figure for small pilot valves. */
+export const PILOT_MIN_BAR = 1.5;
+
 export function stepSimulation(dt: number): FrameGraph {
   // First, so solenoid valves/contacts see this frame's coil states when pneumatics is computed.
   solveElectrical(dt);
 
   for (const c of appState.components) c.recompute?.();
 
+  // In flow mode a pilot only actuates once its line holds enough pressure - so a throttled or
+  // long pilot line switches its valve later, as on real equipment. The pressures are the flow
+  // network's from the previous frame (this frame's are worked out further down).
+  const flowMode = appState.simulationMode === 'flow';
+  const pilotActuated = flowMode
+    ? (key: string): boolean => (flowPressureAt(key) ?? 0) >= PILOT_MIN_BAR
+    : undefined;
+  const isPressurizedFor = (c: Component, p: string): boolean =>
+    pilotActuated && c.ports[p]?.isPilot
+      ? pilotActuated(portKey(c.id, p))
+      : graph.pressurized.has(portKey(c.id, p));
+
   let graph = computeFrameGraph(
     appState.components,
     appState.connections,
     appState.topologyVersion,
+    pilotActuated,
   );
 
   let anyEdgeTriggered = false;
   for (const c of appState.components) {
     if (!c.onPressureChange) continue;
     anyEdgeTriggered = true;
-    const ctx: ConductivityContext = {
-      isPressurized: (p) => graph.pressurized.has(portKey(c.id, p)),
-    };
+    const ctx: ConductivityContext = { isPressurized: (p) => isPressurizedFor(c, p) };
     c.onPressureChange(ctx);
   }
 
@@ -43,13 +63,17 @@ export function stepSimulation(dt: number): FrameGraph {
   // step() hooks like cylinder motion see) reflects that new state immediately, instead of
   // lagging one whole frame behind the position that's already on screen.
   if (anyEdgeTriggered) {
-    graph = computeFrameGraph(appState.components, appState.connections, appState.topologyVersion);
+    graph = computeFrameGraph(
+      appState.components,
+      appState.connections,
+      appState.topologyVersion,
+      pilotActuated,
+    );
   }
 
   // Flow mode: move air through the lines and cylinders for this frame first, so every step()
   // below reads the pressures that resulted.
-  const flowMode = appState.simulationMode === 'flow';
-  if (flowMode) stepFlowNetwork(appState.components, graph, dt);
+  if (flowMode) stepFlowNetwork(appState.components, graph, dt, pilotActuated);
   const portPressure = (key: string): number =>
     flowMode ? Math.max(0, flowPressureAt(key) ?? 0) : pressureAt(graph, key);
 
@@ -58,7 +82,7 @@ export function stepSimulation(dt: number): FrameGraph {
     const ctx: SimStepContext = {
       dt,
       flowMode,
-      isPressurized: (p) => graph.pressurized.has(portKey(c.id, p)),
+      isPressurized: (p) => isPressurizedFor(c, p),
       flowMultiplierToNearestSource: (p) => flowMultiplierToNearestSource(graph, portKey(c.id, p)),
       flowMultiplierToOpenExhaust: (p) => flowMultiplierToOpenExhaust(graph, portKey(c.id, p)),
       pressureAt: (p) => portPressure(portKey(c.id, p)),

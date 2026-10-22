@@ -12,6 +12,7 @@ import { createPressureReducingValve } from '../components/pressureReducingValve
 import { createOneWayFlowControlValve } from '../components/oneWayFlowControlValve';
 import { createCylinderSingle } from '../components/cylinderSingle';
 import { createPushButton32 } from '../components/pushButton32';
+import { createThrottleValve } from '../components/throttleValve';
 import type { Component } from '../core/types';
 import type { ViewportAdapter } from '../ui/viewport';
 
@@ -178,5 +179,44 @@ describe('single-acting cylinder in flow mode', () => {
     wire(source, 'OUT', cyl, 'A');
     for (let i = 0; i < 100; i++) stepSimulation(0.02);
     expect(pos(cyl)).toBeLessThan(1);
+  });
+});
+
+describe('pilots in flow mode', () => {
+  /** Supply -> 5/2 valve -> cylinder; the valve's pilot 14 fed from the supply through a
+   * throttle set to `pilotFlowPct`, with a long pilot line. Returns the time until the cylinder
+   * starts moving. */
+  function timeToStart(pilotFlowPct: number): number {
+    const source = add(createSource(layer(), 0, 0));
+    const valve = add(createValve52Mono(layer(), 0, 0));
+    const cyl = add(createCylinderDouble(layer(), 0, 0));
+    wire(source, 'OUT', valve, '1');
+    wire(valve, '4', cyl, 'A');
+    wire(valve, '2', cyl, 'B');
+    for (let i = 0; i < 25; i++) stepSimulation(0.02);
+    const throttle = add(createThrottleValve(layer(), 0, 0));
+    throttle.restore({ ...throttle.snapshot(), flowPct: pilotFlowPct });
+    wire(source, 'OUT', throttle, 'IN');
+    wire(throttle, 'OUT', valve, '14');
+    for (let t = 0; t < 5; t += 0.01) {
+      stepSimulation(0.01);
+      if (pos(cyl) > 0.01) return t;
+    }
+    return Infinity;
+  }
+
+  it('switch their valve only once the pilot line has built up pressure', () => {
+    const quick = timeToStart(100);
+    appState.components = [];
+    appState.connections = [];
+    resetFlowNetwork();
+    const slow = timeToStart(2);
+    expect(quick).toBeLessThan(0.2);
+    expect(slow).toBeGreaterThan(quick);
+  });
+
+  it('switch at once in logic mode, whatever the pilot line', () => {
+    appState.simulationMode = 'logic';
+    expect(timeToStart(2)).toBeLessThan(0.05);
   });
 });

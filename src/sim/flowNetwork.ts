@@ -182,11 +182,20 @@ interface Edge {
   capAB: number | null;
 }
 
-function buildEdges(components: Component[], graph: FrameGraph, topo: Topology): Edge[] {
+function buildEdges(
+  components: Component[],
+  graph: FrameGraph,
+  topo: Topology,
+  pilotActuated?: (key: PortKeyStr) => boolean,
+): Edge[] {
   const edges: Edge[] = [];
   for (const c of components) {
+    // The same view of each port the logic graph took - pilots by their real pressure.
     const rules = c.conductivityRule({
-      isPressurized: (p) => graph.pressurized.has(portKey(c.id, p)),
+      isPressurized: (p) =>
+        pilotActuated && c.ports[p]?.isPilot
+          ? pilotActuated(portKey(c.id, p))
+          : graph.pressurized.has(portKey(c.id, p)),
     });
     for (const rule of rules) {
       const a = topo.netOf.get(portKey(c.id, rule.a));
@@ -224,12 +233,17 @@ function edgeFlow(e: Edge, pa: number, pb: number): number {
  * air between nets and into/out of devices, then records every port's pressure (see
  * `flowPressureAt`). Call once per frame in flow mode, before components' own step().
  */
-export function stepFlowNetwork(components: Component[], graph: FrameGraph, dt: number): void {
+export function stepFlowNetwork(
+  components: Component[],
+  graph: FrameGraph,
+  dt: number,
+  pilotActuated?: (key: PortKeyStr) => boolean,
+): void {
   if (!topology || topology.version !== appState.topologyVersion) {
     topology = buildTopology(components);
   }
   const topo = topology;
-  const edges = buildEdges(components, graph, topo);
+  const edges = buildEdges(components, graph, topo, pilotActuated);
   const devices: Array<{ comp: Component; device: FlowDevice }> = [];
   for (const c of components) {
     const device = c.flowDevice?.();
