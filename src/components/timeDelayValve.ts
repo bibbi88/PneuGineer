@@ -12,6 +12,38 @@ import {
 } from './shared/slidingValve32';
 import { addSpringZigzag, SPRING_DEFAULT_GEOMETRY } from './shared/spring';
 import { drawBallCheckSymbol } from './shared/checkValveSymbol';
+import { appState } from '../app/AppState';
+import type { FlowDevice } from '../sim/flowNetwork';
+import { BAR, fromGaugeBar, isoMassFlow, P_ATM } from '../sim/flowModel';
+
+/** Flow mode: the reservoir behind the throttle, m³. */
+const RESERVOIR_VOLUME = 20e-6;
+/** Flow mode: reservoir pressure (gauge, bar) at which the valve switches. */
+const SWITCH_BAR = 3;
+/** Flow mode: the check valve's free-flow capacity, dm³/(s·bar) - fast enough that the
+ * reservoir fills (off-delay) or empties (on-delay) almost at once. */
+const CHECK_CONDUCTANCE = 0.6;
+const RT = 287 * 293.15;
+
+/** Seconds the reservoir takes, through a conductance of 1 dm³/(s·bar), to fill from
+ * atmospheric to the switching pressure off a 6 bar line (`filling`), or to empty from 6 bar
+ * down to it into an open line. Time scales exactly with 1 / conductance, so the throttle that
+ * gives a set delay at 6 bar is (this / delay) - and a lower supply then takes longer, as on a
+ * real valve. */
+function referenceTime(filling: boolean): number {
+  const line = filling ? fromGaugeBar(6) : P_ATM;
+  let p = filling ? P_ATM : fromGaugeBar(6);
+  const target = fromGaugeBar(SWITCH_BAR);
+  const h = 1e-5;
+  let t = 0;
+  while (filling ? p < target : p > target) {
+    p += (RT * isoMassFlow(line, p, 1) * h) / RESERVOIR_VOLUME;
+    t += h;
+  }
+  return t;
+}
+const FILL_REFERENCE = referenceTime(true);
+const EMPTY_REFERENCE = referenceTime(false);
 
 export const TIME_DELAY_VALVE_TYPE = 'timeDelayValve';
 /** The same valve with its 3/2 valve normally open: output on at once, off after the delay - a
@@ -286,6 +318,28 @@ export function createTimeDelayValve(
   }
   let timer = 0;
   let delaySec = DEFAULT_DELAY_SEC;
+  // Flow mode: pressure in the reservoir (absolute, Pa).
+  let reservoir = P_ATM;
+
+  /** Flow mode's reservoir, joined to port 12's line through the one-way flow control: slow
+   * through the throttle one way, free through the check valve the other. On-delay: it fills
+   * slowly (the delay) and empties at once (the reset); off-delay the other way round. */
+  function flowDevice(): FlowDevice | null {
+    if (appState.simulationMode !== 'flow') return null;
+    const reference = offDelay ? EMPTY_REFERENCE : FILL_REFERENCE;
+    const throttle = reference / Math.max(delaySec, 0.01);
+    return {
+      ports: ['12'],
+      substep(h, netPressure) {
+        const line = netPressure('12');
+        const filling = line > reservoir;
+        const slow = offDelay ? !filling : filling;
+        const q = isoMassFlow(line, reservoir, slow ? throttle : CHECK_CONDUCTANCE);
+        reservoir = Math.max(1, reservoir + (RT * q * h) / RESERVOIR_VOLUME);
+        return { '12': q };
+      },
+    };
+  }
 
   function updateLabel(): void {
     delayLabel.textContent = `${delaySec.toFixed(1)}s`;
@@ -309,6 +363,13 @@ export function createTimeDelayValve(
     },
 
     step(dt: number, ctx: SimStepContext): void {
+      if (ctx.flowMode) {
+        // The reservoir does the timing (see flowDevice): switched while it's above the
+        // switching pressure, on- and off-delay alike.
+        active = (reservoir - P_ATM) / BAR >= SWITCH_BAR;
+        valve.setActive(active);
+        return;
+      }
       const signal = ctx.isPressurized('12');
       if (offDelay) {
         // Switches with the signal; holds for delaySec after it goes, and a signal back before
@@ -350,7 +411,9 @@ export function createTimeDelayValve(
       valve.setSwapped(normallyOpen);
       valve.setActive(active);
     },
+    flowDevice,
     reset(): void {
+      reservoir = P_ATM;
       active = false;
       timer = 0;
       valve.setActive(false);

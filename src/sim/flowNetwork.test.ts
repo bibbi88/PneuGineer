@@ -1,6 +1,6 @@
 import { beforeEach, afterEach, describe, expect, it } from 'vitest';
 import { appState } from '../app/AppState';
-import { initWires, createConnection } from '../wires/connection';
+import { initWires, createConnection, removeConnection } from '../wires/connection';
 import { stepSimulation } from './engine';
 import { portKey } from './pressure';
 import { flowPressureAt, resetFlowNetwork } from './flowNetwork';
@@ -13,6 +13,7 @@ import { createOneWayFlowControlValve } from '../components/oneWayFlowControlVal
 import { createCylinderSingle } from '../components/cylinderSingle';
 import { createPushButton32 } from '../components/pushButton32';
 import { createThrottleValve } from '../components/throttleValve';
+import { createTimeDelayValve } from '../components/timeDelayValve';
 import type { Component } from '../core/types';
 import type { ViewportAdapter } from '../ui/viewport';
 
@@ -218,5 +219,57 @@ describe('pilots in flow mode', () => {
   it('switch at once in logic mode, whatever the pilot line', () => {
     appState.simulationMode = 'logic';
     expect(timeToStart(2)).toBeLessThan(0.05);
+  });
+});
+
+describe('time delay valve in flow mode', () => {
+  /** Source on 1 and, through its own wire, on 12. Returns the valve and that pilot wire. */
+  function delayCircuit(variant: 'NC' | 'NO' | 'OFF', delaySec: number) {
+    const source = add(createSource(layer(), 0, 0));
+    const valve = add(createTimeDelayValve(layer(), 0, 0, variant));
+    valve.restore({ ...valve.snapshot(), delaySec });
+    wire(source, 'OUT', valve, '1');
+    const pilot = createConnection({ id: source.id, port: 'OUT' }, { id: valve.id, port: '12' });
+    return { valve, pilot };
+  }
+  /** Seconds until port 2 is (or, with `on` false, is no longer) pressurized. */
+  function timeUntil(valve: Component, on: boolean, limit = 6): number {
+    for (let t = 0; t < limit; t += 0.01) {
+      const graph = stepSimulation(0.01);
+      if (graph.pressurized.has(portKey(valve.id, '2')) === on) return t;
+    }
+    return Infinity;
+  }
+
+  it('switches on after about its set delay, filling its reservoir through the throttle', () => {
+    const { valve } = delayCircuit('NC', 1);
+    const t = timeUntil(valve, true);
+    expect(t).toBeGreaterThan(0.8);
+    expect(t).toBeLessThan(1.3);
+  });
+
+  it('takes about twice as long when set to twice the delay', () => {
+    const { valve } = delayCircuit('NC', 2);
+    const t = timeUntil(valve, true);
+    expect(t).toBeGreaterThan(1.7);
+    expect(t).toBeLessThan(2.5);
+  });
+
+  it('as a pulse valve, gives a pulse about as long as its delay', () => {
+    const { valve } = delayCircuit('NO', 1);
+    expect(timeUntil(valve, true, 0.2)).toBeLessThan(0.2);
+    const off = timeUntil(valve, false);
+    expect(off).toBeGreaterThan(0.7);
+    expect(off).toBeLessThan(1.3);
+  });
+
+  it('as an off-delay, switches at once and holds for about its delay after the signal goes', () => {
+    const { valve, pilot } = delayCircuit('OFF', 1);
+    expect(timeUntil(valve, true, 0.3)).toBeLessThan(0.3);
+    for (let i = 0; i < 20; i++) stepSimulation(0.01);
+    removeConnection(pilot.id);
+    const t = timeUntil(valve, false);
+    expect(t).toBeGreaterThan(0.8);
+    expect(t).toBeLessThan(1.4);
   });
 });

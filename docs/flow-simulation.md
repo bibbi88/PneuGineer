@@ -25,9 +25,13 @@ switch picks the model, and the choice is saved with the project (`simulation.mo
    and a return spring (6 % of the air force at 6 bar at rest, 14 % fully compressed); the
    spring side is vented. Same stroke/mass/load settings.
 
+4. **Pilots on real pressure**: in flow mode a port flagged `isPilot` actuates only at 1.5 bar
+   or more in its line (`PILOT_MIN_BAR`, engine.ts) - in the logic graph, the components' step()
+   and the network's own paths alike. **Time delay valves** time with a 20 cm³ reservoir behind
+   the one-way flow control instead of a timer, switching at 3 bar; the throttle is calibrated so
+   the set delay holds at 6 bar supply (a lower supply takes longer).
+
 ## Next steps, in order
 
-4. **Pilots switch on real pressure** (a minimum pilot pressure, e.g. 1.5 bar), and the time
-   delay valve's reservoir fills through its throttle instead of using a timer.
 5. **Per-component flow ratings** (C values, optionally editable) and **air consumption** /
    flow (l/min) readouts.
