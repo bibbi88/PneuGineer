@@ -251,7 +251,12 @@ describe('time delay valve in flow mode', () => {
   /** Source on 1 and, through its own wire, on 12. Returns the valve and that pilot wire. */
   function delayCircuit(variant: 'NC' | 'NO' | 'OFF', delaySec: number) {
     const source = add(createSource(layer(), 0, 0));
-    const valve = add(createTimeDelayValve(layer(), 0, 0, variant));
+    const valve = add(createTimeDelayValve(layer(), 0, 0));
+    valve.restore({
+      ...valve.snapshot(),
+      normallyOpen: variant === 'NO',
+      offDelay: variant === 'OFF',
+    });
     valve.restore({ ...valve.snapshot(), delaySec });
     wire(source, 'OUT', valve, '1');
     const pilot = createConnection({ id: source.id, port: 'OUT' }, { id: valve.id, port: '12' });

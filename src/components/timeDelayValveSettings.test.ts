@@ -5,12 +5,7 @@ import { stepSimulation } from '../sim/engine';
 import { portKey } from '../sim/pressure';
 import { createSource } from './source';
 import { componentRegistry } from './registry';
-import {
-  createTimeDelayValve,
-  TIME_DELAY_VALVE_NO_TYPE,
-  TIME_DELAY_VALVE_OFF_TYPE,
-  TIME_DELAY_VALVE_TYPE,
-} from './timeDelayValve';
+import { createTimeDelayValve, TIME_DELAY_VALVE_TYPE } from './timeDelayValve';
 import type { Component, SimStepContext } from '../core/types';
 import type { ViewportAdapter } from '../ui/viewport';
 
@@ -19,14 +14,21 @@ const OPEN = [{ a: '2', b: '1' }];
 const CLOSED = [{ a: '2', b: '3' }];
 const noPressure = { isPressurized: () => false };
 
+/** A time delay valve with the given settings ticked. */
+function timeDelay(settings: { normallyOpen?: boolean; offDelay?: boolean } = {}): Component {
+  const valve = createTimeDelayValve(layer(), 0, 0);
+  valve.restore({ ...valve.snapshot(), ...settings });
+  return valve;
+}
+
 function pilot(on: boolean): SimStepContext {
   return { isPressurized: () => on } as unknown as SimStepContext;
 }
 
 describe('time delay valve, normally open', () => {
   it('passes 1 to 2 at rest, and shuts off once 12 has been held for the delay', () => {
-    const valve = createTimeDelayValve(layer(), 0, 0, 'NO');
-    expect(valve.type).toBe(TIME_DELAY_VALVE_NO_TYPE);
+    const valve = timeDelay({ normallyOpen: true });
+    expect(valve.snapshot()).toMatchObject({ normallyOpen: true, offDelay: false });
     expect(valve.conductivityRule(noPressure)).toEqual(OPEN);
 
     for (let i = 0; i < 5; i++) valve.step?.(0.1, pilot(true));
@@ -37,15 +39,16 @@ describe('time delay valve, normally open', () => {
   });
 
   it('opens again the moment 12 is released, ready for the next pulse', () => {
-    const valve = createTimeDelayValve(layer(), 0, 0, 'NO');
+    const valve = timeDelay({ normallyOpen: true });
     for (let i = 0; i < 15; i++) valve.step?.(0.1, pilot(true));
     valve.step?.(0.1, pilot(false));
     expect(valve.conductivityRule(noPressure)).toEqual(OPEN);
   });
 
-  it('stays normally open through save and load, whatever the data says', () => {
-    const valve = createTimeDelayValve(layer(), 0, 0, 'NO');
-    valve.restore({ ...valve.snapshot(), normallyOpen: false, delaySec: 2.5 });
+  it('is the one time delay valve with normally open ticked', () => {
+    const valve = createTimeDelayValve(layer(), 0, 0);
+    valve.restore({ ...valve.snapshot(), normallyOpen: true, delaySec: 2.5 });
+    expect(valve.type).toBe(TIME_DELAY_VALVE_TYPE);
     expect(valve.snapshot()).toMatchObject({ normallyOpen: true, delaySec: 2.5 });
     expect(valve.conductivityRule(noPressure)).toEqual(OPEN);
   });
@@ -56,15 +59,15 @@ describe('time delay valve, normally open', () => {
     expect(valve.conductivityRule(noPressure)).toEqual(CLOSED);
   });
 
-  it('is in the library, findable as a pulse valve', () => {
-    const entry = componentRegistry.get(TIME_DELAY_VALVE_NO_TYPE);
+  it('is one library entry, findable as a pulse valve or an off-delay too', () => {
+    const entry = componentRegistry.get(TIME_DELAY_VALVE_TYPE);
     expect(entry?.placeable).toBe(true);
-    expect(entry?.label).toBe('Time delay valve, normally open');
-    expect(entry?.keywords).toContain('pulse valve');
+    expect(entry?.label).toBe('Time delay valve');
+    expect(entry?.keywords).toEqual(expect.arrayContaining(['pulse valve', 'off delay']));
   });
 
   it('draws the ISO symbol: throttle and check valve, reservoir, in a dash-dot frame', () => {
-    const valve = createTimeDelayValve(layer(), 0, 0, 'NO');
+    const valve = timeDelay({ normallyOpen: true });
     const svg = valve.el.querySelector('svg') as SVGSVGElement;
     expect(svg.querySelector('rect[stroke-dasharray]')).not.toBeNull();
     expect(svg.querySelector('rect[rx]')).not.toBeNull(); // the reservoir
@@ -74,15 +77,15 @@ describe('time delay valve, normally open', () => {
 
 describe('time delay valve, off-delay', () => {
   it('switches the moment 12 is pressurized', () => {
-    const valve = createTimeDelayValve(layer(), 0, 0, 'OFF');
-    expect(valve.type).toBe(TIME_DELAY_VALVE_OFF_TYPE);
+    const valve = timeDelay({ offDelay: true });
+    expect(valve.snapshot()).toMatchObject({ offDelay: true, normallyOpen: false });
     expect(valve.conductivityRule(noPressure)).toEqual(CLOSED);
     valve.step?.(0.01, pilot(true));
     expect(valve.conductivityRule(noPressure)).toEqual(OPEN);
   });
 
   it('holds on for the delay after 12 goes away, then switches back', () => {
-    const valve = createTimeDelayValve(layer(), 0, 0, 'OFF'); // 1.0 s
+    const valve = timeDelay({ offDelay: true }); // 1.0 s
     valve.step?.(0.1, pilot(true));
     for (let i = 0; i < 5; i++) valve.step?.(0.1, pilot(false));
     expect(valve.conductivityRule(noPressure)).toEqual(OPEN);
@@ -91,7 +94,7 @@ describe('time delay valve, off-delay', () => {
   });
 
   it('restarts the wait if 12 comes back before the delay is up', () => {
-    const valve = createTimeDelayValve(layer(), 0, 0, 'OFF');
+    const valve = timeDelay({ offDelay: true });
     valve.step?.(0.1, pilot(true));
     for (let i = 0; i < 8; i++) valve.step?.(0.1, pilot(false));
     valve.step?.(0.1, pilot(true));
@@ -100,31 +103,47 @@ describe('time delay valve, off-delay', () => {
   });
 
   it('reset() returns it to rest', () => {
-    const valve = createTimeDelayValve(layer(), 0, 0, 'OFF');
+    const valve = timeDelay({ offDelay: true });
     valve.step?.(0.1, pilot(true));
     valve.reset();
     expect(valve.conductivityRule(noPressure)).toEqual(CLOSED);
   });
 
-  it('draws its check valve the other way round from the on-delay one', () => {
+  it('shows its check valve the other way round from the on-delay one', () => {
     // The check valve's ball sits on the side air flows freely towards: the reservoir for an
-    // off-delay (fills at once), port 12 for an on-delay (vents at once).
+    // off-delay (fills at once), port 12 for an on-delay (vents at once). Both are drawn; the
+    // setting shows one.
     const ballX = (c: Component): number => {
       const circles = [...c.el.querySelectorAll('svg circle')].filter(
-        (el) => !el.hasAttribute('data-port') && Number(el.getAttribute('r')) < 6,
+        (el) =>
+          !el.hasAttribute('data-port') &&
+          Number(el.getAttribute('r')) < 6 &&
+          (el.closest('g[style]') as HTMLElement | null)?.style.display !== 'none',
       );
       return Number(circles[0]?.getAttribute('cx'));
     };
-    const on = createTimeDelayValve(layer(), 0, 0);
-    const off = createTimeDelayValve(layer(), 0, 0, 'OFF');
-    expect(ballX(off)).toBeGreaterThan(ballX(on));
+    const valve = createTimeDelayValve(layer(), 0, 0);
+    const onDelay = ballX(valve);
+    valve.restore({ ...valve.snapshot(), offDelay: true });
+    expect(ballX(valve)).toBeGreaterThan(onDelay);
+    valve.restore({ ...valve.snapshot(), offDelay: false });
+    expect(ballX(valve)).toBe(onDelay);
   });
 
-  it('is in the library', () => {
-    expect(componentRegistry.get(TIME_DELAY_VALVE_OFF_TYPE)?.label).toBe(
-      'Time delay valve, off-delay',
-    );
-    expect(componentRegistry.get(TIME_DELAY_VALVE_TYPE)?.label).toBe('Time delay valve, on-delay');
+  it('becomes an off-delay when the setting is ticked', () => {
+    const valve = createTimeDelayValve(layer(), 0, 0);
+    valve.restore({ ...valve.snapshot(), offDelay: true });
+    valve.step?.(0.01, pilot(true));
+    expect(valve.conductivityRule(noPressure)).toEqual(OPEN);
+  });
+
+  it('names itself after its settings', () => {
+    const valve = createTimeDelayValve(layer(), 0, 0);
+    const name = (): string => valve.el.querySelector('.compNameText')?.textContent ?? '';
+    valve.restore({ ...valve.snapshot(), showName: true });
+    expect(name()).toBe('Time delay valve, on-delay');
+    valve.restore({ ...valve.snapshot(), offDelay: true, normallyOpen: true });
+    expect(name()).toBe('Time delay valve, off-delay, normally open');
   });
 });
 
@@ -151,7 +170,7 @@ describe('time delay valve, normally open, in a circuit', () => {
   it('turns a held signal into a pulse as long as the delay', () => {
     // The pulse-valve connection: the same signal feeds both supply port 1 and pilot 12.
     const source = add(createSource(layer(), 0, 0));
-    const valve = add(createTimeDelayValve(layer(), 0, 0, 'NO'));
+    const valve = add(timeDelay({ normallyOpen: true }));
     createConnection({ id: source.id, port: 'OUT' }, { id: valve.id, port: '1' });
     createConnection({ id: source.id, port: 'OUT' }, { id: valve.id, port: '12' });
     const out = portKey(valve.id, '2');

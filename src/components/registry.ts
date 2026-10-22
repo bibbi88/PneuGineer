@@ -13,12 +13,7 @@ import { createCylinderDouble, CYLINDER_DOUBLE_TYPE } from './cylinderDouble';
 import { createCylinderSingle, CYLINDER_SINGLE_TYPE } from './cylinderSingle';
 import { createJunction, JUNCTION_TYPE } from './junction';
 import { createPressureSequenceValve, PRESSURE_SEQUENCE_VALVE_TYPE } from './pressureSequenceValve';
-import {
-  createTimeDelayValve,
-  TIME_DELAY_VALVE_NO_TYPE,
-  TIME_DELAY_VALVE_OFF_TYPE,
-  TIME_DELAY_VALVE_TYPE,
-} from './timeDelayValve';
+import { createTimeDelayValve, TIME_DELAY_VALVE_TYPE } from './timeDelayValve';
 import { createQuickExhaustValve, QUICK_EXHAUST_VALVE_TYPE } from './quickExhaustValve';
 import {
   createOneWayFlowControlValve,
@@ -222,28 +217,19 @@ export const componentRegistry = new Map<string, RegistryEntry>([
     TIME_DELAY_VALVE_TYPE,
     {
       factory: (ctx, x, y) => createTimeDelayValve(ctx.compLayer, x, y),
-      label: 'Time delay valve, on-delay',
-      keywords: ['time delay valve', 'on delay', 'TON'],
-      placeable: true,
-      category: ComponentCategory.FLOW,
-    },
-  ],
-  [
-    TIME_DELAY_VALVE_NO_TYPE,
-    {
-      factory: (ctx, x, y) => createTimeDelayValve(ctx.compLayer, x, y, 'NO'),
-      label: 'Time delay valve, normally open',
-      keywords: ['pulse valve', 'impulse valve', 'one-shot', 'pulskretsventil'],
-      placeable: true,
-      category: ComponentCategory.FLOW,
-    },
-  ],
-  [
-    TIME_DELAY_VALVE_OFF_TYPE,
-    {
-      factory: (ctx, x, y) => createTimeDelayValve(ctx.compLayer, x, y, 'OFF'),
-      label: 'Time delay valve, off-delay',
-      keywords: ['off delay', 'release delay', 'TOF'],
+      label: 'Time delay valve',
+      // On- or off-delay, normally closed or open, are its settings in the inspector.
+      keywords: [
+        'on delay',
+        'off delay',
+        'release delay',
+        'pulse valve',
+        'impulse valve',
+        'one-shot',
+        'pulskretsventil',
+        'TON',
+        'TOF',
+      ],
       placeable: true,
       category: ComponentCategory.FLOW,
     },

@@ -32,11 +32,7 @@ import { SOURCE_TYPE } from '../components/source';
 import { LIMIT_VALVE_32_TYPE } from '../components/limitValve32';
 import { PUSH_BUTTON_32_TYPE } from '../components/pushButton32';
 import { AIR_VALVE_32_TYPE } from '../components/airValve32';
-import {
-  TIME_DELAY_VALVE_NO_TYPE,
-  TIME_DELAY_VALVE_OFF_TYPE,
-  TIME_DELAY_VALVE_TYPE,
-} from '../components/timeDelayValve';
+import { TIME_DELAY_VALVE_TYPE } from '../components/timeDelayValve';
 import { PRESSURE_SEQUENCE_VALVE_TYPE } from '../components/pressureSequenceValve';
 
 /** The 3/2 valve family (shared/slidingValve32.ts): ports 1 (supply) and 2 (outlet) sit on one
@@ -47,8 +43,6 @@ const THREE_TWO_TYPES = new Set<string>([
   PUSH_BUTTON_32_TYPE,
   AIR_VALVE_32_TYPE,
   TIME_DELAY_VALVE_TYPE,
-  TIME_DELAY_VALVE_NO_TYPE,
-  TIME_DELAY_VALVE_OFF_TYPE,
   PRESSURE_SEQUENCE_VALVE_TYPE,
 ]);
 

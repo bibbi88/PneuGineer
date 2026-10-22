@@ -46,19 +46,9 @@ const FILL_REFERENCE = referenceTime(true);
 const EMPTY_REFERENCE = referenceTime(false);
 
 export const TIME_DELAY_VALVE_TYPE = 'timeDelayValve';
-/** The same valve with its 3/2 valve normally open: output on at once, off after the delay - a
- * "pulse valve" (one-shot), used to shorten a signal that would otherwise hold a pilot on. */
-export const TIME_DELAY_VALVE_NO_TYPE = 'timeDelayValveNO';
-/** Off-delay: output on as soon as 12 is, and held on for the delay after 12 goes away. */
-export const TIME_DELAY_VALVE_OFF_TYPE = 'timeDelayValveOff';
-
-export type TimeDelayVariant = 'NC' | 'NO' | 'OFF';
-
-const VARIANTS: Record<TimeDelayVariant, { type: string; name: string }> = {
-  NC: { type: TIME_DELAY_VALVE_TYPE, name: 'Time delay valve, on-delay' },
-  NO: { type: TIME_DELAY_VALVE_NO_TYPE, name: 'Time delay valve, normally open' },
-  OFF: { type: TIME_DELAY_VALVE_OFF_TYPE, name: 'Time delay valve, off-delay' },
-};
+function defaultName(offDelay: boolean, normallyOpen: boolean): string {
+  return `Time delay valve, ${offDelay ? 'off' : 'on'}-delay${normallyOpen ? ', normally open' : ''}`;
+}
 
 /** Room added on each side of the canvas for the pilot circuit drawn left of the valve. Equal on
  * both sides, so the canvas center - which is what the component's position is - stays put and
@@ -157,8 +147,7 @@ export function drawTimeDelayValveActuator(
   mover: SVGGElement,
   svg: SVGSVGElement,
   geo: TimeDelayValveGeometry,
-  delayOn = true,
-): { port12: ReturnType<typeof createPort> } {
+): { port12: ReturnType<typeof createPort>; setOffDelay(offDelay: boolean): void } {
   const cy = SLIDING_VALVE_H / 2;
   const parts = createSvgEl('g');
 
@@ -204,17 +193,21 @@ export function drawTimeDelayValveActuator(
   );
 
   // Check valve in the bypass above: free flow back toward port 12 for an on-delay (reservoir
-  // vents at once), free flow from it for an off-delay (reservoir fills at once).
+  // vents at once), free flow from it for an off-delay (reservoir fills at once). Both are drawn;
+  // the valve's off-delay setting picks which one shows.
   const by = cy - geo.bypassRise;
-  const check = drawBallCheckSymbol(parts, tx, by, 'horizontal', delayOn ? -1 : 1, 0.45);
-  const leftEnd = delayOn ? check.outPoint.x : check.inPoint.x;
-  const rightEnd = delayOn ? check.inPoint.x : check.outPoint.x;
-  parts.append(
-    seg(fcLeft, cy, fcLeft, by),
-    seg(fcLeft, by, leftEnd, by),
-    seg(rightEnd, by, fcRight, by),
-    seg(fcRight, by, fcRight, cy),
-  );
+  parts.append(seg(fcLeft, cy, fcLeft, by), seg(fcRight, by, fcRight, cy));
+  const bypass = (delayOn: boolean): SVGGElement => {
+    const group = createSvgEl('g') as SVGGElement;
+    const check = drawBallCheckSymbol(group, tx, by, 'horizontal', delayOn ? -1 : 1, 0.45);
+    const leftEnd = delayOn ? check.outPoint.x : check.inPoint.x;
+    const rightEnd = delayOn ? check.inPoint.x : check.outPoint.x;
+    group.append(seg(fcLeft, by, leftEnd, by), seg(rightEnd, by, fcRight, by));
+    parts.appendChild(group);
+    return group;
+  };
+  const onDelayCheck = bypass(true);
+  const offDelayCheck = bypass(false);
 
   // Reservoir, hanging off the pilot line.
   parts.append(
@@ -251,7 +244,12 @@ export function drawTimeDelayValveActuator(
   const frame = parts.firstElementChild as SVGElement;
   mover.insertBefore(frame, mover.firstChild);
   mover.append(parts, port12.el, spring);
-  return { port12 };
+  function setOffDelay(offDelay: boolean): void {
+    onDelayCheck.style.display = offDelay ? 'none' : '';
+    offDelayCheck.style.display = offDelay ? '' : 'none';
+  }
+  setOffDelay(false);
+  return { port12, setOffDelay };
 }
 
 /**
@@ -262,26 +260,22 @@ export function drawTimeDelayValveActuator(
  *
  * Normally closed (the default) it's an on-delay: 2 comes on `delaySec` after 12 does. Normally
  * open it's the reverse: 2 is on at once and goes off after `delaySec` - with 1 and 12 fed from
- * the same signal, that turns a held signal into a pulse of that length. The off-delay variant
- * switches the moment 12 is pressurized and holds 2 on for `delaySec` after 12 goes away.
+ * the same signal, that turns a held signal into a pulse of that length. Set to off-delay, the
+ * valve switches the moment 12 is pressurized and holds switched for `delaySec` after 12 goes
+ * away (2 on, or with normally open, off). Both are settings of the one valve (`normallyOpen`,
+ * `offDelay`), ticked in the inspector.
  */
-export function createTimeDelayValve(
-  compLayer: HTMLElement,
-  x: number,
-  y: number,
-  variant: TimeDelayVariant = 'NC',
-): Component {
+export function createTimeDelayValve(compLayer: HTMLElement, x: number, y: number): Component {
   const geo = TIME_DELAY_VALVE_DEFAULT_GEOMETRY;
-  const fixedNormallyOpen = variant === 'NO';
-  const offDelay = variant === 'OFF';
+  let offDelay = false;
   const shell = buildComponentShell(
     compLayer,
-    VARIANTS[variant].type,
+    TIME_DELAY_VALVE_TYPE,
     x,
     y,
     SVG_W,
     SVG_H,
-    VARIANTS[variant].name,
+    defaultName(false, false),
     {
       x: GEOMETRY.offsetX - geo.framePadLeft,
       y: GEOMETRY.offsetY - geo.framePadY,
@@ -290,7 +284,8 @@ export function createTimeDelayValve(
     },
   );
   const valve = buildSlidingValve32Body(shell.svg, `arrow-delay-${uid()}`, GEOMETRY);
-  const { port12 } = drawTimeDelayValveActuator(valve.mover, shell.svg, geo, !offDelay);
+  const { port12, setOffDelay } = drawTimeDelayValveActuator(valve.mover, shell.svg, geo);
+  setOffDelay(offDelay);
 
   // Not part of the mover (doesn't slide) - positioned in canvas-absolute coordinates instead.
   const delayLabel = createSvgEl('text', {
@@ -309,7 +304,7 @@ export function createTimeDelayValve(
   // normally open - see pushButton32.ts, which this mirrors. Only the artwork and the rule
   // change: actuating still slides the mover the same way, so the actuator animates identically
   // either way round.
-  let normallyOpen = fixedNormallyOpen;
+  let normallyOpen = false;
 
   /** True while 1 is connected through to 2, whichever combination of actuated and
    * normally-open produced it - both the symbol and the rule follow this one value. */
@@ -348,7 +343,7 @@ export function createTimeDelayValve(
 
   const comp: Component = {
     id: uid(),
-    type: VARIANTS[variant].type,
+    type: TIME_DELAY_VALVE_TYPE,
     el: shell.el,
     x,
     y,
@@ -395,6 +390,7 @@ export function createTimeDelayValve(
       return {
         delaySec,
         normallyOpen,
+        offDelay,
         showName: shell.getNameVisible(),
         customName: shell.getCustomName(),
         silencer3: valve.getSilencer(),
@@ -402,8 +398,10 @@ export function createTimeDelayValve(
     },
     restore(data: Record<string, unknown>): void {
       delaySec = data.delaySec as number;
-      // The normally-open variant is that by definition; the plain valve keeps its own option.
-      normallyOpen = fixedNormallyOpen || Boolean(data.normallyOpen);
+      normallyOpen = Boolean(data.normallyOpen);
+      offDelay = Boolean(data.offDelay);
+      setOffDelay(offDelay);
+      shell.setDefaultName(defaultName(offDelay, normallyOpen));
       shell.setNameVisible(Boolean(data.showName));
       shell.setCustomName((data.customName as string | null) ?? null);
       valve.setSilencer((data.silencer3 as 'none' | 'silencer') ?? 'silencer');

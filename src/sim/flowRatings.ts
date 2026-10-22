@@ -31,8 +31,6 @@ export const DEFAULT_FLOW_RATINGS: Readonly<Record<string, number>> = {
   quickExhaustValve: 1.5,
   pressureReducingValve: 0.8,
   timeDelayValve: 0.4,
-  timeDelayValveNO: 0.4,
-  timeDelayValveOff: 0.4,
   pressureSequenceValve: 0.4,
   // Measuring: a flow meter barely restricts the line it measures
   flowMeter: 2,
@@ -61,8 +59,6 @@ export const DEFAULT_CRITICAL_RATIOS: Readonly<Record<string, number>> = {
   quickExhaustValve: 0.5,
   pressureReducingValve: 0.3,
   timeDelayValve: 0.35,
-  timeDelayValveNO: 0.35,
-  timeDelayValveOff: 0.35,
   pressureSequenceValve: 0.35,
   flowMeter: 0.5,
   cylinderDouble: 0.4,
