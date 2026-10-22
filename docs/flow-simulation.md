@@ -36,8 +36,16 @@ switch picks the model, and the choice is saved with the project (`simulation.mo
    and a path never moves more air in one step than would level its two sides - otherwise lines
    overshoot and sit oscillating above supply pressure.
 
-## Next steps, in order
+6. **Per-component flow ratings** (`src/sim/flowRatings.ts`): every pneumatic component has a
+   sonic conductance C - its kind's typical value (e.g. push-button 3/2 0.3, 5/2 0.6, check
+   valve 0.8, quick exhaust 1.5, cylinder port fittings 0.8 dm³/(s·bar)) until one is set in the
+   inspector ("Flow rating C"; clearing it returns to typical). Saved as `flowC` in the
+   component's data, so it survives save/load, undo and copy/paste.
 
-6. **Per-component flow ratings** (C values, optionally editable in the inspector) instead of
-   one default for every valve path.
-7. Flow-mode readouts on more components (flow through a throttle, l/min on a valve path).
+## Still open
+
+7. Flow readouts on more components (l/min through a throttle or valve path).
+8. The supply is ideal (unlimited flow at 6 bar); a supply/service-unit rating would make
+   pressure sag when many cylinders move at once.
+9. Still decided by the logic graph rather than pressure: AND/OR (two-pressure/shuttle) valves
+   and the quick-exhaust valve's switching; valves switch instantly (no switching time).

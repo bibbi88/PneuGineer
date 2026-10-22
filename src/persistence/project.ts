@@ -1,3 +1,4 @@
+import { restoreFlowRating, snapshotWithFlowRating } from '../sim/flowRatings';
 import type { ComponentFactoryContext } from '../components/registry';
 import type { ViewportAdapter } from '../ui/viewport';
 import { appState } from '../app/AppState';
@@ -51,7 +52,7 @@ export function serializeProject(name: string): ProjectFileV1 {
       y: c.y,
       rot: getComponentRotation(c),
       ...(isComponentMirrored(c) ? { mirror: true } : {}),
-      data: c.snapshot(),
+      data: snapshotWithFlowRating(c),
     })),
     conns: appState.connections.map((c) => ({
       from: c.from,
@@ -111,6 +112,7 @@ export function loadProject(
       const type = upgradedCoilType(snap.type, snap.data as Record<string, unknown>, solenoidKeys);
       const comp = spawnComponent(type, ctx, viewport, snap.x, snap.y);
       comp.restore(snap.data);
+      restoreFlowRating(comp, snap.data as Record<string, unknown>);
       if (snap.rot) setComponentRotation(comp, snap.rot);
       if (snap.mirror) setComponentMirrored(comp, true);
       idMap.set(snap.id, comp.id);

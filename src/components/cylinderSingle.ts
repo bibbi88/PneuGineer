@@ -4,6 +4,7 @@ import { buildComponentShell, createSvgEl, createPort } from './shared/svgHelper
 import { nextCylinderLetter, isCylinderLetterInUse } from './shared/letters';
 import { BASE_CYL_SPEED } from '../sim/constants';
 import type { FlowDevice } from '../sim/flowNetwork';
+import { flowRatingOf } from '../sim/flowRatings';
 import {
   P_ATM,
   stepSingleCylinder,
@@ -177,8 +178,6 @@ type CylinderMode = 'push' | 'pull';
 const DEFAULT_STROKE_MM = 100;
 const DEFAULT_MASS_KG = 1;
 const DEFAULT_LOAD_N = 0;
-/** Flow capacity of the port's fitting, dm³/(s·bar). */
-const PORT_CONDUCTANCE = 0.8;
 /** Return spring, as a share of the air force at 6 bar: at rest, and fully compressed. */
 const SPRING_AT_REST = 0.06;
 const SPRING_COMPRESSED = 0.14;
@@ -299,7 +298,7 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
         const q = stepSingleCylinder(
           flow,
           spec,
-          { kind: 'node', pressure: netPressure('A'), conductance: PORT_CONDUCTANCE },
+          { kind: 'node', pressure: netPressure('A'), conductance: flowRatingOf(comp) },
           h,
         );
         frameFlow.q += q * h;

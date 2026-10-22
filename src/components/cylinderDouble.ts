@@ -4,6 +4,7 @@ import { buildComponentShell, createSvgEl, createPort } from './shared/svgHelper
 import { nextCylinderLetter, isCylinderLetterInUse } from './shared/letters';
 import { BASE_CYL_SPEED } from '../sim/constants';
 import type { FlowDevice } from '../sim/flowNetwork';
+import { flowRatingOf } from '../sim/flowRatings';
 import {
   atRest,
   P_ATM,
@@ -35,9 +36,6 @@ export const CYLINDER_DOUBLE_TYPE = 'cylinderDouble';
 function formatBar(bar: number): string {
   return `${(Math.abs(bar) < 0.05 ? 0 : bar).toFixed(1)} bar`;
 }
-
-/** Flow capacity of a cylinder port's fitting, dm³/(s·bar). */
-const PORT_CONDUCTANCE = 0.8;
 
 /** Flow-mode defaults: a short training-rig cylinder, carrying nothing in particular. */
 const DEFAULT_STROKE_MM = 100;
@@ -269,7 +267,7 @@ export function createCylinderDouble(compLayer: HTMLElement, x: number, y: numbe
         const node = (port: 'A' | 'B'): PortFeed => ({
           kind: 'node',
           pressure: netPressure(port),
-          conductance: PORT_CONDUCTANCE,
+          conductance: flowRatingOf(comp),
         });
         const q = stepCylinder(flow, spec, node('A'), node('B'), h);
         frameFlow.A += q.qA * h;

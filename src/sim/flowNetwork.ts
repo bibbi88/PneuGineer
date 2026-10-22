@@ -8,7 +8,8 @@
  * - Fixed nets: any net holding a supply port sits at supply pressure; a port with nothing wired
  *   to it is open to atmosphere (a valve's exhaust, a throttle's free end).
  * - Every path a component currently opens (its `conductivityRule`, as the logic graph sees it)
- *   is a restriction between two nets, passing air per ISO 6358. A directed path (a check valve)
+ *   is a restriction between two nets, passing air per ISO 6358 at the component's flow rating
+ *   (sim/flowRatings.ts), scaled by its `flowMultiplier` (a throttle's setting). A directed path (a check valve)
  *   passes air one way only; a pressure reducing valve only while its outlet is below its set
  *   pressure.
  * - Devices (cylinders, see `Component.flowDevice`) hold their own volumes and exchange air with
@@ -22,10 +23,8 @@ import { appState } from '../app/AppState';
 import { SOURCE_PRESSURE } from './constants';
 import { isoMassFlow, P_ATM, BAR, fromGaugeBar } from './flowModel';
 import { portKey, type FrameGraph, type PortKeyStr } from './pressure';
+import { flowRatingOf } from './flowRatings';
 
-/** Flow capacity of a component's internal path (a valve's, a check valve's...), dm³/(s·bar). A
- * throttle's `flowMultiplier` scales it down. */
-export const COMPONENT_CONDUCTANCE = 0.6;
 /** Bore of the tubing a wire stands for (4 mm), m². */
 const TUBE_AREA = Math.PI * 0.002 ** 2;
 /** Metres of tubing per pixel of drawn wire - a 300 px line is 0.6 m of tube. */
@@ -209,6 +208,7 @@ function buildEdges(
           ? pilotActuated(portKey(c.id, p))
           : graph.pressurized.has(portKey(c.id, p)),
     });
+    const rating = flowRatingOf(c);
     for (const rule of rules) {
       const a = topo.netOf.get(portKey(c.id, rule.a));
       const b = topo.netOf.get(portKey(c.id, rule.b));
@@ -217,8 +217,8 @@ function buildEdges(
       edges.push({
         a,
         b,
-        cAB: COMPONENT_CONDUCTANCE * (c.flowMultiplier?.(rule.a, rule.b) ?? 1),
-        cBA: rule.directed ? 0 : COMPONENT_CONDUCTANCE * (c.flowMultiplier?.(rule.b, rule.a) ?? 1),
+        cAB: rating * (c.flowMultiplier?.(rule.a, rule.b) ?? 1),
+        cBA: rule.directed ? 0 : rating * (c.flowMultiplier?.(rule.b, rule.a) ?? 1),
         capAB: cap === null || cap === undefined ? null : fromGaugeBar(cap),
       });
     }

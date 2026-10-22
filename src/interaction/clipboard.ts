@@ -1,3 +1,4 @@
+import { restoreFlowRating, snapshotWithFlowRating } from '../sim/flowRatings';
 import type { ComponentFactoryContext } from '../components/registry';
 import type { ViewportAdapter } from '../ui/viewport';
 import type { ComponentId, ConnectionEndpoint, WireGuide } from '../core/types';
@@ -84,7 +85,7 @@ export function copySelection(): void {
       type: c.type,
       x: c.x,
       y: c.y,
-      data: c.snapshot(),
+      data: snapshotWithFlowRating(c),
     })),
     // Only wires with both ends inside the copied group come along - a wire to something
     // outside the selection has nothing sensible to reattach to in the pasted copy.
@@ -116,6 +117,7 @@ function pasteWithOffset(offsetFor: (comps: ClipboardComp[]) => { dx: number; dy
     for (const c of clipboard!.comps) {
       const comp = spawnComponent(c.type, ctxRef!, viewportRef!, c.x + dx, c.y + dy);
       comp.restore(c.data);
+      restoreFlowRating(comp, c.data as Record<string, unknown>);
       // A pasted cylinder gets its own fresh letter (and so its own sensor signal names) rather
       // than colliding with the one it was copied from.
       comp.relabel?.();

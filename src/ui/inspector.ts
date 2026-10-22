@@ -11,6 +11,13 @@ import {
   type DistributeAxis,
 } from '../interaction/align';
 import { appState } from '../app/AppState';
+import {
+  defaultFlowRating,
+  hasFlowRating,
+  MAX_FLOW_RATING,
+  MIN_FLOW_RATING,
+  setFlowRating,
+} from '../sim/flowRatings';
 import { getSelectedComponents, onSelectionChange } from '../interaction/selection';
 import { redrawAllConnections } from '../wires/connection';
 import { setPageFrameSize, renderPageFrame, type PageFrameSize } from './pageFrame';
@@ -374,6 +381,33 @@ function updateComponentField(comp: Component, key: string, value: unknown): voi
   comp.restore({ ...comp.snapshot(), [key]: value });
   redrawAllConnections();
   appState.markDirty();
+}
+
+/** The component's flow rating C (see sim/flowRatings.ts): its own value if set, otherwise left
+ * empty with its kind's typical value shown as the placeholder - clearing the field goes back to
+ * that default. Only flow simulation mode uses it. */
+function renderFlowRatingField(container: HTMLElement, comp: Component, refresh: () => void): void {
+  const row = document.createElement('label');
+  row.className = 'inspectorRow';
+  row.title =
+    'Sonic conductance C (ISO 6358): how much air this component can pass. Used in Flow simulation; empty uses the typical value.';
+  const span = document.createElement('span');
+  span.textContent = 'Flow rating C (dm³/s·bar)';
+  const input = document.createElement('input');
+  input.type = 'number';
+  input.className = 'flowRatingInput';
+  input.min = String(MIN_FLOW_RATING);
+  input.max = String(MAX_FLOW_RATING);
+  input.step = '0.05';
+  input.placeholder = String(defaultFlowRating(comp.type));
+  input.value = comp.flowRating === undefined ? '' : String(comp.flowRating);
+  input.addEventListener('change', () => {
+    setFlowRating(comp, input.value.trim() === '' ? null : Number(input.value));
+    appState.markDirty();
+    refresh();
+  });
+  row.append(span, input);
+  container.appendChild(row);
 }
 
 function renderSelectField(
@@ -1114,8 +1148,10 @@ export function renderInspector(container: HTMLElement, projectBar: ProjectBarRe
     if (showsNameSection) renderNameSection(container, comp, snap);
 
     const fields = INSPECTOR_FIELDS[comp.type];
+    const ratable = hasFlowRating(comp.type);
     if (!fields || fields.length === 0) {
-      if (!showsNameSection) {
+      if (ratable) renderFlowRatingField(container, comp, refresh);
+      else if (!showsNameSection) {
         const hint = document.createElement('p');
         hint.className = 'inspectorHint';
         hint.textContent = 'This component has nothing to configure here.';
@@ -1139,6 +1175,7 @@ export function renderInspector(container: HTMLElement, projectBar: ProjectBarRe
         renderMultilineTextField(container, comp, field, snap);
       else renderNumberOrTextField(container, comp, field, snap);
     }
+    if (ratable) renderFlowRatingField(container, comp, refresh);
   }
 
   function refresh(): void {

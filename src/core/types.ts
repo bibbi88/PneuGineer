@@ -123,6 +123,10 @@ export interface Component<TSnapshot = Record<string, unknown>> {
   gy: number;
   ports: Record<PortKey, PortDef>;
   electrical?: ElectricalBehavior;
+  /** Flow mode: this component's own sonic conductance C, dm³/(s·bar), if the user has set one
+   * in the inspector - otherwise its kind's default applies (see sim/flowRatings.ts). Saved,
+   * undone and copied along with the component's snapshot. */
+  flowRating?: number;
 
   conductivityRule(ctx: ConductivityContext): PortConnection[];
   flowMultiplier?(fromPort: PortKey, toPort: PortKey): number;
