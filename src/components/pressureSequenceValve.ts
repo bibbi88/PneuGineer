@@ -85,12 +85,16 @@ function seg(
  * Draws the pilot stage, its internal supply and the frame. Port 12's signal acts on a small
  * adjustable pressure valve (the box, with its setting spring and adjustment arrow above it);
  * once that pressure reaches the setting, the stage passes air - taken internally from port 1,
- * the dashed line - on to the 3/2 valve's air pilot. Everything is static: the valve shows its
- * switched state by its cells trading places (see setSwapped) rather than sliding, so the lines
- * joining the pilot stage to port 1 and to the valve never come apart. Coordinates are relative
- * to the valve body's top-left corner.
+ * the dashed line - on to the 3/2 valve's air pilot. It all slides with the valve when it
+ * switches, like any valve's actuator, except where the supply taps off port 1, which stays put
+ * - so the returned bottom run of that line is restretched to it (see show()). Coordinates are
+ * relative to the valve body's top-left corner, i.e. the sliding mover's own.
  */
-function drawPilotStage(g: SVGElement, geo: PressureSequenceValveGeometry, port1X: number): void {
+function drawPilotStage(
+  g: SVGElement,
+  geo: PressureSequenceValveGeometry,
+  port1X: number,
+): { supplyRun: SVGElement; tap: SVGElement } {
   const cy = SLIDING_VALVE_H / 2;
   const left = geo.stageX - geo.stageHalfW;
   const right = geo.stageX + geo.stageHalfW;
@@ -112,11 +116,13 @@ function drawPilotStage(g: SVGElement, geo: PressureSequenceValveGeometry, port1
 
   // Internal pilot supply: off port 1's line at a junction, along the bottom, up the left, into
   // the stage's inlet.
+  const supplyRun = seg(port1X, geo.supplyY, geo.supplyX, geo.supplyY, dashed);
+  const tap = createSvgEl('circle', { cx: port1X, cy: geo.supplyY, r: 2.5, fill: '#111' });
   g.append(
-    seg(port1X, geo.supplyY, geo.supplyX, geo.supplyY, dashed),
+    supplyRun,
     seg(geo.supplyX, geo.supplyY, geo.supplyX, cy, dashed),
     seg(geo.supplyX, cy, left, cy, dashed),
-    createSvgEl('circle', { cx: port1X, cy: geo.supplyY, r: 2.5, fill: '#111' }),
+    tap,
   );
 
   // The stage: a box with its flow path drawn through it, inlet left, outlet right.
@@ -184,6 +190,7 @@ function drawPilotStage(g: SVGElement, geo: PressureSequenceValveGeometry, port1
       'stroke-width': 1.5,
     }),
   );
+  return { supplyRun, tap };
 }
 
 /**
@@ -221,33 +228,29 @@ export function createPressureSequenceValve(
   const valve = buildSlidingValve32Body(shell.svg, `arrow-seq-${uid()}`, GEOMETRY);
   const port1X = Number(valve.ports['1'].el.getAttribute('cx')) - ox;
 
-  const stage = createSvgEl('g', { transform: `translate(${ox}, ${oy})` });
-  drawPilotStage(stage, geo, port1X);
+  // The pilot stage, frame, spring, port 12 and set-pressure label all ride on the valve's mover,
+  // so the whole unit slides when it switches, like every other valve.
+  const mover = valve.mover;
+  const stage = createSvgEl('g');
+  const { supplyRun, tap } = drawPilotStage(stage, geo, port1X);
   // Behind the valve body (its frame and supply line run under the body's own port leads).
-  shell.svg.insertBefore(stage, shell.svg.firstChild);
+  mover.insertBefore(stage, mover.firstChild);
 
   const spring = createSvgEl('g', {
-    transform: `translate(${ox + SLIDING_VALVE_W}, ${oy + SLIDING_VALVE_H / 2})`,
+    transform: `translate(${SLIDING_VALVE_W}, ${SLIDING_VALVE_H / 2})`,
   });
   addSpringZigzag(spring, 0, SPRING_DEFAULT_GEOMETRY.springSpan, 0, 2, SPRING_DEFAULT_GEOMETRY);
-  shell.svg.appendChild(spring);
+  mover.appendChild(spring);
 
-  const port12: PortDef = createLabeledPort(
-    shell.svg,
-    '12',
-    ox + geo.stageX,
-    oy + geo.portY,
-    'V',
-    'left',
-  );
+  const port12: PortDef = createLabeledPort(mover, '12', geo.stageX, geo.portY, 'V', 'left');
 
   // The set pressure, written beside the setting spring it belongs to.
   const setLabel = createSvgEl('text', {
-    x: ox + geo.stageX + 14,
-    y: oy + geo.stageTop - geo.springLen + 8,
+    x: geo.stageX + 14,
+    y: geo.stageTop - geo.springLen + 8,
     'font-size': 11,
   });
-  shell.svg.appendChild(setLabel);
+  mover.appendChild(setLabel);
 
   const ports = { ...valve.ports, '12': port12 };
 
@@ -260,8 +263,13 @@ export function createPressureSequenceValve(
   updateLabel();
 
   function show(): void {
-    // Switched: the flow cell trades places with the exhaust cell under the ports.
-    valve.setSwapped(active);
+    // Switched: the valve slides over, the flow cell under the ports, like every 3/2 valve.
+    valve.setActive(active);
+    // Port 1 doesn't slide, so the supply's tap on its line stays put - in the mover's own
+    // coordinates, that's one cell further back while switched.
+    const tapX = port1X - (active ? SLIDING_VALVE_W / 2 : 0);
+    supplyRun.setAttribute('x1', String(tapX));
+    tap.setAttribute('cx', String(tapX));
   }
 
   const comp: Component = {

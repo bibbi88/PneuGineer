@@ -64,6 +64,27 @@ describe('pressure sequence valve', () => {
     expect(valve.conductivityRule(noPressure)).toEqual(CLOSED);
   });
 
+  it('slides over when it switches, like any 3/2 valve, its supply still tapping port 1', () => {
+    const valve = createPressureSequenceValve(layer(), 0, 0);
+    const mover = valve.el.querySelector('svg.compSvg > g') as SVGGElement;
+    const shift = (): number =>
+      Number(/translate\(([-\d.]+)/.exec(mover.getAttribute('transform') ?? '')?.[1]);
+    // The tap dot is drawn on the mover; where it lands on the canvas is mover shift + its cx.
+    const tapOnCanvas = (): number => {
+      const dot = [...mover.querySelectorAll('circle')].find((c) => c.getAttribute('r') === '2.5');
+      return shift() + Number(dot?.getAttribute('cx'));
+    };
+    const restShift = shift();
+    const restTap = tapOnCanvas();
+
+    valve.step?.(0.1, ctx(true, 6));
+    expect(shift()).toBeGreaterThan(restShift);
+    expect(tapOnCanvas()).toBeCloseTo(restTap, 6);
+
+    valve.step?.(0.1, ctx(true, 0));
+    expect(shift()).toBe(restShift);
+  });
+
   it('is in the library under its English name', () => {
     const entry = componentRegistry.get(PRESSURE_SEQUENCE_VALVE_TYPE);
     expect(entry?.placeable).toBe(true);
