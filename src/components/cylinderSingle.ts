@@ -3,6 +3,14 @@ import { uid } from '../core/ids';
 import { buildComponentShell, createSvgEl, createPort } from './shared/svgHelpers';
 import { nextCylinderLetter, isCylinderLetterInUse } from './shared/letters';
 import { BASE_CYL_SPEED } from '../sim/constants';
+import type { FlowDevice } from '../sim/flowNetwork';
+import {
+  P_ATM,
+  stepSingleCylinder,
+  toGaugeBar,
+  type SingleCylinderSpec,
+  type SingleCylinderState,
+} from '../sim/flowModel';
 import { redrawAllConnections } from '../wires/connection';
 import { appState } from '../app/AppState';
 import {
@@ -165,6 +173,21 @@ export function drawCylinderSingleBody(
 
 type CylinderMode = 'push' | 'pull';
 
+/** Flow-mode defaults - see cylinderDouble.ts, which these match. */
+const DEFAULT_STROKE_MM = 100;
+const DEFAULT_MASS_KG = 1;
+const DEFAULT_LOAD_N = 0;
+/** Flow capacity of the port's fitting, dm³/(s·bar). */
+const PORT_CONDUCTANCE = 0.8;
+/** Return spring, as a share of the air force at 6 bar: at rest, and fully compressed. */
+const SPRING_AT_REST = 0.06;
+const SPRING_COMPRESSED = 0.14;
+
+/** A gauge pressure as shown beside the port - one decimal, and never "-0.0". */
+function formatBar(bar: number): string {
+  return `${(Math.abs(bar) < 0.05 ? 0 : bar).toFixed(1)} bar`;
+}
+
 export function createCylinderSingle(compLayer: HTMLElement, x: number, y: number): Component {
   const geo = CYLINDER_SINGLE_DEFAULT_GEOMETRY;
   let letter = nextCylinderLetter();
@@ -195,6 +218,22 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
   let boreDiameter = DEFAULT_BORE_DIAMETER_MM;
   let rodDiameter = DEFAULT_ROD_DIAMETER_MM;
   let showForce = false;
+  let strokeMm = DEFAULT_STROKE_MM;
+  let massKg = DEFAULT_MASS_KG;
+  let loadN = DEFAULT_LOAD_N;
+  // Flow mode's physical state (not saved - it starts from rest each run, like the logic
+  // model's own state).
+  let flow: SingleCylinderState = { p: P_ATM, x: 0, v: 0 };
+  let flowStarted = false;
+  let frameFlow = { q: 0, time: 0 };
+
+  const pressureLabel = createSvgEl('text', {
+    y: geo.h + geo.portMargin + 16,
+    'font-size': 10,
+    class: 'cylPressure',
+  });
+  pressureLabel.style.display = 'none';
+  g.appendChild(pressureLabel);
 
   const forceLabelEl = document.createElement('div');
   forceLabelEl.className = 'forceLabel';
@@ -224,6 +263,78 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
   }
   updatePortSide();
 
+  function flowSpec(): SingleCylinderSpec {
+    const bore = boreAreaMm2(boreDiameter) * 1e-6;
+    const area = mode === 'push' ? bore : annularAreaMm2(boreDiameter, rodDiameter) * 1e-6;
+    const stroke = Math.max(strokeMm, 1) / 1000;
+    const fullForce = area * 6e5;
+    return {
+      area,
+      airDirection: mode === 'push' ? 1 : -1,
+      stroke,
+      mass: Math.max(massKg, 0.05),
+      load: loadN,
+      deadVolume: bore * 0.01 + 1e-6,
+      friction: 0.03 * bore * 6e5 + 5,
+      damping: 50,
+      restX: normallyExtended ? stroke : 0,
+      springPreload: SPRING_AT_REST * fullForce,
+      springRate: ((SPRING_COMPRESSED - SPRING_AT_REST) * fullForce) / stroke,
+    };
+  }
+
+  /** The cylinder's part in flow mode's network (sim/flowNetwork.ts): its air chamber is joined
+   * to the line at port A through the port's fitting; the spring side is vented. */
+  function flowDevice(): FlowDevice | null {
+    if (appState.simulationMode !== 'flow') return null;
+    const spec = flowSpec();
+    if (!flowStarted) {
+      flow = { p: P_ATM, x: pos * spec.stroke, v: 0 };
+      flowStarted = true;
+    }
+    frameFlow = { q: 0, time: 0 };
+    return {
+      ports: ['A'],
+      substep(h, netPressure) {
+        const q = stepSingleCylinder(
+          flow,
+          spec,
+          { kind: 'node', pressure: netPressure('A'), conductance: PORT_CONDUCTANCE },
+          h,
+        );
+        frameFlow.q += q * h;
+        frameFlow.time += h;
+        return { A: q };
+      },
+    };
+  }
+
+  /** Flow mode's per-frame update, after the network has moved the piston. */
+  function stepFlow(ctx: SimStepContext): void {
+    const spec = flowSpec();
+    pos = flow.x / spec.stroke;
+    updateVisual();
+
+    const TINY = 1e-6; // kg/s
+    const q = frameFlow.time ? frameFlow.q / frameFlow.time : 0;
+    fillingNow = q > TINY;
+    ventingNow = q < -TINY;
+
+    pressureLabel.setAttribute('x', String(ports.A.cx + 7));
+    pressureLabel.textContent = formatBar(toGaugeBar(flow.p));
+    pressureLabel.style.display = '';
+
+    if (showForce) {
+      forceLabelEl.textContent = `${((flow.p - P_ATM) * spec.area).toFixed(0)} N`;
+      forceLabelEl.style.display = '';
+    } else {
+      forceLabelEl.style.display = 'none';
+    }
+    for (const sensor of sensors) {
+      ctx.emitSignal(sensor.label, isInSensorRange(pos, sensor));
+    }
+  }
+
   function targetFor(pressurizedA: boolean): number {
     const restTarget = normallyExtended ? 1 : 0;
     return mode === 'push' ? (pressurizedA ? 1 : restTarget) : pressurizedA ? 0 : restTarget;
@@ -246,6 +357,12 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
     },
 
     step(dt: number, ctx: SimStepContext): void {
+      if (ctx.flowMode) {
+        stepFlow(ctx);
+        return;
+      }
+      flowStarted = false;
+      pressureLabel.style.display = 'none';
       const pressurizedA = ctx.isPressurized('A');
       const target = targetFor(pressurizedA);
       // While air is coming in through A, only the supply side can restrict it (the spring side
@@ -308,6 +425,9 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
         boreDiameter,
         rodDiameter,
         showForce,
+        strokeMm,
+        massKg,
+        loadN,
       };
     },
     restore(data: Record<string, unknown>): void {
@@ -321,6 +441,9 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
       boreDiameter = (data.boreDiameter as number) || DEFAULT_BORE_DIAMETER_MM;
       rodDiameter = (data.rodDiameter as number) || DEFAULT_ROD_DIAMETER_MM;
       showForce = Boolean(data.showForce);
+      strokeMm = Number(data.strokeMm) || DEFAULT_STROKE_MM;
+      massKg = Number(data.massKg) || DEFAULT_MASS_KG;
+      loadN = Number.isFinite(Number(data.loadN)) ? Number(data.loadN) : DEFAULT_LOAD_N;
       // The actual force value depends on live pressurization, only known during step() - this
       // just gets the checkbox's own on/off state to take effect immediately (showing 0 N until
       // the sim's next tick recomputes it) instead of waiting on that next tick to even appear.
@@ -334,6 +457,8 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
       pos = normallyExtended ? 1 : 0;
       ventingNow = false;
       fillingNow = false;
+      flowStarted = false;
+      pressureLabel.style.display = 'none';
       if (showForce) forceLabelEl.textContent = '0 N';
       updateVisual();
     },
@@ -345,6 +470,7 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
     },
     getBounds: shell.getBounds,
     setSelected: shell.setSelected,
+    flowDevice,
     currentlyVenting: () => (ventingNow ? ['A'] : []),
     currentlyFilling: () => (fillingNow ? ['A'] : []),
 

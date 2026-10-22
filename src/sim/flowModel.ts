@@ -153,29 +153,97 @@ export function stepCylinder(
 
     // Pressure force (gauge on both sides: atmosphere acts on the rod's own cross-section).
     const drive = (state.pA - P_ATM) * spec.areaA - (state.pB - P_ATM) * spec.areaB - spec.load;
-
-    if (Math.abs(state.v) < 1e-6 && Math.abs(drive) <= spec.friction) {
-      // Static friction holds it.
-      state.v = 0;
-    } else {
-      const dir = state.v !== 0 ? Math.sign(state.v) : Math.sign(drive);
-      const accel = (drive - dir * spec.friction - spec.damping * state.v) / spec.mass;
-      const vNext = state.v + accel * h;
-      // Friction can stop the piston, never push it back the other way.
-      state.v = state.v !== 0 && Math.sign(vNext) !== Math.sign(state.v) ? 0 : vNext;
-    }
-
-    state.x += state.v * h;
-    if (state.x <= 0) {
-      state.x = 0;
-      if (state.v < 0) state.v = 0;
-    } else if (state.x >= spec.stroke) {
-      state.x = spec.stroke;
-      if (state.v > 0) state.v = 0;
-    }
+    movePiston(state, drive, spec, h);
   }
 
   return { qA: sumA / steps, qB: sumB / steps };
+}
+
+/** One integration step of the piston: `drive` is the net force on it (N, positive extending)
+ * before friction. Static friction holds it until `drive` exceeds it; moving, it's opposed by
+ * friction and damping, and it stops dead at either end stop. */
+function movePiston(
+  state: { x: number; v: number },
+  drive: number,
+  spec: { mass: number; friction: number; damping: number; stroke: number },
+  h: number,
+): void {
+  if (Math.abs(state.v) < 1e-6 && Math.abs(drive) <= spec.friction) {
+    state.v = 0;
+  } else {
+    const dir = state.v !== 0 ? Math.sign(state.v) : Math.sign(drive);
+    const accel = (drive - dir * spec.friction - spec.damping * state.v) / spec.mass;
+    const vNext = state.v + accel * h;
+    // Friction can stop the piston, never push it back the other way.
+    state.v = state.v !== 0 && Math.sign(vNext) !== Math.sign(state.v) ? 0 : vNext;
+  }
+  state.x += state.v * h;
+  if (state.x <= 0) {
+    state.x = 0;
+    if (state.v < 0) state.v = 0;
+  } else if (state.x >= spec.stroke) {
+    state.x = spec.stroke;
+    if (state.v > 0) state.v = 0;
+  }
+}
+
+export interface SingleCylinderSpec {
+  /** Area the air acts on, m² - the full bore when it pushes the rod out, the bore less the rod
+   * when it pulls it in. */
+  area: number;
+  /** +1: air extends the rod (its chamber is at the cap end, growing as the rod comes out);
+   * -1: air retracts it (chamber at the rod end, growing as the rod goes in). */
+  airDirection: 1 | -1;
+  stroke: number;
+  mass: number;
+  /** External force opposing extension, N. */
+  load: number;
+  deadVolume: number;
+  friction: number;
+  damping: number;
+  /** Where the spring returns the piston to, m (0 or stroke). */
+  restX: number;
+  /** Spring force at its rest position, N, and how much it grows per metre compressed. */
+  springPreload: number;
+  springRate: number;
+}
+
+export interface SingleCylinderState {
+  /** Absolute pressure in the air chamber, Pa (the spring side is vented to atmosphere). */
+  p: number;
+  x: number;
+  v: number;
+}
+
+/** Advances a single-acting cylinder by `dt` seconds, mutating `state`; returns the average
+ * mass flow into its air chamber, kg/s. */
+export function stepSingleCylinder(
+  state: SingleCylinderState,
+  spec: SingleCylinderSpec,
+  feed: PortFeed,
+  dt: number,
+): number {
+  const steps = Math.max(1, Math.ceil(dt / SUBSTEP));
+  const h = dt / steps;
+  const rt = R_AIR * T_AIR;
+  let sum = 0;
+  for (let i = 0; i < steps; i++) {
+    const q = chamberFlow(state.p, feed);
+    sum += q;
+    const travel = spec.airDirection > 0 ? state.x : spec.stroke - state.x;
+    const volume = spec.area * travel + spec.deadVolume;
+    const dV = spec.area * state.v * spec.airDirection;
+    state.p += (POLYTROPIC_N * (rt * q - state.p * dV) * h) / volume;
+    state.p = Math.max(state.p, 1);
+
+    const compressed = Math.abs(state.x - spec.restX);
+    const springToward =
+      spec.restX > state.x || (spec.restX === state.x && spec.restX > 0) ? 1 : -1;
+    const spring = springToward * (spec.springPreload + spec.springRate * compressed);
+    const drive = spec.airDirection * (state.p - P_ATM) * spec.area + spring - spec.load;
+    movePiston(state, drive, spec, h);
+  }
+  return sum / steps;
 }
 
 /** Standard volumetric flow (ANR, litres per minute) for a mass flow in kg/s - how air

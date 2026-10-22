@@ -10,6 +10,8 @@ import { createCylinderDouble } from '../components/cylinderDouble';
 import { createPressureSequenceValve } from '../components/pressureSequenceValve';
 import { createPressureReducingValve } from '../components/pressureReducingValve';
 import { createOneWayFlowControlValve } from '../components/oneWayFlowControlValve';
+import { createCylinderSingle } from '../components/cylinderSingle';
+import { createPushButton32 } from '../components/pushButton32';
 import type { Component } from '../core/types';
 import type { ViewportAdapter } from '../ui/viewport';
 
@@ -130,5 +132,51 @@ describe('flow network', () => {
       }
     }
     expect(switchedAt).toBe(1);
+  });
+});
+
+describe('single-acting cylinder in flow mode', () => {
+  function single(data: Record<string, unknown> = {}): Component {
+    const cyl = add(createCylinderSingle(layer(), 0, 0));
+    cyl.restore({ ...cyl.snapshot(), ...data });
+    return cyl;
+  }
+
+  it('extends on air in push mode', () => {
+    const source = add(createSource(layer(), 0, 0));
+    const cyl = single();
+    wire(source, 'OUT', cyl, 'A');
+    for (let i = 0; i < 100 && pos(cyl) < 1; i++) stepSimulation(0.01);
+    expect(pos(cyl)).toBe(1);
+    for (let i = 0; i < 50; i++) stepSimulation(0.02);
+    expect(bar(cyl, 'A')).toBeGreaterThan(5.9);
+  });
+
+  it('is returned by its spring once its air is let out', () => {
+    // A normally-closed push-button valve, at rest, vents the cylinder through its port 3.
+    const source = add(createSource(layer(), 0, 0));
+    const button = add(createPushButton32(layer(), 0, 0));
+    const cyl = single({ pos: 1 });
+    wire(source, 'OUT', button, '1');
+    wire(button, '2', cyl, 'A');
+    for (let i = 0; i < 200 && pos(cyl) > 0; i++) stepSimulation(0.01);
+    expect(pos(cyl)).toBe(0);
+  });
+
+  it('retracts on air in pull mode', () => {
+    const source = add(createSource(layer(), 0, 0));
+    const cyl = single({ pos: 1, mode: 'pull', normallyExtended: true });
+    wire(source, 'OUT', cyl, 'A');
+    for (let i = 0; i < 200 && pos(cyl) > 0; i++) stepSimulation(0.01);
+    expect(pos(cyl)).toBe(0);
+  });
+
+  it('cannot push a load heavier than its air force less its spring', () => {
+    const source = add(createSource(layer(), 0, 0));
+    // 32 mm at 6 bar: about 480 N of air, of which the spring takes 30-70 N.
+    const cyl = single({ loadN: 450 });
+    wire(source, 'OUT', cyl, 'A');
+    for (let i = 0; i < 100; i++) stepSimulation(0.02);
+    expect(pos(cyl)).toBeLessThan(1);
   });
 });

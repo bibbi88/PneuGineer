@@ -21,9 +21,12 @@ switch picks the model, and the choice is saved with the project (`simulation.mo
    valve on a **meter-in** line switches at the end of stroke (with meter-out, or no throttle, the
    driving line is near supply pressure the whole stroke, as in a real circuit).
 
+3. **Single-acting cylinder**: one air chamber (cap end in push mode, rod end in pull mode)
+   and a return spring (6 % of the air force at 6 bar at rest, 14 % fully compressed); the
+   spring side is vented. Same stroke/mass/load settings.
+
 ## Next steps, in order
 
-3. **Single-acting cylinder** in flow mode (one chamber + spring).
 4. **Pilots switch on real pressure** (a minimum pilot pressure, e.g. 1.5 bar), and the time
    delay valve's reservoir fills through its throttle instead of using a timer.
 5. **Per-component flow ratings** (C values, optionally editable) and **air consumption** /
