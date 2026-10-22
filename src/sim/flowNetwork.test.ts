@@ -1,4 +1,4 @@
-import { beforeEach, afterEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { appState } from '../app/AppState';
 import { initWires, createConnection, removeConnection } from '../wires/connection';
 import { stepSimulation } from './engine';
@@ -16,6 +16,13 @@ import { createThrottleValve } from '../components/throttleValve';
 import { createTimeDelayValve } from '../components/timeDelayValve';
 import type { Component } from '../core/types';
 import type { ViewportAdapter } from '../ui/viewport';
+import { getDefaultFlowScale, setDefaultFlowScale } from './flowRatings';
+
+// These check the physics at real-world ratings; the slowed-down teaching default is pinned
+// separately (flowRatings.test.ts).
+const teachingScale = getDefaultFlowScale();
+beforeAll(() => setDefaultFlowScale(1));
+afterAll(() => setDefaultFlowScale(teachingScale));
 
 const layer = (): HTMLElement => document.createElement('div');
 const viewport: ViewportAdapter = {

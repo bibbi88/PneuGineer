@@ -1,6 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { appState } from '../app/AppState';
-import { initWires, createConnection } from '../wires/connection';
+import { initWires, createConnection, removeConnection } from '../wires/connection';
 import { stepSimulation } from './engine';
 import { resetFlowNetwork } from './flowNetwork';
 import {
@@ -28,6 +28,13 @@ import { createCheckValve } from '../components/checkValve';
 import { createJunction } from '../components/junction';
 import type { Component } from '../core/types';
 import type { ViewportAdapter } from '../ui/viewport';
+import { getDefaultFlowScale, setDefaultFlowScale } from './flowRatings';
+
+// These check the physics at real-world ratings; the slowed-down teaching default is pinned
+// separately (flowRatings.test.ts).
+const teachingScale = getDefaultFlowScale();
+beforeAll(() => setDefaultFlowScale(1));
+afterAll(() => setDefaultFlowScale(teachingScale));
 
 const layer = (): HTMLElement => document.createElement('div');
 const viewport: ViewportAdapter = {
@@ -289,5 +296,65 @@ describe('flow rating in the inspector', () => {
     const el = inspectorFor(createJunction(layer(), 0, 0));
     expect(ratingInput(el)).toBeNull();
     expect(el.querySelector('.criticalRatioInput')).toBeNull();
+  });
+});
+
+describe('the teaching default', () => {
+  beforeEach(() => {
+    setDefaultFlowScale(teachingScale);
+    appState.simulationMode = 'flow';
+    resetFlowNetwork();
+    initWires(document.createElementNS('http://www.w3.org/2000/svg', 'svg'), viewport, layer());
+  });
+  afterEach(() => {
+    setDefaultFlowScale(1);
+    appState.simulationMode = 'logic';
+  });
+
+  it('strokes a 32 x 100 mm cylinder on a 5/2 valve in 2-3 s each way', () => {
+    const add = <T extends Component>(c: T): T => {
+      appState.addComponent(c);
+      return c;
+    };
+    const source = add(createSource(layer(), 0, 0));
+    const valve = add(createValve52Mono(layer(), 0, 0));
+    const cyl = add(createCylinderDouble(layer(), 0, 0));
+    createConnection({ id: source.id, port: 'OUT' }, { id: valve.id, port: '1' });
+    createConnection({ id: valve.id, port: '4' }, { id: cyl.id, port: 'A' });
+    createConnection({ id: valve.id, port: '2' }, { id: cyl.id, port: 'B' });
+    for (let i = 0; i < 300; i++) stepSimulation(0.02);
+    const pilot = createConnection({ id: source.id, port: 'OUT' }, { id: valve.id, port: '14' });
+    const pos = (): number => (cyl.snapshot() as { pos: number }).pos;
+
+    let out = Infinity;
+    for (let t = 0; t < 10; t += 0.02) {
+      stepSimulation(0.02);
+      if (pos() >= 1) {
+        out = t;
+        break;
+      }
+    }
+    expect(out).toBeGreaterThan(1.8);
+    expect(out).toBeLessThan(3);
+
+    // Back again once the pilot is taken away - a little slower, as the larger full-bore chamber
+    // now has to empty through the valve's exhaust.
+    for (let i = 0; i < 200; i++) stepSimulation(0.02);
+    removeConnection(pilot.id);
+    let back = Infinity;
+    for (let t = 0; t < 10; t += 0.02) {
+      stepSimulation(0.02);
+      if (pos() <= 0) {
+        back = t;
+        break;
+      }
+    }
+    expect(back).toBeGreaterThan(out);
+    expect(back).toBeLessThan(3);
+  });
+
+  it('leaves a flow meter at its full rating, so it still barely restricts the line', () => {
+    expect(defaultFlowRating('flowMeter')).toBe(2);
+    expect(defaultFlowRating('valve52')).toBeCloseTo(0.6 * teachingScale, 9);
   });
 });

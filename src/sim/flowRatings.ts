@@ -83,8 +83,28 @@ export function hasFlowRating(type: string): boolean {
   return type in DEFAULT_FLOW_RATINGS;
 }
 
+/** Scale on the typical ratings above, for teaching: at their real-world values a training
+ * cylinder strokes in a fifth of a second - too fast to follow what's happening. 0.075 slows the
+ * defaults so a 32 x 100 mm cylinder on a 5/2 valve takes 2-3 s each way (2.2 s out, 2.8 s back;
+ * see flowRatings.test.ts).
+ * Ratings the user enters - as C or as Nl/min from a data sheet - are used as entered. */
+let defaultFlowScale = 0.075;
+/** Kinds left at their full rating: a flow meter should barely restrict what it measures. */
+const UNSCALED = new Set(['flowMeter']);
+
+/** The scale currently applied to typical ratings. */
+export function getDefaultFlowScale(): number {
+  return defaultFlowScale;
+}
+
+/** For tests that check behaviour at real-world ratings (scale 1). */
+export function setDefaultFlowScale(scale: number): void {
+  defaultFlowScale = scale;
+}
+
 export function defaultFlowRating(type: string): number {
-  return DEFAULT_FLOW_RATINGS[type] ?? FALLBACK;
+  const typical = DEFAULT_FLOW_RATINGS[type] ?? FALLBACK;
+  return UNSCALED.has(type) ? typical : typical * defaultFlowScale;
 }
 
 /** Bounds the inspector accepts for a standard nominal flow, Nl/min. */
