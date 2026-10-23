@@ -10,7 +10,8 @@ import {
 } from './shared/slidingValve32';
 import { getSignal } from '../sim/signals';
 import { appState } from '../app/AppState';
-import { isSensorKeyBoundElsewhere } from './shared/sensorPositions';
+import { isSensorKeyBoundElsewhere, isSensorTriggeredAtRest } from './shared/sensorPositions';
+import { Modes } from '../app/modes';
 import { addSpringZigzag, SPRING_DEFAULT_GEOMETRY } from './shared/spring';
 
 export const LIMIT_VALVE_32_TYPE = 'limitValve32';
@@ -55,11 +56,13 @@ export const LIMIT_VALVE_32_DEFAULT_GEOMETRY: LimitValve32Geometry = {
 };
 
 /** Draws the roller lever + arms + spring into the mover, matching the original app's
- * roller-lever limit-switch artwork. Coordinates are local to the mover, not the canvas. */
+ * roller-lever limit-switch artwork. Coordinates are local to the mover, not the canvas.
+ * `cam` is the cylinder's trip cam pressing the roller, the sign that the valve is held
+ * actuated - hidden until the caller shows it. */
 export function drawLimitValve32Actuator(
   mover: SVGGElement,
   geo: LimitValve32Geometry,
-): { sensorLabel: SVGTextElement } {
+): { sensorLabel: SVGTextElement; cam: SVGElement } {
   const rollerGroup = createSvgEl('g', {
     transform: `translate(${geo.rollerX}, ${SLIDING_VALVE_H / 2})`,
   });
@@ -107,13 +110,23 @@ export function drawLimitValve32Actuator(
   });
   rollerGroup.appendChild(sensorLabel);
 
+  // A solid wedge pointing at the roller from outside, its tip touching it.
+  const camTip = geo.rollerCenterX - geo.rollerOuterR - 1;
+  const cam = createSvgEl('path', {
+    d: `M ${camTip} 0 L ${camTip - 14} -8 L ${camTip - 14} 8 Z`,
+    fill: '#111',
+    class: 'limitValveCam',
+  });
+  cam.style.display = 'none';
+  rollerGroup.appendChild(cam);
+
   const spring = createSvgEl('g', {
     transform: `translate(${SLIDING_VALVE_W}, ${SLIDING_VALVE_H / 2})`,
   });
   addSpringZigzag(spring, 0, geo.springSpan, 0, 2, geo);
 
   mover.append(rollerGroup, spring);
-  return { sensorLabel };
+  return { sensorLabel, cam };
 }
 
 export function createLimitValve32(compLayer: HTMLElement, x: number, y: number): Component {
@@ -134,7 +147,7 @@ export function createLimitValve32(compLayer: HTMLElement, x: number, y: number)
     },
   );
   const valve = buildSlidingValve32Body(shell.svg, `arrow-limit-${uid()}`);
-  const { sensorLabel } = drawLimitValve32Actuator(valve.mover, geo);
+  const { sensorLabel, cam } = drawLimitValve32Actuator(valve.mover, geo);
 
   const id = uid();
 
@@ -172,6 +185,24 @@ export function createLimitValve32(compLayer: HTMLElement, x: number, y: number)
   updateLabel();
   appState.onChange(updateLabel);
 
+  /** Shows the valve actuated (or not), with the cam on its roller when it's its cylinder
+   * holding it there. */
+  function draw(actuated: boolean): void {
+    valve.setActive(actuated);
+    cam.style.display = actuated && sensorKey ? '' : 'none';
+  }
+
+  // While the simulation is stopped the valve is drawn in the circuit's initial position, as
+  // circuit diagrams are: actuated if its cylinder rests on its sensor (e.g. a0 with the
+  // cylinder retracted) - so it reads, and exports, the way it starts. Only the drawing:
+  // `active`, what the simulation and the saved project go by, is untouched.
+  function drawRestState(): void {
+    if (appState.mode !== Modes.STOP) return;
+    draw(sensorKey !== '' && isSensorTriggeredAtRest(sensorKey));
+  }
+  appState.onChange(drawRestState);
+  appState.onModeChange(drawRestState);
+
   const comp: Component = {
     id,
     type: LIMIT_VALVE_32_TYPE,
@@ -190,7 +221,7 @@ export function createLimitValve32(compLayer: HTMLElement, x: number, y: number)
 
     recompute(): void {
       active = sensorKey ? getSignal(sensorKey) : manualActive;
-      valve.setActive(active);
+      draw(active);
     },
 
     snapshot(): Record<string, unknown> {
@@ -212,12 +243,14 @@ export function createLimitValve32(compLayer: HTMLElement, x: number, y: number)
       valve.setSilencer((data.silencer3 as 'none' | 'silencer') ?? 'silencer');
       updateLabel();
       valve.setSwapped(normallyOpen);
-      valve.setActive(active);
+      draw(active);
+      drawRestState();
     },
     reset(): void {
       active = false;
       manualActive = false;
-      valve.setActive(false);
+      draw(false);
+      drawRestState();
     },
 
     setPos(nx: number, ny: number): void {
