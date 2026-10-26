@@ -10,6 +10,10 @@ import {
 } from '../wires/connection';
 import { selectOnly } from './selection';
 import { ELEC_COIL_TYPE, ELEC_SOLENOID_TYPE } from '../components/electrical';
+import { AND_VALVE_TYPE } from '../components/andValve';
+import { OR_VALVE_TYPE } from '../components/orValve';
+import { hitBoundsOf } from '../components/shared/svgHelpers';
+import { getComponentRotation, setComponentRotation } from './componentContextMenu';
 
 let ctxRef: ComponentFactoryContext | null = null;
 let viewportRef: ViewportAdapter | null = null;
@@ -39,7 +43,8 @@ export function swapComponentType(comp: Component, newType: string): void {
   const { x, y } = comp;
   // Contact <-> push button keeps its NO/NC choice, relay coil <-> solenoid keeps its name;
   // other swaps have no such fields.
-  const { normallyClosed, key } = comp.snapshot() as Record<string, unknown>;
+  const { normallyClosed, key, showName, customName } = comp.snapshot() as Record<string, unknown>;
+  const rotation = getComponentRotation(comp);
   const keepsKey =
     (comp.type === ELEC_COIL_TYPE || comp.type === ELEC_SOLENOID_TYPE) &&
     (newType === ELEC_COIL_TYPE || newType === ELEC_SOLENOID_TYPE);
@@ -57,6 +62,9 @@ export function swapComponentType(comp: Component, newType: string): void {
   appState.runSuppressed(() => {
     removeComponentAndConnections(comp.id);
     const next = spawnComponent(newType, ctxRef!, viewportRef!, x, y);
+    // It takes the old one's place as it was: turned the same way, named the same.
+    setComponentRotation(next, rotation);
+    if (showName !== undefined) next.restore({ ...next.snapshot(), showName, customName });
     if (normallyClosed !== undefined) next.restore({ ...next.snapshot(), normallyClosed });
     if (keepsKey && typeof key === 'string') next.restore({ ...next.snapshot(), key });
 
@@ -79,4 +87,21 @@ export function swapComponentType(comp: Component, newType: string): void {
 
     selectOnly(next.id);
   });
+}
+
+/** Component types that swap into one another when one is dropped from the library onto the
+ * other - the same ports, so every wire carries over. */
+const DROP_SWAP_FAMILIES: Array<Set<string>> = [new Set([AND_VALVE_TYPE, OR_VALVE_TYPE])];
+
+/** The component a library drop of `type` at `world` would swap out - one of the other types in
+ * its swap family whose body is under the drop point - or null. */
+export function dropSwapTarget(type: string, world: { x: number; y: number }): Component | null {
+  const family = DROP_SWAP_FAMILIES.find((f) => f.has(type));
+  if (!family) return null;
+  for (const c of appState.components) {
+    if (c.type === type || !family.has(c.type)) continue;
+    const b = hitBoundsOf(c.el) ?? c.getBounds();
+    if (world.x >= b.x && world.x <= b.x + b.w && world.y >= b.y && world.y <= b.y + b.h) return c;
+  }
+  return null;
 }

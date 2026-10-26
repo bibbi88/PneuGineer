@@ -6,6 +6,7 @@ import { canEdit } from '../app/modes';
 import { snap } from '../core/grid';
 import { getComponentRotation, setComponentRotation } from './componentContextMenu';
 import { placeComponent } from './spawn';
+import { dropSwapTarget, swapComponentType } from './valveActuatorSwap';
 import {
   findNearestWireHit,
   isWireInsertableType,
@@ -36,6 +37,15 @@ interface ActiveDrag {
 
 let active: ActiveDrag | null = null;
 let handler: LibraryDragHandler | null = null;
+/** The component a drop here would swap out (see dropSwapTarget), marked while hovered. */
+let swapTarget: Component | null = null;
+
+function setSwapTarget(c: Component | null): void {
+  if (swapTarget === c) return;
+  swapTarget?.el.classList.remove('swapTarget');
+  c?.el.classList.add('swapTarget');
+  swapTarget = c;
+}
 
 export function isLibraryDragActive(): boolean {
   return active !== null;
@@ -91,6 +101,7 @@ export function initLibraryDrag(
   function finish(): void {
     removeGhost();
     setWireInsertHighlight(null);
+    setSwapTarget(null);
     active = null;
     document.body.classList.remove('libraryDragging');
     window.removeEventListener('mousedown', onRightMouseDown, true);
@@ -110,9 +121,11 @@ export function initLibraryDrag(
       if (!overCanvas(clientX, clientY)) {
         if (active.ghost) active.ghost.el.style.display = 'none';
         setWireInsertHighlight(null);
+        setSwapTarget(null);
         return;
       }
       const world = viewport.clientToWorld(clientX, clientY);
+      setSwapTarget(dropSwapTarget(active.type, world));
       if (!active.ghost) {
         const { type } = active;
         const ghost = createComponent(type, ctx, snap(world.x), snap(world.y));
@@ -135,6 +148,13 @@ export function initLibraryDrag(
       finish();
       if (!overCanvas(clientX, clientY) || !canEdit(appState.mode)) return;
       const world = viewport.clientToWorld(clientX, clientY);
+      // Dropped on its counterpart (an OR valve on an AND valve, say): that one becomes this
+      // type, in place, wires and all.
+      const target = dropSwapTarget(type, world);
+      if (target) {
+        swapComponentType(target, type);
+        return;
+      }
       // Dropping a check/throttle/one-way-flow valve (etc.) close enough to an existing wire
       // splices it into that wire instead of landing unconnected on top of it - see
       // interaction/wireInsertion.ts for which types support this and why.
