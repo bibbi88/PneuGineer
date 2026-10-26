@@ -49,6 +49,12 @@ export interface ConductivityContext {
   isPressurized(port: PortKey): boolean;
 }
 
+/** What a component's flow-mode passages can depend on (see `flowConductivityRule`). */
+export interface FlowConductivityContext {
+  /** Gauge pressure, bar, in the line at `port` right now. */
+  pressureAt(port: PortKey): number;
+}
+
 export interface SimStepContext {
   dt: number;
   /** True in flow simulation mode (see AppState.simulationMode): components that model flow
@@ -136,6 +142,12 @@ export interface Component<TSnapshot = Record<string, unknown>> {
   flowCriticalRatio?: number;
 
   conductivityRule(ctx: ConductivityContext): PortConnection[];
+  /** Flow mode only: the passages air actually has through this component, decided by the real
+   * line pressures rather than the logic graph's on/off view - for a valve whose shuttle the
+   * pressures themselves move (the AND and OR valves). In the on/off view such a valve can be
+   * left with no passage at all, shutting the air in its output line in. The logic graph (what
+   * the lines are coloured and other valves switched by) still goes by `conductivityRule`. */
+  flowConductivityRule?(ctx: FlowConductivityContext): PortConnection[];
   flowMultiplier?(fromPort: PortKey, toPort: PortKey): number;
   /** Ceiling, in bar, this component imposes on air crossing from `fromPort` to `toPort` - a
    * pressure-reducing valve's set pressure. null (or omitted) means it imposes none, which is

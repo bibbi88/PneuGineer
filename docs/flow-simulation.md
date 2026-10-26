@@ -52,9 +52,15 @@ switch picks the model, and the choice is saved with the project (`simulation.mo
    the simulation started, in litres - air per cycle. High flow rating (C 2, b 0.5) so it barely
    restricts the line. Reads `flowThrough()`, the network's per-path flow.
 
+8. **AND and OR valves by pressure** (`src/components/shared/shuttle.ts`): their passages in
+   the flow network come from the real input pressures (`Component.flowConductivityRule`), as a
+   shuttle's position does - an AND valve's output is open to its lower input, an OR valve's to
+   its higher one. So the output vents back through the input whose signal has gone, instead of
+   being shut in at full pressure.
+
 ## Still open
 
 7. The supply is ideal (unlimited flow at 6 bar); a supply/service-unit rating would make
    pressure sag when many cylinders move at once.
-8. Still decided by the logic graph rather than pressure: AND/OR (two-pressure/shuttle) valves
-   and the quick-exhaust valve's switching; valves switch instantly (no switching time).
+8. Still decided by the logic graph rather than pressure: the quick-exhaust valve's switching;
+   valves switch instantly (no switching time).

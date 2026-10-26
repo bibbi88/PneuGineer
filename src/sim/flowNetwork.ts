@@ -216,17 +216,26 @@ function buildEdges(
   components: Component[],
   graph: FrameGraph,
   topo: Topology,
+  pressureOf: (net: Net) => number,
   pilotActuated?: (key: PortKeyStr) => boolean,
 ): Edge[] {
   const edges: Edge[] = [];
   for (const c of components) {
-    // The same view of each port the logic graph took - pilots by their real pressure.
-    const rules = c.conductivityRule({
-      isPressurized: (p) =>
-        pilotActuated && c.ports[p]?.isPilot
-          ? pilotActuated(portKey(c.id, p))
-          : graph.pressurized.has(portKey(c.id, p)),
-    });
+    // A component moved by the line pressures themselves says so from them; everything else
+    // takes the same view of each port the logic graph took - pilots by their real pressure.
+    const rules = c.flowConductivityRule
+      ? c.flowConductivityRule({
+          pressureAt: (p) => {
+            const net = topo.netOf.get(portKey(c.id, p));
+            return ((net ? pressureOf(net) : P_ATM) - P_ATM) / BAR;
+          },
+        })
+      : c.conductivityRule({
+          isPressurized: (p) =>
+            pilotActuated && c.ports[p]?.isPilot
+              ? pilotActuated(portKey(c.id, p))
+              : graph.pressurized.has(portKey(c.id, p)),
+        });
     const rating = flowRatingOf(c);
     const criticalRatio = criticalRatioOf(c);
     for (const rule of rules) {
@@ -277,16 +286,16 @@ export function stepFlowNetwork(
     topology = buildTopology(components);
   }
   const topo = topology;
-  const edges = buildEdges(components, graph, topo, pilotActuated);
+  const pressureOf = (net: Net): number => net.fixed ?? pressures.get(net.key) ?? P_ATM;
+  for (const net of topo.nets) {
+    if (net.fixed === null && !pressures.has(net.key)) pressures.set(net.key, P_ATM);
+  }
+
+  const edges = buildEdges(components, graph, topo, pressureOf, pilotActuated);
   const devices: Array<{ comp: Component; device: FlowDevice }> = [];
   for (const c of components) {
     const device = c.flowDevice?.();
     if (device) devices.push({ comp: c, device });
-  }
-
-  const pressureOf = (net: Net): number => net.fixed ?? pressures.get(net.key) ?? P_ATM;
-  for (const net of topo.nets) {
-    if (net.fixed === null && !pressures.has(net.key)) pressures.set(net.key, P_ATM);
   }
 
   const steps = Math.max(1, Math.ceil(dt / SUBSTEP));

@@ -1,6 +1,7 @@
 import type { Component, ConductivityContext, PortConnection } from '../core/types';
 import { uid } from '../core/ids';
 import { buildComponentShell, createSvgEl, createLabeledPort } from './shared/svgHelpers';
+import { orValveFlowRule } from './shared/shuttle';
 
 export const OR_VALVE_TYPE = 'orValve';
 
@@ -146,6 +147,8 @@ export function createOrValve(compLayer: HTMLElement, x: number, y: number): Com
       if (ctx.isPressurized('B')) edges.push({ a: 'B', b: 'OUT' });
       return edges;
     },
+
+    flowConductivityRule: orValveFlowRule,
 
     snapshot(): Record<string, unknown> {
       return { showName: shell.getNameVisible(), customName: shell.getCustomName() };

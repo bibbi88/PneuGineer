@@ -1,6 +1,7 @@
 import type { Component, ConductivityContext, PortConnection } from '../core/types';
 import { uid } from '../core/ids';
 import { buildComponentShell, createSvgEl, createLabeledPort } from './shared/svgHelpers';
+import { andValveFlowRule } from './shared/shuttle';
 
 export const AND_VALVE_TYPE = 'andValve';
 
@@ -135,6 +136,8 @@ export function createAndValve(compLayer: HTMLElement, x: number, y: number): Co
           ]
         : [];
     },
+
+    flowConductivityRule: andValveFlowRule,
 
     snapshot(): Record<string, unknown> {
       return { showName: shell.getNameVisible(), customName: shell.getCustomName() };
