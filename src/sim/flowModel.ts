@@ -144,6 +144,7 @@ export function stepCylinder(
   feedB: PortFeed,
   dt: number,
 ): CylinderFlows {
+  if (!(dt > 0)) return { qA: 0, qB: 0 };
   const steps = Math.max(1, Math.ceil(dt / SUBSTEP));
   const h = dt / steps;
   const rt = R_AIR * T_AIR;
@@ -239,6 +240,7 @@ export function stepSingleCylinder(
   feed: PortFeed,
   dt: number,
 ): number {
+  if (!(dt > 0)) return 0;
   const steps = Math.max(1, Math.ceil(dt / SUBSTEP));
   const h = dt / steps;
   const rt = R_AIR * T_AIR;

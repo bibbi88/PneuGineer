@@ -162,6 +162,20 @@ describe('flow network', () => {
   });
 });
 
+describe('a frame with no time in it', () => {
+  it('leaves every pressure and the piston as they were, instead of turning them into NaN', () => {
+    const { source, valve, cyl } = cylinderCircuit();
+    const before = [bar(cyl, 'A'), bar(cyl, 'B'), pos(cyl)];
+    stepSimulation(0);
+    expect([bar(cyl, 'A'), bar(cyl, 'B'), pos(cyl)]).toEqual(before);
+    // ...and the circuit carries on working.
+    wire(source, 'OUT', valve, '14');
+    for (let i = 0; i < 100; i++) stepSimulation(0.02);
+    expect(Number.isFinite(bar(cyl, 'A'))).toBe(true);
+    expect(pos(cyl)).toBeGreaterThan(0.9);
+  });
+});
+
 describe('single-acting cylinder in flow mode', () => {
   function single(data: Record<string, unknown> = {}): Component {
     const cyl = add(createCylinderSingle(layer(), 0, 0));

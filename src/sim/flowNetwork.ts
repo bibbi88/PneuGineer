@@ -282,6 +282,8 @@ export function stepFlowNetwork(
   dt: number,
   pilotActuated?: (key: PortKeyStr) => boolean,
 ): void {
+  // No time, no air moves - and the per-step limit below divides by the step's length.
+  if (!(dt > 0)) return;
   if (!topology || topology.version !== appState.topologyVersion) {
     topology = buildTopology(components);
   }
@@ -339,7 +341,9 @@ export function stepFlowNetwork(
     // Isothermal lines: p = m R T / V, so dp = R T dm / V.
     for (const [net, q] of massIn) {
       const p = pressureOf(net) + (RT * q * h) / net.volume;
-      pressures.set(net.key, Math.max(1, p));
+      // A value that isn't a number would spread to every line and cylinder it touches and
+      // stop the whole circuit - should anything ever produce one, the line keeps what it had.
+      if (Number.isFinite(p)) pressures.set(net.key, Math.max(1, p));
     }
   }
 
