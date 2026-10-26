@@ -50,8 +50,10 @@ export interface CylinderSingleGeometry {
   rodTipInset: number;
   rodTipWidth: number;
   rodTipHeight: number;
-  springInset: number;
-  springSegment: number;
+  /** Return spring: how many coils it has with room for them, and how far each zig reaches
+   * either side of the center line. */
+  springCoils: number;
+  springAmplitude: number;
 }
 
 export const CYLINDER_SINGLE_DEFAULT_GEOMETRY: CylinderSingleGeometry = {
@@ -75,8 +77,8 @@ export const CYLINDER_SINGLE_DEFAULT_GEOMETRY: CylinderSingleGeometry = {
   rodTipInset: 10,
   rodTipWidth: 10,
   rodTipHeight: 12,
-  springInset: 28,
-  springSegment: 10,
+  springCoils: 6,
+  springAmplitude: 18,
 };
 
 /** Piston/rod/tip x-layout for a given stroke position (0..1) - kept separate from the static
@@ -93,6 +95,38 @@ export function computeCylinderSinglePistonLayout(
   return { px, rodX, rodWidth: Math.max(0, tipX - rodX), tipX };
 }
 
+/** Closest, px, the spring's zigs get to one another before it drops a coil. */
+const SPRING_MIN_PITCH = 4;
+
+/**
+ * The return spring's zigzag, from the piston to the end wall it pushes against - the rod end
+ * in push mode (it pushes the piston back in), the cap end in pull mode (it pushes the rod
+ * out) - so it compresses and stretches as the piston moves. Squeezed short (the piston at
+ * its end), it keeps only as many coils as stay apart, so it reads as a tightly packed spring
+ * rather than a solid block.
+ */
+export function cylinderSingleSpringPath(
+  geo: CylinderSingleGeometry,
+  pos: number,
+  mode: 'push' | 'pull',
+): string {
+  const { px } = computeCylinderSinglePistonLayout(geo, pos);
+  // From just off the piston face to just off the end wall, so the coils' ends read as seated.
+  const [x0, x1] = mode === 'push' ? [px + geo.pistonWidth + 1, geo.w - 1] : [1, px - 1];
+  const cy = geo.h / 2;
+  const fitting = 2 * Math.floor((x1 - x0) / (2 * SPRING_MIN_PITCH));
+  const zigs = Math.max(4, Math.min(geo.springCoils * 2, fitting));
+  const step = (x1 - x0) / zigs;
+  const parts = [`M ${x0} ${cy}`];
+  for (let i = 0; i < zigs; i++) {
+    const y = cy + (i % 2 === 0 ? -1 : 1) * geo.springAmplitude;
+    // Each zig peaks halfway along its step; the last one comes back to the center line.
+    parts.push(`L ${x0 + (i + 0.5) * step} ${y}`);
+  }
+  parts.push(`L ${x1} ${cy}`);
+  return parts.join(' ');
+}
+
 export function drawCylinderSingleBody(
   g: SVGElement,
   geo: CylinderSingleGeometry,
@@ -100,6 +134,7 @@ export function drawCylinderSingleBody(
   piston: SVGRectElement;
   rod: SVGRectElement;
   rodTip: SVGRectElement;
+  spring: SVGPathElement;
   leadA: SVGLineElement;
   capPortX: number;
   rodPortX: number;
@@ -136,21 +171,15 @@ export function drawCylinderSingleBody(
     fill: '#666',
   });
 
-  // Spring symbol (right side, pushing the piston back when unpressurized).
-  const springY = geo.h / 2;
-  const springX0 = geo.w - geo.springInset;
-  const seg = geo.springSegment;
+  // The return spring, drawn before the rod so its coils pass behind it - a spring around
+  // the rod rather than one lying on top of it.
   const spring = createSvgEl('path', {
-    d: [
-      `M ${springX0} ${springY}`,
-      `l ${-seg} ${-8}`,
-      `l ${-seg} ${16}`,
-      `l ${-seg} ${-16}`,
-      `l ${-seg} ${16}`,
-    ].join(' '),
+    d: cylinderSingleSpringPath(geo, 0, 'push'),
     fill: 'none',
     stroke: '#111',
-    'stroke-width': 2,
+    'stroke-width': 1.5,
+    'stroke-linejoin': 'round',
+    'stroke-linecap': 'round',
   });
 
   const capPortX = geo.capPortInset;
@@ -167,9 +196,9 @@ export function drawCylinderSingleBody(
     stroke: '#111',
     'stroke-width': 2,
   });
-  g.append(body, piston, rod, rodTip, spring, leadA);
+  g.append(body, spring, piston, rod, rodTip, leadA);
 
-  return { piston, rod, rodTip, leadA, capPortX, rodPortX };
+  return { piston, rod, rodTip, spring, leadA, capPortX, rodPortX };
 }
 
 type CylinderMode = 'push' | 'pull';
@@ -201,7 +230,7 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
   shell.setNameVisible(true);
 
   const g = createSvgEl('g', { transform: `translate(${geo.gx},${geo.gy})` });
-  const { piston, rod, rodTip, leadA, capPortX, rodPortX } = drawCylinderSingleBody(g, geo);
+  const { piston, rod, rodTip, spring, leadA, capPortX, rodPortX } = drawCylinderSingleBody(g, geo);
   shell.svg.appendChild(g);
 
   let mode: CylinderMode = 'push';
@@ -245,6 +274,7 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
     rod.setAttribute('x', String(layout.rodX));
     rod.setAttribute('width', String(layout.rodWidth));
     rodTip.setAttribute('x', String(layout.tipX));
+    spring.setAttribute('d', cylinderSingleSpringPath(geo, pos, mode));
   }
   updateVisual();
 
