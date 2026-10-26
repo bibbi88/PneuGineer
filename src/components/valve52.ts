@@ -379,6 +379,7 @@ export function createValve52(compLayer: HTMLElement, x: number, y: number): Com
   const arrowId = `arrow-v52-${uid()}`;
   const { gInner, gSlide, midX, fixedPorts, port12, port14, silencer3El, silencer5El } =
     drawValve52Body(svg, geo, arrowId);
+  shell.followFrame(gInner, geo.gx0 - geo.w0, geo.gy0);
 
   let silencer3: SilencerOption = 'silencer';
   let silencer5: SilencerOption = 'silencer';

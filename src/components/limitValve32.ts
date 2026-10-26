@@ -147,6 +147,7 @@ export function createLimitValve32(compLayer: HTMLElement, x: number, y: number)
     },
   );
   const valve = buildSlidingValve32Body(shell.svg, `arrow-limit-${uid()}`);
+  shell.followFrame(valve.mover, valve.rest.x, valve.rest.y);
   const { sensorLabel, cam } = drawLimitValve32Actuator(valve.mover, geo);
 
   const id = uid();

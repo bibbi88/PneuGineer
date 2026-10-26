@@ -284,6 +284,7 @@ export function createTimeDelayValve(compLayer: HTMLElement, x: number, y: numbe
     },
   );
   const valve = buildSlidingValve32Body(shell.svg, `arrow-delay-${uid()}`, GEOMETRY);
+  shell.followFrame(valve.mover, valve.rest.x, valve.rest.y);
   const { port12, setOffDelay } = drawTimeDelayValveActuator(valve.mover, shell.svg, geo);
   setOffDelay(offDelay);
 

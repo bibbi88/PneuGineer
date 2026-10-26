@@ -168,6 +168,7 @@ export function createValve52Solenoid(compLayer: HTMLElement, x: number, y: numb
   svg.style.overflow = 'visible';
 
   const body = drawValve52MonoBody(svg, geo, `arrow-v52s-${uid()}`);
+  shell.followFrame(body.gInner, geo.gx0 - geo.w0, geo.gy0);
   const pilotGroup = body.gInner.lastElementChild as SVGElement;
   const nameEl = drawSolenoid(pilotGroup, 'left', 0, geo.h0 / 2);
 
@@ -281,6 +282,7 @@ export function createValve52SolenoidDouble(
   svg.style.overflow = 'visible';
 
   const body = drawValve52Body(svg, geo, `arrow-v52sd-${uid()}`);
+  shell.followFrame(body.gInner, geo.gx0 - geo.w0, geo.gy0);
   // gInner's children are [slide, right pilot (12), left pilot (14)].
   const rightGroup = body.gInner.children[1] as SVGElement;
   const leftGroup = body.gInner.children[2] as SVGElement;
@@ -445,6 +447,7 @@ export function createValve53Solenoid(compLayer: HTMLElement, x: number, y: numb
   svg.style.overflow = 'visible';
 
   const body = drawValve53MonoBody(svg, geo, `arrow-v53s-${uid()}`);
+  shell.followFrame(body.gInner, geo.gx0 - geo.w0, geo.gy0);
   const name14 = drawSolenoidEnd(body.leftGroup, 'left', 0, geo.h0 / 2, geo);
   const name12 = drawSolenoidEnd(body.rightGroup, 'right', geo.w0 * 3, geo.h0 / 2, geo);
 

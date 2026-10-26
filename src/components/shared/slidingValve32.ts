@@ -65,6 +65,8 @@ export interface SlidingValve32Body {
   /** Port 3 is this valve family's exhaust - the one a silencer would actually be fitted to. */
   setSilencer(option: SilencerOption): void;
   getSilencer(): SilencerOption;
+  /** Where `mover` sits (its translate) at rest - for ComponentShell.followFrame. */
+  rest: { x: number; y: number };
 }
 
 function tBlock(
@@ -263,5 +265,13 @@ export function buildSlidingValve32Body(
     setSilencerState(ports['3'], silencer3El, silencer3);
   }
 
-  return { mover, ports, setActive, setSwapped, setSilencer, getSilencer: () => silencer3 };
+  return {
+    mover,
+    ports,
+    setActive,
+    setSwapped,
+    setSilencer,
+    getSilencer: () => silencer3,
+    rest: { x: ox, y: oy },
+  };
 }

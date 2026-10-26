@@ -103,6 +103,7 @@ export function createAirValve32(compLayer: HTMLElement, x: number, y: number): 
     },
   );
   const valve = buildSlidingValve32Body(shell.svg, `arrow-air-${uid()}`);
+  shell.followFrame(valve.mover, valve.rest.x, valve.rest.y);
   const { port14 } = drawAirValve32Actuator(valve.mover, shell.svg, geo);
 
   const ports = { ...valve.ports, '14': port14 };

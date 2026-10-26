@@ -226,6 +226,7 @@ export function createPressureSequenceValve(
   );
 
   const valve = buildSlidingValve32Body(shell.svg, `arrow-seq-${uid()}`, GEOMETRY);
+  shell.followFrame(valve.mover, valve.rest.x, valve.rest.y);
   const port1X = Number(valve.ports['1'].el.getAttribute('cx')) - ox;
 
   // The pilot stage, frame, spring, port 12 and set-pressure label all ride on the valve's mover,

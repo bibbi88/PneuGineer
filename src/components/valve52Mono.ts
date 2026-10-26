@@ -343,6 +343,7 @@ export function createValve52Mono(compLayer: HTMLElement, x: number, y: number):
     geo,
     arrowId,
   );
+  shell.followFrame(gInner, geo.gx0 - geo.w0, geo.gy0);
 
   let silencer3: SilencerOption = 'silencer';
   let silencer5: SilencerOption = 'silencer';

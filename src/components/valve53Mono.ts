@@ -393,6 +393,7 @@ export function createValve53Mono(compLayer: HTMLElement, x: number, y: number):
   const arrowId = `arrow-v53m-${uid()}`;
   const { gInner, cellW, fixedPorts, leftGroup, rightGroup, silencer3El, silencer5El } =
     drawValve53MonoBody(svg, geo, arrowId);
+  shell.followFrame(gInner, geo.gx0 - geo.w0, geo.gy0);
 
   let silencer3: SilencerOption = 'silencer';
   let silencer5: SilencerOption = 'silencer';
