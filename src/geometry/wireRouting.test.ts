@@ -3,6 +3,7 @@ import { autoRouteAStar } from './autoRoute';
 import {
   alignJunctionAnchor,
   computeConnectionAnchors,
+  computeConnectionGeometry,
   worldPortAnchor,
 } from './connectionGeometry';
 import { completeGuides, guideCorners, type Point, type PortAnchor } from './routing';
@@ -13,6 +14,9 @@ import type { ViewportAdapter } from '../ui/viewport';
 import { createThrottleValve } from '../components/throttleValve';
 import { createValve52Mono } from '../components/valve52Mono';
 import { createJunction } from '../components/junction';
+import { createLimitValve32 } from '../components/limitValve32';
+import { createValve52 } from '../components/valve52';
+import { createSource } from '../components/source';
 import { setComponentMirrored, setComponentRotation } from '../interaction/componentContextMenu';
 
 const layer = (): HTMLElement => document.createElement('div');
@@ -249,5 +253,45 @@ describe('which side of a junction a free-routed wire uses', () => {
 
     const anchors = computeConnectionAnchors(viewport, workspaceEl, branch);
     expect(anchors?.toAnchor).toMatchObject({ entryOrientation: 'H', pilotDir: 1 });
+  });
+});
+
+describe('a sideways port wired to an up/down one', () => {
+  /** A 5/2 valve's pilot 12 (out to the right) to a limit valve's port 2 (out the top), the
+   * limit valve below and to the right - and, optionally, something standing in the way. */
+  function pilotToOutlet(blocker?: Point): Point[] {
+    appState.components = [];
+    appState.connections = [];
+    initWires(
+      document.createElementNS('http://www.w3.org/2000/svg', 'svg') as SVGSVGElement,
+      viewport,
+      workspaceEl,
+    );
+    const valve = createValve52(layer(), 0, 0);
+    const limit = createLimitValve32(layer(), 300, 260);
+    appState.addComponent(valve);
+    appState.addComponent(limit);
+    const vb = valve.getBounds();
+    const lb = limit.getBounds();
+    placePort(valve, '12', { x: vb.x + vb.w + 20, y: vb.y + vb.h / 2 });
+    placePort(limit, '2', { x: lb.x + lb.w / 2, y: lb.y - 10 });
+    if (blocker) appState.addComponent(createSource(layer(), blocker.x, blocker.y));
+    const conn = createConnection({ id: valve.id, port: '12' }, { id: limit.id, port: '2' });
+    return computeConnectionGeometry(viewport, workspaceEl, conn);
+  }
+
+  it('runs across and then down, one corner and no jog', () => {
+    const points = pilotToOutlet();
+    expect(points).toHaveLength(3);
+    const [a, corner, b] = points as [Point, Point, Point];
+    expect(corner.y).toBe(a.y);
+    expect(corner.x).toBe(b.x);
+  });
+
+  it('goes round something standing on that L instead', () => {
+    const plain = pilotToOutlet();
+    const corner = plain[1] as Point;
+    const routed = pilotToOutlet({ x: corner.x, y: corner.y + 60 });
+    expect(routed.length).toBeGreaterThan(3);
   });
 });
