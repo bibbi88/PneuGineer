@@ -4,7 +4,6 @@ import { Modes } from '../app/modes';
 import { createLimitValve32 } from './limitValve32';
 import { createCylinderDouble } from './cylinderDouble';
 import { createCylinderSingle } from './cylinderSingle';
-import { resetCylinderLetters } from './shared/letters';
 import { buildExportSvg } from '../persistence/exportImage';
 import type { Component } from '../core/types';
 
@@ -34,7 +33,6 @@ describe('limit valves drawn in the initial position while stopped', () => {
     appState.components = [];
     appState.connections = [];
     appState.setMode(Modes.STOP);
-    resetCylinderLetters();
   });
 
   it('draws a valve on a0 actuated, with the cam on its roller, while cylinder A is retracted', () => {

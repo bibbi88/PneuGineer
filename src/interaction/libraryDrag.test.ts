@@ -9,7 +9,6 @@ import { selectOnly, clearSelection } from './selection';
 import { createSource } from '../components/source';
 import { VALVE_52_TYPE } from '../components/valve52';
 import { CYLINDER_DOUBLE_TYPE } from '../components/cylinderDouble';
-import { resetCylinderLetters } from '../components/shared/letters';
 import type { ViewportAdapter } from '../ui/viewport';
 
 const viewport: ViewportAdapter = {
@@ -39,7 +38,6 @@ describe('dragging a component out of the library', () => {
     appState.connections = [];
     appState.setMode(Modes.STOP);
     clearSelection();
-    resetCylinderLetters();
     compLayer = document.createElement('div');
     document.body.appendChild(compLayer);
     workspaceEl = document.createElement('div');
