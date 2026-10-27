@@ -5,13 +5,22 @@ import type { ViewportAdapter } from './viewport';
 import { resetHistory } from '../history/historyStore';
 import { openExportDialog } from './exportDialog';
 import { iconButton } from './iconButton';
+import { EXAMPLES } from '../persistence/examples';
+import { loadProject } from '../persistence/project';
+import { zoomToFit } from '../interaction/zoomToFit';
+import { appState } from '../app/AppState';
+import { canEdit } from '../app/modes';
+import { activeNameChanged, newDocument, prepareToOpen } from '../app/documents';
+
+/** World px kept free right of an example's drawing for its readouts (see zoomToFit). */
+const EXAMPLE_READOUT_ROOM = 60;
 
 export interface ProjectBarRefs {
   getName(): string;
   setName(name: string): void;
 }
 
-/** The toolbar's project section: the project name, then save, load and export. The name field
+/** The toolbar's project section: the project name, then new, save, load and export. The name field
  * is the canonical copy - the inspector's own "Project name" row and the page frame's title
  * block both read and write it through the refs returned here, rather than keeping their own. */
 export function renderProjectBar(
@@ -29,18 +38,29 @@ export function renderProjectBar(
   nameInput.title = 'Project name';
   nameInput.setAttribute('aria-label', 'Project name');
 
+  // A new, empty circuit in a tab of its own - the same as the tab bar's +.
+  const newBtn = iconButton('newDocument', 'New circuit', () => newDocument());
+
   const saveBtn = iconButton(
     'save',
     'Save project',
     () => void saveProjectToFile(nameInput.value || 'project'),
   );
 
+  nameInput.addEventListener('input', () => activeNameChanged());
+
   const loadBtn = iconButton('folderOpen', 'Load project', () => {
-    // Reset history only once a file was actually picked - loadProjectFromPicker itself
-    // does the clear+rebuild, so this must run right before that, not before the picker
-    // even opens (a cancelled picker shouldn't wipe undo history for nothing).
-    void loadProjectFromPicker(ctx, viewport, resetHistory).then((loadedName) => {
-      if (loadedName) nameInput.value = loadedName;
+    // Only once a file was actually picked - loadProjectFromPicker itself does the
+    // clear+rebuild, so this must run right before that, not before the picker even opens (a
+    // cancelled picker shouldn't open a document or wipe undo history for nothing). In a new
+    // document it starts its own history; loaded over the current one, the history is reset.
+    void loadProjectFromPicker(ctx, viewport, () => {
+      if (prepareToOpen() === 'current') resetHistory();
+    }).then((loadedName) => {
+      if (loadedName) {
+        nameInput.value = loadedName;
+        activeNameChanged();
+      }
     });
   });
 
@@ -48,12 +68,43 @@ export function renderProjectBar(
     openExportDialog(nameInput.value || 'project', connLayer, frameLayer, viewport, workspaceEl);
   });
 
-  container.append(nameInput, saveBtn, loadBtn, exportBtn);
+  // Ready-made circuits to start from - opened in a new document (or, if the setting is off,
+  // replacing whatever is on the canvas: Undo brings it back; no confirm() dialog, which
+  // embedded viewers suppress).
+  const examples = document.createElement('select');
+  examples.className = 'exampleSelect';
+  examples.title = 'Load an example circuit';
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = 'Examples…';
+  examples.appendChild(placeholder);
+  EXAMPLES.forEach((ex, i) => {
+    const o = document.createElement('option');
+    o.value = String(i);
+    o.textContent = ex.title;
+    examples.appendChild(o);
+  });
+  examples.addEventListener('change', () => {
+    const ex = EXAMPLES[Number(examples.value)];
+    examples.value = '';
+    if (!ex || !canEdit(appState.mode)) return;
+    const file = ex.file();
+    prepareToOpen();
+    loadProject(file, ctx, viewport);
+    nameInput.value = file.name;
+    activeNameChanged();
+    appState.markDirty();
+    // Room on the right for the simulation readouts beside the right-most components.
+    requestAnimationFrame(() => zoomToFit(viewport, workspaceEl, EXAMPLE_READOUT_ROOM));
+  });
+
+  container.append(nameInput, newBtn, saveBtn, loadBtn, exportBtn, examples);
 
   return {
     getName: () => nameInput.value || 'project',
     setName: (name: string) => {
       nameInput.value = name;
+      activeNameChanged();
     },
   };
 }

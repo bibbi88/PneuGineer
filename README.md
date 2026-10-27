@@ -27,6 +27,11 @@ modeled as a simple pressurized/not-pressurized graph, not real fluid dynamics.
 - Save / Load a project as JSON, or export the circuit as an SVG or PNG. Work is autosaved
   locally and offered back if you return to an unsaved session.
 
+Several circuits can be open at once, as **tabs** above the canvas (or listed in the inspector -
+see **Settings**, the gear in the toolbar), each with its own undo history. **New circuit** in
+the toolbar (or + on the tab bar) opens an empty one; the **Examples** menu and loaded files open
+in a new tab. Every open circuit is kept in the browser and is back after a reload.
+
 ## Running PneuGineer
 
 There are three ways to run the app, from simplest to most involved.
