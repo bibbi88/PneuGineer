@@ -57,6 +57,9 @@ const TIP_SECTIONS: TipSection[] = [
         'middle-click or × to close it, right-click for more. They are kept in the browser, so ' +
         'they are back after a reload. Settings (the gear) can list them in the inspector ' +
         'instead.',
+      'The lightbulb in the toolbar turns tips on: the canvas shortcuts and short ' +
+        'explanations in the inspector. Drag the inner edge of the library or the inspector to ' +
+        'make it wider or narrower (double-click the edge for the default width).',
       'Right-click a component for Rotate, Copy, and Delete.',
       'Right-click a port to add a pressure source to it, or a silencer on an exhaust port ' +
         '(right-click the silencer itself to change it again).',
