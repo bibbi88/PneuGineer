@@ -2,6 +2,8 @@ import type { Component } from '../core/types';
 import type { ProjectBarRefs } from './projectBar';
 import { openTipsDialog } from './tipsDialog';
 import { openTermsDialog } from './termsDialog';
+import { MAX_PICTURE_WIDTH, MIN_PICTURE_WIDTH, PICTURE_TYPE } from '../components/picture';
+import { choosePictureFor } from '../interaction/pictures';
 import { renderDocumentListSection } from './documentTabs';
 import { onDocumentsChange } from '../app/documents';
 import { onSettingsChange } from '../app/settings';
@@ -176,6 +178,13 @@ interface CylinderDimsField {
   kind: 'cylinderDims';
 }
 
+/** A button that does something to the component, e.g. choose a picture's image. */
+interface ActionField {
+  kind: 'action';
+  label: FieldLabel;
+  run(comp: Component): void;
+}
+
 /** Several checkboxes side by side on one row. */
 interface CheckboxRowField {
   kind: 'checkboxRow';
@@ -190,6 +199,7 @@ interface MultilineTextField {
 }
 
 type InspectorField =
+  | ActionField
   | CylinderDimsField
   | CheckboxRowField
   | SelectField
@@ -327,6 +337,21 @@ const INSPECTOR_FIELDS: Record<string, InspectorField[]> = {
     { kind: 'number', key: 'loadN', label: 'Load force (N)', min: -10000, max: 10000, step: 10 },
     { kind: 'checkbox', key: 'showForce', label: 'Show force' },
     { kind: 'sensorList', arrayKey: 'sensors', min: 0, max: 100, step: 1 },
+  ],
+  [PICTURE_TYPE]: [
+    {
+      kind: 'action',
+      label: (comp) => (comp.snapshot().src ? 'Replace picture…' : 'Choose picture…'),
+      run: (comp) => void choosePictureFor(comp),
+    },
+    {
+      kind: 'number',
+      key: 'width',
+      label: 'Width (px)',
+      min: MIN_PICTURE_WIDTH,
+      max: MAX_PICTURE_WIDTH,
+      step: 10,
+    },
   ],
   [TEXT_ANNOTATION_TYPE]: [
     {
@@ -610,6 +635,15 @@ function renderCylinderDimsField(
     box('strokeMm', 'Stroke (mm)', 2000, 10),
   );
   container.append(caption, row);
+}
+
+function renderActionField(container: HTMLElement, comp: Component, field: ActionField): void {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'btn inspectorActionBtn';
+  btn.textContent = resolveLabel(field.label, comp);
+  btn.addEventListener('click', () => field.run(comp));
+  container.appendChild(btn);
 }
 
 /** Checkboxes side by side, each with its label after it. */
@@ -1346,6 +1380,7 @@ export function renderInspector(container: HTMLElement, projectBar: ProjectBarRe
       else if (field.kind === 'silencer') renderSilencerField(container, comp, field, snap);
       else if (field.kind === 'checkbox') renderCheckboxField(container, comp, field, snap);
       else if (field.kind === 'checkboxRow') renderCheckboxRowField(container, comp, field, snap);
+      else if (field.kind === 'action') renderActionField(container, comp, field);
       else if (field.kind === 'cylinderDims') renderCylinderDimsField(container, comp, snap);
       else if (field.kind === 'readonlyText') renderReadonlyTextField(container, comp, field, snap);
       else if (field.kind === 'select') renderSelectField(container, comp, field, snap);
