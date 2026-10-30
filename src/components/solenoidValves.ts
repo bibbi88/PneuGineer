@@ -18,6 +18,8 @@ export const VALVE_52_SOLENOID_DOUBLE_TYPE = 'valve52SolenoidDouble';
 export const VALVE_53_SOLENOID_TYPE = 'valve53Solenoid';
 
 export const SOLENOID_VALVE_TYPES = new Set<string>([
+  // The configurable 5/2 valve (valve52Configurable.ts) keeps coil names in key14/key12 too.
+  'valve52Cfg',
   VALVE_52_SOLENOID_TYPE,
   VALVE_52_SOLENOID_DOUBLE_TYPE,
   VALVE_53_SOLENOID_TYPE,
@@ -67,11 +69,11 @@ function solenoidKeyUseCount(key: string): number {
  * coils have been given the same name is caught too - it would otherwise look perfectly fine
  * while both ends fired at once.
  */
-function markDuplicateLabel(el: SVGTextElement, key: string): void {
+export function markDuplicateLabel(el: SVGTextElement, key: string): void {
   el.classList.toggle('solenoidLabelDuplicate', solenoidKeyUseCount(key) > 1);
 }
 
-function nextFreeSolenoidKeys(count: number): string[] {
+export function nextFreeSolenoidKeys(count: number): string[] {
   const used = new Set<string>();
   for (const c of appState.components) {
     if (!SOLENOID_VALVE_TYPES.has(c.type)) continue;
@@ -101,7 +103,7 @@ const STROKE = 2;
  * solenoid on each end mirrors its partner rather than both leaning the same way. Returns the
  * name text so the caller can keep it in sync. `labelSide` puts the coil name under the box
  * instead of over it, for the valves that also carry a return spring on this same end face. */
-function drawSolenoid(
+export function drawSolenoid(
   group: SVGElement,
   side: 'left' | 'right',
   bodyEdgeX: number,

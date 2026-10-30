@@ -38,8 +38,8 @@ export function initValveActuatorSwap(
  * that doesn't exist on the new component is dropped rather than reconnected somewhere invalid,
  * instead of silently becoming an invisible, un-removable connection with nowhere to land.
  */
-export function swapComponentType(comp: Component, newType: string): void {
-  if (!ctxRef || !viewportRef) return;
+export function swapComponentType(comp: Component, newType: string): Component | null {
+  if (!ctxRef || !viewportRef) return null;
   const { x, y } = comp;
   // Contact <-> push button keeps its NO/NC choice, relay coil <-> solenoid keeps its name;
   // other swaps have no such fields.
@@ -59,9 +59,10 @@ export function swapComponentType(comp: Component, newType: string): void {
       stubEndLen: c.stubEndLen,
     }));
 
+  let next: Component | null = null;
   appState.runSuppressed(() => {
     removeComponentAndConnections(comp.id);
-    const next = spawnComponent(newType, ctxRef!, viewportRef!, x, y);
+    next = spawnComponent(newType, ctxRef!, viewportRef!, x, y);
     // It takes the old one's place as it was: turned the same way, named the same.
     setComponentRotation(next, rotation);
     if (showName !== undefined) next.restore({ ...next.snapshot(), showName, customName });
@@ -87,6 +88,7 @@ export function swapComponentType(comp: Component, newType: string): void {
 
     selectOnly(next.id);
   });
+  return next;
 }
 
 /** Component types that swap into one another when one is dropped from the library onto the

@@ -4,6 +4,8 @@ import { openTipsDialog } from './tipsDialog';
 import { openTermsDialog } from './termsDialog';
 import { MAX_PICTURE_WIDTH, MIN_PICTURE_WIDTH, PICTURE_TYPE } from '../components/picture';
 import { choosePictureFor } from '../interaction/pictures';
+import { renderValveConfigurator } from './valveConfigurator';
+import { VALVE_52_CONFIGURABLE_TYPE } from '../components/valve52Configurable';
 import { renderDocumentListSection } from './documentTabs';
 import { onDocumentsChange } from '../app/documents';
 import { onSettingsChange } from '../app/settings';
@@ -178,6 +180,11 @@ interface CylinderDimsField {
   kind: 'cylinderDims';
 }
 
+/** A 5/2 valve's actuation, set visually - see ui/valveConfigurator.ts. */
+interface ValveConfiguratorField {
+  kind: 'valveConfigurator';
+}
+
 /** A button that does something to the component, e.g. choose a picture's image. */
 interface ActionField {
   kind: 'action';
@@ -199,6 +206,7 @@ interface MultilineTextField {
 }
 
 type InspectorField =
+  | ValveConfiguratorField
   | ActionField
   | CylinderDimsField
   | CheckboxRowField
@@ -231,11 +239,12 @@ const ELEC_COIL_MODES: Array<{ type: string; label: string }> = [
   { type: ELEC_SOLENOID_TYPE, label: 'Solenoid (valve coil)' },
 ];
 
-const VALVE_52_MODES: Array<{ type: string; label: string }> = [
-  { type: VALVE_52_TYPE, label: 'Pneumatic, bistable (double pilot)' },
-  { type: VALVE_52_MONO_TYPE, label: 'Pneumatic, monostable (spring return)' },
-  { type: VALVE_52_SOLENOID_TYPE, label: 'Electric, single solenoid (spring return)' },
-  { type: VALVE_52_SOLENOID_DOUBLE_TYPE, label: 'Electric, double solenoid' },
+/** Every 5/2 valve: its actuation set visually (which can turn a fixed type into the
+ * configurable valve), then its exhaust silencers. */
+const VALVE_52_FIELDS: InspectorField[] = [
+  { kind: 'valveConfigurator' },
+  { kind: 'silencer', key: 'silencer3', port: '3', label: 'Port 3 silencer' },
+  { kind: 'silencer', key: 'silencer5', port: '5', label: 'Port 5 silencer' },
 ];
 
 // Both 5/3 variants are closed-centre and spring-centred; only the actuator differs, and they
@@ -300,16 +309,9 @@ const INSPECTOR_FIELDS: Record<string, InspectorField[]> = {
     { kind: 'checkbox', key: 'normallyOpen', label: 'Normally open (NO)' },
     { kind: 'silencer', key: 'silencer3', port: '3', label: 'Port 3 silencer' },
   ],
-  [VALVE_52_TYPE]: [
-    { kind: 'actuatorMode', label: 'Operation', options: VALVE_52_MODES },
-    { kind: 'silencer', key: 'silencer3', port: '3', label: 'Port 3 silencer' },
-    { kind: 'silencer', key: 'silencer5', port: '5', label: 'Port 5 silencer' },
-  ],
-  [VALVE_52_MONO_TYPE]: [
-    { kind: 'actuatorMode', label: 'Operation', options: VALVE_52_MODES },
-    { kind: 'silencer', key: 'silencer3', port: '3', label: 'Port 3 silencer' },
-    { kind: 'silencer', key: 'silencer5', port: '5', label: 'Port 5 silencer' },
-  ],
+  [VALVE_52_TYPE]: VALVE_52_FIELDS,
+  [VALVE_52_MONO_TYPE]: VALVE_52_FIELDS,
+  [VALVE_52_CONFIGURABLE_TYPE]: VALVE_52_FIELDS,
   [VALVE_53_MONO_TYPE]: [
     { kind: 'actuatorMode', label: 'Operation', options: VALVE_53_MODES },
     { kind: 'silencer', key: 'silencer3', port: '3', label: 'Port 3 silencer' },
@@ -390,19 +392,8 @@ const INSPECTOR_FIELDS: Record<string, InspectorField[]> = {
     { kind: 'actuatorMode', label: 'Type', options: ELEC_COIL_MODES },
     { kind: 'text', key: 'key', label: 'Name - same as the valve coil it drives (e.g. Y1)' },
   ],
-  [VALVE_52_SOLENOID_TYPE]: [
-    { kind: 'actuatorMode', label: 'Operation', options: VALVE_52_MODES },
-    { kind: 'text', key: 'key', label: 'Solenoid coil name' },
-    { kind: 'silencer', key: 'silencer3', port: '3', label: 'Port 3 silencer' },
-    { kind: 'silencer', key: 'silencer5', port: '5', label: 'Port 5 silencer' },
-  ],
-  [VALVE_52_SOLENOID_DOUBLE_TYPE]: [
-    { kind: 'actuatorMode', label: 'Operation', options: VALVE_52_MODES },
-    { kind: 'text', key: 'key14', label: 'Left solenoid coil name' },
-    { kind: 'text', key: 'key12', label: 'Right solenoid coil name' },
-    { kind: 'silencer', key: 'silencer3', port: '3', label: 'Port 3 silencer' },
-    { kind: 'silencer', key: 'silencer5', port: '5', label: 'Port 5 silencer' },
-  ],
+  [VALVE_52_SOLENOID_TYPE]: VALVE_52_FIELDS,
+  [VALVE_52_SOLENOID_DOUBLE_TYPE]: VALVE_52_FIELDS,
   [VALVE_53_SOLENOID_TYPE]: [
     { kind: 'actuatorMode', label: 'Operation', options: VALVE_53_MODES },
     { kind: 'text', key: 'key14', label: 'Left solenoid coil name' },
@@ -1381,6 +1372,7 @@ export function renderInspector(container: HTMLElement, projectBar: ProjectBarRe
       else if (field.kind === 'checkbox') renderCheckboxField(container, comp, field, snap);
       else if (field.kind === 'checkboxRow') renderCheckboxRowField(container, comp, field, snap);
       else if (field.kind === 'action') renderActionField(container, comp, field);
+      else if (field.kind === 'valveConfigurator') renderValveConfigurator(container, comp);
       else if (field.kind === 'cylinderDims') renderCylinderDimsField(container, comp, snap);
       else if (field.kind === 'readonlyText') renderReadonlyTextField(container, comp, field, snap);
       else if (field.kind === 'select') renderSelectField(container, comp, field, snap);

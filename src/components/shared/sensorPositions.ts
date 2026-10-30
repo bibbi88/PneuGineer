@@ -182,7 +182,7 @@ export function isSensorLabelBound(label: string): boolean {
   if (!target) return false;
   for (const comp of appState.components) {
     const snap = comp.snapshot() as Record<string, unknown>;
-    for (const value of [snap.sensorKey, snap.key]) {
+    for (const value of [snap.sensorKey, snap.key, snap.sensor14, snap.sensor12]) {
       if (typeof value === 'string' && value.trim().toUpperCase() === target) return true;
     }
   }

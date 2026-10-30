@@ -51,6 +51,7 @@ import {
 import { createPlc, PLC_TYPE } from './plc';
 import { createTextAnnotation, TEXT_ANNOTATION_TYPE } from './textAnnotation';
 import { createPicture, PICTURE_TYPE } from './picture';
+import { createValve52Configurable, VALVE_52_CONFIGURABLE_TYPE } from './valve52Configurable';
 
 export interface ComponentFactoryContext {
   compLayer: HTMLElement;
@@ -138,6 +139,16 @@ export const componentRegistry = new Map<string, RegistryEntry>([
     {
       factory: (ctx, x, y) => createPushButton32(ctx.compLayer, x, y),
       label: '3/2 push button',
+      placeable: true,
+      category: ComponentCategory.DIRECTIONAL_MANUAL,
+    },
+  ],
+  [
+    VALVE_52_CONFIGURABLE_TYPE,
+    {
+      factory: (ctx, x, y) => createValve52Configurable(ctx.compLayer, x, y),
+      label: '5/2 valve, any actuation',
+      keywords: ['roller', 'push button', 'pilot operated', 'servo', 'configurable', 'manual'],
       placeable: true,
       category: ComponentCategory.DIRECTIONAL_MANUAL,
     },

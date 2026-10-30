@@ -82,6 +82,11 @@ const TIP_SECTIONS: TipSection[] = [
         'actuation, and a 5/2 or 5/3 between pneumatic and solenoid, from the inspector’s ' +
         'Control mode / Operation dropdown. Wires on ports the new variant also has carry over; ' +
         'a wire on a port it doesn’t have is dropped.',
+      'Any 5/2 valve shows its actuation in the inspector as a picture of the valve with a ' +
+        'dropdown under each end: air pilot, solenoid, push button or roller (and a spring on ' +
+        'the right for spring return). "Pilot operated" makes a solenoid, button or roller ' +
+        'shift the valve only with pressure at port 1. A valve without a spring starts in the ' +
+        'position chosen under "Starts in".',
       'Exhaust ports come with a silencer fitted by default - the inspector can take it off.',
       'The pressure reducing valve caps everything downstream of it at its set pressure: port ' +
         'and wire readouts show the reduced figure, and a cylinder behind one develops ' +

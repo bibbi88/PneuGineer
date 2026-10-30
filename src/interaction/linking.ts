@@ -58,6 +58,9 @@ function nearestPort(
   let bestDist = radius;
   for (const c of only ? [only] : appState.components) {
     for (const port of Object.values(c.ports)) {
+      // A port its component isn't showing (a configurable valve's pilot port on an end that
+      // has no air pilot) takes no wire.
+      if ((port.el as SVGElement).closest('[style*="display: none"]')) continue;
       if (pendingPort) {
         if (pendingPort.compId === c.id && pendingPort.port === port.key) continue;
         if (!portDomainsCompatible(pendingPort.compId, pendingPort.port, c.id, port.key)) continue;

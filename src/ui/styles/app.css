@@ -2234,3 +2234,31 @@ body.libraryDragging * {
 .comp[data-type='picture'] {
   z-index: -1;
 }
+
+/* The 5/2 valve configurator (ui/valveConfigurator.ts): the valve drawn across the inspector,
+   a dropdown under each end. */
+.valveConfigPreview {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: #fff;
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+}
+
+.valveConfigEnds {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 6px 0 4px;
+}
+
+.valveConfigEnds select {
+  flex: 0 1 46%;
+  min-width: 0;
+  padding: 4px 6px;
+  border: 1px solid #bbb;
+  border-radius: 4px;
+  font: inherit;
+  font-size: 12.5px;
+}
