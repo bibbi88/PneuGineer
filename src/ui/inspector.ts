@@ -171,6 +171,17 @@ interface SelectField {
   options: Array<{ value: string; label: string }>;
 }
 
+/** A cylinder's size on one row - Ø bore / rod - stroke, in mm - under a line saying so. */
+interface CylinderDimsField {
+  kind: 'cylinderDims';
+}
+
+/** Several checkboxes side by side on one row. */
+interface CheckboxRowField {
+  kind: 'checkboxRow';
+  boxes: Array<{ key: string; label: string }>;
+}
+
 /** Free text over several lines, e.g. a note's own text. */
 interface MultilineTextField {
   kind: 'multilineText';
@@ -179,6 +190,8 @@ interface MultilineTextField {
 }
 
 type InspectorField =
+  | CylinderDimsField
+  | CheckboxRowField
   | SelectField
   | MultilineTextField
   | NumberField
@@ -294,20 +307,22 @@ const INSPECTOR_FIELDS: Record<string, InspectorField[]> = {
   ],
   [CYLINDER_DOUBLE_TYPE]: [
     { kind: 'relabel', label: 'Cylinder letter' },
-    { kind: 'number', key: 'boreDiameter', label: 'Bore diameter (mm)', min: 1, max: 500, step: 1 },
-    { kind: 'number', key: 'rodDiameter', label: 'Rod diameter (mm)', min: 1, max: 500, step: 1 },
-    { kind: 'number', key: 'strokeMm', label: 'Stroke (mm)', min: 1, max: 2000, step: 10 },
+    { kind: 'cylinderDims' },
     { kind: 'number', key: 'massKg', label: 'Moving mass (kg)', min: 0.1, max: 1000, step: 0.5 },
     { kind: 'number', key: 'loadN', label: 'Load force (N)', min: -10000, max: 10000, step: 10 },
-    { kind: 'checkbox', key: 'showForce', label: 'Show force' },
+    {
+      kind: 'checkboxRow',
+      boxes: [
+        { key: 'startExtended', label: 'Start extended' },
+        { key: 'showForce', label: 'Show force' },
+      ],
+    },
     { kind: 'sensorList', arrayKey: 'sensors', min: 0, max: 100, step: 1 },
   ],
   [CYLINDER_SINGLE_TYPE]: [
     { kind: 'relabel', label: 'Cylinder letter' },
     { kind: 'cylinderMode' },
-    { kind: 'number', key: 'boreDiameter', label: 'Bore diameter (mm)', min: 1, max: 500, step: 1 },
-    { kind: 'number', key: 'rodDiameter', label: 'Rod diameter (mm)', min: 1, max: 500, step: 1 },
-    { kind: 'number', key: 'strokeMm', label: 'Stroke (mm)', min: 1, max: 2000, step: 10 },
+    { kind: 'cylinderDims' },
     { kind: 'number', key: 'massKg', label: 'Moving mass (kg)', min: 0.1, max: 1000, step: 0.5 },
     { kind: 'number', key: 'loadN', label: 'Load force (N)', min: -10000, max: 10000, step: 10 },
     { kind: 'checkbox', key: 'showForce', label: 'Show force' },
@@ -554,6 +569,67 @@ function renderNumberOrTextField(
   });
 
   row.append(span, input);
+  container.appendChild(row);
+}
+
+/** Ø bore / rod - stroke, in mm, as three small boxes on one row under a line naming them. */
+function renderCylinderDimsField(
+  container: HTMLElement,
+  comp: Component,
+  snap: Record<string, unknown>,
+): void {
+  const caption = document.createElement('div');
+  caption.className = 'inspectorCaption';
+  caption.textContent = 'Bore / rod Ø - stroke (mm)';
+  const row = document.createElement('div');
+  row.className = 'inspectorRow inspectorDimsRow';
+  const box = (key: string, label: string, max: number, step: number): HTMLInputElement => {
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.min = '1';
+    input.max = String(max);
+    input.step = String(step);
+    input.value = String(snap[key] ?? '');
+    input.title = label;
+    input.setAttribute('aria-label', label);
+    input.addEventListener('change', () => updateComponentField(comp, key, Number(input.value)));
+    return input;
+  };
+  const text = (t: string): HTMLSpanElement => {
+    const span = document.createElement('span');
+    span.className = 'inspectorDimsSep';
+    span.textContent = t;
+    return span;
+  };
+  row.append(
+    text('Ø'),
+    box('boreDiameter', 'Bore diameter (mm)', 500, 1),
+    text('/'),
+    box('rodDiameter', 'Rod diameter (mm)', 500, 1),
+    text('–'),
+    box('strokeMm', 'Stroke (mm)', 2000, 10),
+  );
+  container.append(caption, row);
+}
+
+/** Checkboxes side by side, each with its label after it. */
+function renderCheckboxRowField(
+  container: HTMLElement,
+  comp: Component,
+  field: CheckboxRowField,
+  snap: Record<string, unknown>,
+): void {
+  const row = document.createElement('div');
+  row.className = 'inspectorRow inspectorCheckboxRow';
+  for (const { key, label } of field.boxes) {
+    const item = document.createElement('label');
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = Boolean(snap[key]);
+    checkbox.addEventListener('change', () => updateComponentField(comp, key, checkbox.checked));
+    item.append(checkbox, document.createTextNode(` ${label}`));
+    row.appendChild(item);
+  }
   container.appendChild(row);
 }
 
@@ -855,10 +931,7 @@ function renderSensorListField(
 
   const hint = document.createElement('p');
   hint.className = 'inspectorHint';
-  hint.textContent =
-    'Each sensor turns on while the piston is within its range of the stroke (0% = fully ' +
-    'retracted, 100% = fully extended). Give a 3/2 limit switch the same label as its "Sensor ' +
-    'key" to read it - labels are case-insensitive, so "a0" and "A0" are the same sensor.';
+  hint.textContent = 'On while the piston is in its range: 0% in, 100% out.';
   container.appendChild(hint);
 
   function writeSensors(next: CylinderSensor[]): void {
@@ -1017,38 +1090,35 @@ function renderNameSection(
   comp: Component,
   snap: Record<string, unknown>,
 ): void {
-  const heading = document.createElement('div');
-  heading.className = 'inspectorSectionHeading';
-  heading.textContent = 'Name';
-  container.appendChild(heading);
-
-  const showRow = document.createElement('label');
-  showRow.className = 'inspectorRow';
-  const showSpan = document.createElement('span');
-  showSpan.textContent = 'Show name in diagram';
+  // The heading carries the show/hide checkbox on its right; the name itself below (empty: the
+  // default name, shown as the placeholder).
+  const heading = document.createElement('label');
+  heading.className = 'inspectorSectionHeading inspectorHeadingWithToggle';
+  const title = document.createElement('span');
+  title.textContent = 'Name';
+  const show = document.createElement('span');
+  show.className = 'inspectorHeadingToggle';
   const showCheckbox = document.createElement('input');
   showCheckbox.type = 'checkbox';
   showCheckbox.checked = Boolean(snap.showName);
+  showCheckbox.title = 'Show the name in the diagram';
   showCheckbox.addEventListener('change', () => {
     updateComponentField(comp, 'showName', showCheckbox.checked);
   });
-  showRow.append(showSpan, showCheckbox);
-  container.appendChild(showRow);
+  show.append(showCheckbox, document.createTextNode(' Show'));
+  heading.append(title, show);
+  container.appendChild(heading);
 
-  const nameRow = document.createElement('label');
-  nameRow.className = 'inspectorRow';
-  const nameSpan = document.createElement('span');
-  nameSpan.textContent = 'Custom name';
   const nameInput = document.createElement('input');
   nameInput.type = 'text';
-  nameInput.className = 'inspectorCustomNameInput';
-  nameInput.placeholder = '(default)';
+  nameInput.className = 'inspectorNameInput';
+  nameInput.placeholder = comp.el.querySelector('.compNameText')?.textContent ?? '';
   nameInput.value = (snap.customName as string | null) ?? '';
+  nameInput.setAttribute('aria-label', 'Name');
   nameInput.addEventListener('change', () => {
     updateComponentField(comp, 'customName', nameInput.value.trim() || null);
   });
-  nameRow.append(nameSpan, nameInput);
-  container.appendChild(nameRow);
+  container.appendChild(nameInput);
 }
 
 const PAGE_FRAME_OPTIONS: Array<{ value: PageFrameSize; label: string }> = [
@@ -1253,6 +1323,8 @@ export function renderInspector(container: HTMLElement, projectBar: ProjectBarRe
       else if (field.kind === 'cylinderMode') renderCylinderModeField(container, comp, refresh);
       else if (field.kind === 'silencer') renderSilencerField(container, comp, field, snap);
       else if (field.kind === 'checkbox') renderCheckboxField(container, comp, field, snap);
+      else if (field.kind === 'checkboxRow') renderCheckboxRowField(container, comp, field, snap);
+      else if (field.kind === 'cylinderDims') renderCylinderDimsField(container, comp, snap);
       else if (field.kind === 'readonlyText') renderReadonlyTextField(container, comp, field, snap);
       else if (field.kind === 'select') renderSelectField(container, comp, field, snap);
       else if (field.kind === 'multilineText')

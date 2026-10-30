@@ -14,6 +14,7 @@ import {
   type PortFeed,
 } from '../sim/flowModel';
 import { appState } from '../app/AppState';
+import { Modes } from '../app/modes';
 import {
   isInSensorRange,
   defaultSensors,
@@ -189,6 +190,9 @@ export function createCylinderDouble(compLayer: HTMLElement, x: number, y: numbe
   };
 
   let pos = 0;
+  /** Rests - and so starts each run - with the rod out rather than in. */
+  let startExtended = false;
+  const restPos = (): number => (startExtended ? 1 : 0);
   let sensors: CylinderSensor[] = defaultSensors(letter);
   let ventingNow: 'A' | 'B' | null = null;
   let fillingNow: 'A' | 'B' | null = null;
@@ -432,10 +436,15 @@ export function createCylinderDouble(compLayer: HTMLElement, x: number, y: numbe
         strokeMm,
         massKg,
         loadN,
+        startExtended,
       };
     },
     restore(data: Record<string, unknown>): void {
-      pos = data.pos as number;
+      // Turning "Start extended" on or off while stopped moves the cylinder to where a run will
+      // now start from; otherwise it stays where it was saved (or where the simulation has it).
+      const restChanged = Boolean(data.startExtended) !== startExtended;
+      startExtended = Boolean(data.startExtended);
+      pos = restChanged && appState.mode === Modes.STOP ? restPos() : (data.pos as number);
       letter = data.letter as string;
       sensors = isValidSensorArray(data.sensors) ? data.sensors : defaultSensors(letter);
       shell.setDefaultName(`Cylinder ${letter}`);
@@ -455,7 +464,7 @@ export function createCylinderDouble(compLayer: HTMLElement, x: number, y: numbe
       updateVisual();
     },
     reset(): void {
-      pos = 0;
+      pos = restPos();
       ventingNow = null;
       fillingNow = null;
       flowStarted = false;
