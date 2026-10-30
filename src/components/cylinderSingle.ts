@@ -14,6 +14,7 @@ import {
 } from '../sim/flowModel';
 import { redrawAllConnections } from '../wires/connection';
 import { appState } from '../app/AppState';
+import { drawSensorMarks } from './shared/sensorMarks';
 import {
   isInSensorRange,
   defaultSensors,
@@ -268,6 +269,22 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
   forceLabelEl.style.display = 'none';
   shell.el.appendChild(forceLabelEl);
 
+  // The sensors something reads, marked along the rod tip's travel (a0 at its in position, a1
+  // out...). Redrawn when the sensors change and on any project change, since what reads them
+  // is other components' business.
+  const sensorMarks = createSvgEl('g', { class: 'sensorMarks' });
+  g.appendChild(sensorMarks);
+  function updateSensorMarks(): void {
+    drawSensorMarks(
+      sensorMarks,
+      sensors,
+      (p) => computeCylinderSinglePistonLayout(geo, p).tipX + geo.rodTipWidth / 2,
+      geo.h / 2 - geo.rodTipHeight / 2,
+    );
+  }
+  appState.onChange(updateSensorMarks);
+  updateSensorMarks();
+
   function updateVisual(): void {
     const layout = computeCylinderSinglePistonLayout(geo, pos);
     piston.setAttribute('x', String(layout.px));
@@ -470,6 +487,7 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
       mode = data.mode as CylinderMode;
       normallyExtended = data.normallyExtended as boolean;
       sensors = isValidSensorArray(data.sensors) ? data.sensors : defaultSensors(letter);
+      updateSensorMarks();
       shell.setNameVisible(Boolean(data.showName));
       shell.setCustomName((data.customName as string | null) ?? null);
       boreDiameter = (data.boreDiameter as number) || DEFAULT_BORE_DIAMETER_MM;
@@ -512,6 +530,7 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
       const oldLetter = letter;
       letter = nextCylinderLetter();
       sensors = relabelSensors(sensors, oldLetter, letter).sensors;
+      updateSensorMarks();
       updateLabel();
     },
 
@@ -528,6 +547,7 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
       // label so it keeps working instead of silently going dead once nothing emits that name.
       const { sensors: renamedSensors, renames } = relabelSensors(sensors, oldLetter, trimmed);
       sensors = renamedSensors;
+      updateSensorMarks();
       for (const r of renames) renameSensorKeyBindings(r.oldLabel, r.newLabel);
       appState.markDirty();
       return true;

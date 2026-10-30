@@ -174,3 +174,17 @@ export function isSensorTriggeredAtRest(key: string): boolean {
   }
   return false;
 }
+
+/** Whether anything reads the sensor `label` (matched case-insensitively): a limit valve's
+ * sensor key, or an electrical contact's signal. */
+export function isSensorLabelBound(label: string): boolean {
+  const target = label.trim().toUpperCase();
+  if (!target) return false;
+  for (const comp of appState.components) {
+    const snap = comp.snapshot() as Record<string, unknown>;
+    for (const value of [snap.sensorKey, snap.key]) {
+      if (typeof value === 'string' && value.trim().toUpperCase() === target) return true;
+    }
+  }
+  return false;
+}
