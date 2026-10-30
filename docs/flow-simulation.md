@@ -37,7 +37,7 @@ switch picks the model, and the choice is saved with the project (`simulation.mo
    overshoot and sit oscillating above supply pressure.
 
 6. **Per-component flow ratings** (`src/sim/flowRatings.ts`): every pneumatic component has a
-   sonic conductance C - its kind's typical value (e.g. push-button 3/2 0.3, 5/2 0.6, check
+   sonic conductance C - its kind's typical value (e.g. push-button 3/2 0.45, 5/2 0.6, check
    valve 0.8, quick exhaust 1.5, cylinder port fittings 0.8 dm³/(s·bar)) until one is set in the
    inspector ("Flow rating C"; clearing it returns to typical). Likewise its critical pressure
    ratio b ("Critical ratio b", 0-0.99; typical 0.2 for a throttle, 0.3 for spool valves, up to

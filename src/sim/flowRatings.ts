@@ -18,9 +18,9 @@ export const DEFAULT_FLOW_RATINGS: Readonly<Record<string, number>> = {
   valve52Solenoid: 0.6,
   valve52SolenoidDouble: 0.6,
   valve53Solenoid: 0.6,
-  airValve32: 0.5,
-  pushButton32: 0.3,
-  limitValve32: 0.3,
+  airValve32: 0.75,
+  pushButton32: 0.45,
+  limitValve32: 0.45,
   // Logic
   andValve: 0.5,
   orValve: 0.5,
@@ -30,8 +30,8 @@ export const DEFAULT_FLOW_RATINGS: Readonly<Record<string, number>> = {
   oneWayFlowControlValve: 0.6,
   quickExhaustValve: 1.5,
   pressureReducingValve: 0.8,
-  timeDelayValve: 0.4,
-  pressureSequenceValve: 0.4,
+  timeDelayValve: 0.6,
+  pressureSequenceValve: 0.6,
   // Measuring: a flow meter barely restricts the line it measures
   flowMeter: 2,
   // Actuators - the port fittings
