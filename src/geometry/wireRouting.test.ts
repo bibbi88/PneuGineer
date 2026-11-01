@@ -16,6 +16,7 @@ import { createValve52Mono } from '../components/valve52Mono';
 import { createJunction } from '../components/junction';
 import { createLimitValve32 } from '../components/limitValve32';
 import { createValve52 } from '../components/valve52';
+import { createCylinderDouble } from '../components/cylinderDouble';
 import { createSource } from '../components/source';
 import { setComponentMirrored, setComponentRotation } from '../interaction/componentContextMenu';
 
@@ -293,5 +294,33 @@ describe('a sideways port wired to an up/down one', () => {
     const corner = plain[1] as Point;
     const routed = pilotToOutlet({ x: corner.x, y: corner.y + 60 });
     expect(routed.length).toBeGreaterThan(3);
+  });
+});
+
+describe('two ports facing each other, not in line', () => {
+  it('jog halfway between them', () => {
+    appState.components = [];
+    appState.connections = [];
+    initWires(
+      document.createElementNS('http://www.w3.org/2000/svg', 'svg') as SVGSVGElement,
+      viewport,
+      workspaceEl,
+    );
+    const valve = createValve52Mono(layer(), 300, 400);
+    const cyl = createCylinderDouble(layer(), 200, 100);
+    appState.addComponent(valve);
+    appState.addComponent(cyl);
+    const vb = valve.getBounds();
+    const cb = cyl.getBounds();
+    const p4 = { x: vb.x + 40, y: vb.y - 10 };
+    const pA = { x: cb.x + 20, y: cb.y + cb.h + 10 };
+    placePort(valve, '4', p4);
+    placePort(cyl, 'A', pA);
+    const conn = createConnection({ id: valve.id, port: '4' }, { id: cyl.id, port: 'A' });
+    const points = computeConnectionGeometry(viewport, workspaceEl, conn);
+    expect(points).toHaveLength(4);
+    const jogY = points[1]!.y;
+    expect(points[2]!.y).toBe(jogY);
+    expect(Math.abs(jogY - (p4.y + pA.y) / 2)).toBeLessThanOrEqual(5);
   });
 });
