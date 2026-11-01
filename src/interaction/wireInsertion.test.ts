@@ -372,13 +372,15 @@ describe('trySpliceOntoWire', () => {
   });
 
   it('splices a valve already on the canvas when it is dragged onto a wire', () => {
+    // Placed off to the side first, then dragged over the wire - as on the canvas.
+    const valve = createCheckValve(compLayer(), 900, 900);
+    appState.addComponent(valve);
     const a = createJunction(compLayer(), 300, 100, 'V');
     const b = createJunction(compLayer(), 300, 500, 'V');
     appState.addComponent(a);
     appState.addComponent(b);
     const original = createConnection({ id: a.id, port: 'P' }, { id: b.id, port: 'P' });
-    const valve = createCheckValve(compLayer(), 304, 283); // let go just off the line
-    appState.addComponent(valve);
+    valve.setPos(304, 283); // let go just off the line
 
     expect(trySpliceExisting(valve, viewport, workspaceEl)).toBe(true);
     expect(valve.x).toBe(300);
