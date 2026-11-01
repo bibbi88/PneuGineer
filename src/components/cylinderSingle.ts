@@ -15,6 +15,7 @@ import {
 import { redrawAllConnections } from '../wires/connection';
 import { appState } from '../app/AppState';
 import { drawSensorMarks } from './shared/sensorMarks';
+import { DRAWN_STROKE_SHARE } from './shared/strokeDrawing';
 import {
   isInSensorRange,
   defaultSensors,
@@ -90,7 +91,7 @@ export function computeCylinderSinglePistonLayout(
 ): { px: number; rodX: number; rodWidth: number; tipX: number } {
   const travelStart = geo.pistonTravelStartInset;
   const travelEnd = geo.w - geo.pistonTravelEndInset;
-  const px = travelStart + pos * (travelEnd - travelStart);
+  const px = travelStart + pos * DRAWN_STROKE_SHARE * (travelEnd - travelStart);
   const rodX = px + geo.pistonToRodGap;
   const tipX = px + (geo.w - geo.rodTipInset);
   return { px, rodX, rodWidth: Math.max(0, tipX - rodX), tipX };

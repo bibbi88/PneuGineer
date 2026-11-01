@@ -15,6 +15,7 @@ import {
 } from '../sim/flowModel';
 import { appState } from '../app/AppState';
 import { drawSensorMarks } from './shared/sensorMarks';
+import { DRAWN_STROKE_SHARE } from './shared/strokeDrawing';
 import { Modes } from '../app/modes';
 import {
   isInSensorRange,
@@ -91,7 +92,7 @@ export function computeCylinderDoublePistonLayout(
   geo: CylinderDoubleGeometry,
   pos: number,
 ): { px: number; rodX: number; rodWidth: number; tipX: number } {
-  const px = geo.pistonTravelInset + pos * (geo.w - geo.pistonTravelInset * 2);
+  const px = geo.pistonTravelInset + pos * DRAWN_STROKE_SHARE * (geo.w - geo.pistonTravelInset * 2);
   const rodX = px + geo.pistonToRodGap;
   const tipX = px + (geo.w - geo.rodTipInset);
   return { px, rodX, rodWidth: Math.max(0, tipX - rodX), tipX };

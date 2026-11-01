@@ -954,9 +954,12 @@ function renderSensorListField(
   heading.textContent = 'Sensors';
   container.appendChild(heading);
 
+  // Always shown (not only as a tip): how the sensors relate to the switches that read them.
   const hint = document.createElement('p');
-  hint.className = 'inspectorHint tipText';
-  hint.textContent = 'On while the piston is in its range: 0% in, 100% out.';
+  hint.className = 'inspectorHint';
+  hint.textContent =
+    'A sensor is on while the piston is within its range (0% = in, 100% = out). A limit ' +
+    'valve, roller or contact given the same name (e.g. A1) switches with it.';
   container.appendChild(hint);
 
   function writeSensors(next: CylinderSensor[]): void {
