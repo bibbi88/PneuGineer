@@ -1,4 +1,11 @@
-import type { Component, ComponentId, Connection, PortKey } from '../core/types';
+import type {
+  Component,
+  ComponentId,
+  Connection,
+  ConnectionEndpoint,
+  PortKey,
+} from '../core/types';
+import { tapLinks } from '../wires/taps';
 import { SOURCE_PRESSURE } from './constants';
 
 export type PortKeyStr = string;
@@ -133,9 +140,14 @@ function getWireAdjacency(
   if (wireCache && wireCache.version === topologyVersion) return wireCache.adjacency;
 
   const adjacency = new Map<PortKeyStr, Set<PortKeyStr>>();
-  for (const conn of connections) {
-    const a = portKey(conn.from.id, conn.from.port);
-    const b = portKey(conn.to.id, conn.to.port);
+  // Wires, and each tap junction joined to the line of the wire it sits on (wires/taps.ts).
+  const links: Array<[ConnectionEndpoint, ConnectionEndpoint]> = [
+    ...connections.map((c): [ConnectionEndpoint, ConnectionEndpoint] => [c.from, c.to]),
+    ...tapLinks(),
+  ];
+  for (const [from, to] of links) {
+    const a = portKey(from.id, from.port);
+    const b = portKey(to.id, to.port);
     if (!adjacency.has(a)) adjacency.set(a, new Set());
     if (!adjacency.has(b)) adjacency.set(b, new Set());
     adjacency.get(a)?.add(b);

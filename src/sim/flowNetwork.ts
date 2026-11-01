@@ -18,7 +18,9 @@
  * Which valve paths are open still comes from the logic graph; this works out the pressures and
  * flows that result.
  */
-import type { Component, PortKey } from '../core/types';
+import { tapLinks } from '../wires/taps';
+import { routeOf } from '../geometry/connectionGeometry';
+import type { Component, Connection, PortKey } from '../core/types';
 import { appState } from '../app/AppState';
 import { SOURCE_PRESSURE } from './constants';
 import { isoMassFlow, P_ATM, BAR, fromGaugeBar } from './flowModel';
@@ -104,6 +106,17 @@ export function flowPressureAt(key: PortKeyStr): number | null {
   return portPressure.get(key) ?? null;
 }
 
+/** A wire's drawn length, px: along its route (line jumps over other wires aside). */
+function drawnWireLength(conn: Connection): number {
+  const route = routeOf(conn.id);
+  if (!route) return pathLength(conn.pathEl.getAttribute('d'));
+  let len = 0;
+  for (let i = 1; i < route.length; i++) {
+    len += Math.abs(route[i]!.x - route[i - 1]!.x) + Math.abs(route[i]!.y - route[i - 1]!.y);
+  }
+  return len;
+}
+
 function pathLength(d: string | null): number {
   if (!d) return 0;
   const nums = (d.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number);
@@ -140,7 +153,17 @@ function buildTopology(components: Component[]): Topology {
     const ra = find(a);
     const rb = find(b);
     if (ra !== rb) parent.set(ra, rb);
-    wires.push({ a, length: pathLength(conn.pathEl.getAttribute('d')) });
+    wires.push({ a, length: drawnWireLength(conn) });
+  }
+  // A tap junction is part of the line of the wire it sits on (wires/taps.ts).
+  for (const [j, end] of tapLinks()) {
+    const a = portKey(j.id, j.port);
+    const b = portKey(end.id, end.port);
+    if (!parent.has(a) || !parent.has(b)) continue;
+    wired.add(a);
+    const ra = find(a);
+    const rb = find(b);
+    if (ra !== rb) parent.set(ra, rb);
   }
   // Every wire's tubing belongs to the net it ended up in.
   const wireLength = new Map<PortKeyStr, number>();

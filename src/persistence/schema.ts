@@ -57,6 +57,8 @@ export interface ProjectFileV1 {
   meta?: ProjectMeta;
   pageFrame?: PageFrame;
   simulation?: SimulationSettings;
+  /** Line jumps where unconnected wires cross (AppState.lineJumps). Omitted: on. */
+  lineJumps?: boolean;
   /** A random per-browser ID (see app/deviceId.ts) - not shown anywhere in the app's own UI, just
    * carried in the saved file itself. `origin` is stamped on this project's very first save and
    * frozen from then on; `lastSaved` is overwritten on every save. Comparing the two is a weak

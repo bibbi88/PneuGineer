@@ -1,3 +1,4 @@
+import { JUNCTION_TYPE, readJunctionHost, remapJunctionHost } from '../components/junction';
 import { restoreFlowRating, snapshotWithFlowRating } from '../sim/flowRatings';
 import type { ComponentFactoryContext } from '../components/registry';
 import type { ViewportAdapter } from '../ui/viewport';
@@ -44,6 +45,7 @@ export function serializeProject(name: string): ProjectFileV1 {
       y: appState.pageFrameY,
     },
     simulation: { mode: appState.simulationMode },
+    ...(appState.lineJumps ? {} : { lineJumps: false }),
     comps: appState.components.map((c) => ({
       id: c.id,
       type: c.type,
@@ -77,6 +79,18 @@ export function clearProject(): void {
   clearSelection();
 }
 
+/** A tap junction names the wire it sits on by its ends' component ids (components/junction.ts)
+ * - which a load gives new ids: carried over through `idMap`, or dropped if its wire's ends
+ * aren't loaded with it. */
+export function retargetTaps(idMap: Map<number, number>): void {
+  for (const comp of appState.components) {
+    if (comp.type !== JUNCTION_TYPE || ![...idMap.values()].includes(comp.id)) continue;
+    const snap = comp.snapshot();
+    const host = readJunctionHost(snap);
+    if (host) comp.restore({ ...snap, host: remapJunctionHost(host, idMap) });
+  }
+}
+
 export function loadProject(
   file: ProjectFileV1,
   ctx: ComponentFactoryContext,
@@ -93,6 +107,7 @@ export function loadProject(
     appState.pageFrameY = file.pageFrame?.y ?? 0;
     // Flow is the default; only a project saved in logic mode opens in it.
     appState.simulationMode = file.simulation?.mode === 'logic' ? 'logic' : 'flow';
+    appState.lineJumps = file.lineJumps !== false;
     appState.projectOriginDeviceId = file.origin ?? null;
     appState.projectLastSavedDeviceId = file.lastSaved ?? null;
 
@@ -116,6 +131,7 @@ export function loadProject(
       if (snap.mirror) setComponentMirrored(comp, true);
       idMap.set(snap.id, comp.id);
     }
+    retargetTaps(idMap);
 
     for (const snap of file.conns) {
       const fromId = idMap.get(snap.from.id);
