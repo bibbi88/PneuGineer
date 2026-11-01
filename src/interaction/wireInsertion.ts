@@ -3,7 +3,7 @@ import type { ComponentFactoryContext } from '../components/registry';
 import type { ViewportAdapter } from '../ui/viewport';
 import { appState } from '../app/AppState';
 import { spawnComponent } from './spawn';
-import { setComponentRotation } from './componentContextMenu';
+import { getComponentRotation, setComponentRotation } from './componentContextMenu';
 import { createConnection, redrawConnection, removeConnection } from '../wires/connection';
 import {
   computeConnectionAnchors,
@@ -330,20 +330,67 @@ export function trySpliceOntoWire(
 
   const hit = findNearestWireHit(viewport, workspaceEl, worldPoint);
   if (!hit) return null;
+  const splitRaw = projectOntoSegment(worldPoint, hit.a, hit.b);
+  const comp = spawnComponent(type, ctx, viewport, snap(splitRaw.x), snap(splitRaw.y));
+  spliceInto(comp, hit, worldPoint, viewport, workspaceEl, rotation);
+  return comp;
+}
+
+/**
+ * A component already on the canvas, dragged onto a wire: spliced into it just as one dropped
+ * from the library is (see trySpliceOntoWire) - if it's a wire-insertable type, has no wires of
+ * its own yet, and sits close enough to one. Returns whether it was spliced. Without this it
+ * would only lie on top of the wire, looking connected while the wire ran straight past it.
+ */
+export function trySpliceExisting(
+  comp: Component,
+  viewport: ViewportAdapter,
+  workspaceEl: HTMLElement,
+): boolean {
+  setWireInsertHighlight(null);
+  if (!splicableExisting(comp)) return false;
+  const at = { x: comp.x, y: comp.y };
+  const hit = findNearestWireHit(viewport, workspaceEl, at);
+  if (!hit) return false;
+  // Turned by the user (R while dragging): kept if it runs along the wire.
+  const rot = getComponentRotation(comp);
+  spliceInto(comp, hit, at, viewport, workspaceEl, rot === 0 ? undefined : rot);
+  return true;
+}
+
+/** Whether `comp` could be spliced into a wire it's dragged onto: a wire-insertable type with no
+ * wires of its own. */
+export function splicableExisting(comp: Component): boolean {
+  return (
+    isWireInsertableType(comp.type) &&
+    !appState.connections.some((c) => c.from.id === comp.id || c.to.id === comp.id)
+  );
+}
+
+/** Splices `comp` into the wire of `hit`, at the point nearest `worldPoint`. */
+function spliceInto(
+  comp: Component,
+  hit: WireHit,
+  worldPoint: Point,
+  viewport: ViewportAdapter,
+  workspaceEl: HTMLElement,
+  rotation: number | undefined,
+): void {
+  const type = comp.type;
   const { conn, a, b, bestIdx, guides } = hit;
 
   const splitRaw = projectOntoSegment(worldPoint, a, b);
   const splitPoint = { x: snap(splitRaw.x), y: snap(splitRaw.y) };
   const horizontal = a.y === b.y;
+  comp.setPos(splitPoint.x, splitPoint.y);
 
-  const comp = spawnComponent(type, ctx, viewport, splitPoint.x, splitPoint.y);
   if (type === QUICK_EXHAUST_VALVE_TYPE) {
     spliceQuickExhaust(comp, hit, splitPoint, viewport, workspaceEl, rotation);
-    return comp;
+    return;
   }
   if (THREE_TWO_TYPES.has(type)) {
     spliceThreeTwo(comp, hit, splitPoint, viewport, workspaceEl, rotation);
-    return comp;
+    return;
   }
   const [usual, reversed] = horizontal ? [90, 270] : [0, 180];
   setComponentRotation(comp, rotation === reversed ? reversed : usual);
@@ -377,6 +424,4 @@ export function trySpliceOntoWire(
   secondConn.stubStartLen = 0;
   secondConn.stubEndLen = stubEndLen;
   redrawConnection(secondConn);
-
-  return comp;
 }

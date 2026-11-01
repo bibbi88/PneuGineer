@@ -5,7 +5,9 @@ import {
   isWireInsertableType,
   setWireInsertHighlight,
   trySpliceOntoWire,
+  trySpliceExisting,
 } from './wireInsertion';
+import { createCheckValve } from '../components/checkValve';
 import { initWires, createConnection } from '../wires/connection';
 import { createJunction } from '../components/junction';
 import { CHECK_VALVE_TYPE } from '../components/checkValve';
@@ -367,6 +369,26 @@ describe('trySpliceOntoWire', () => {
       id: comp.id,
       port: '1',
     });
+  });
+
+  it('splices a valve already on the canvas when it is dragged onto a wire', () => {
+    const a = createJunction(compLayer(), 300, 100, 'V');
+    const b = createJunction(compLayer(), 300, 500, 'V');
+    appState.addComponent(a);
+    appState.addComponent(b);
+    const original = createConnection({ id: a.id, port: 'P' }, { id: b.id, port: 'P' });
+    const valve = createCheckValve(compLayer(), 304, 283); // let go just off the line
+    appState.addComponent(valve);
+
+    expect(trySpliceExisting(valve, viewport, workspaceEl)).toBe(true);
+    expect(valve.x).toBe(300);
+    expect(appState.connections.some((c) => c.id === original.id)).toBe(false);
+    expect(appState.connections).toHaveLength(2);
+    expect(appState.connections.every((c) => c.from.id === valve.id || c.to.id === valve.id)).toBe(
+      true,
+    );
+    // Already wired: dragging it again doesn't splice it a second time.
+    expect(trySpliceExisting(valve, viewport, workspaceEl)).toBe(false);
   });
 
   it('leaves the wire alone for a component type that is not wire-insertable', () => {
