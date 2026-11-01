@@ -14,7 +14,7 @@ import {
   type PortFeed,
 } from '../sim/flowModel';
 import { appState } from '../app/AppState';
-import { drawSensorMarks } from './shared/sensorMarks';
+import { drawSensorMarks, showSensorMarkStates } from './shared/sensorMarks';
 import { DRAWN_STROKE_SHARE } from './shared/strokeDrawing';
 import { Modes } from '../app/modes';
 import {
@@ -338,8 +338,12 @@ export function createCylinderDouble(compLayer: HTMLElement, x: number, y: numbe
   }
   appState.onChange(updateSensorMarks);
   updateSensorMarks();
+  appState.onModeChange(() =>
+    showSensorMarkStates(sensorMarks, sensors, pos, appState.mode !== Modes.STOP),
+  );
 
   function updateVisual(): void {
+    showSensorMarkStates(sensorMarks, sensors, pos, appState.mode !== Modes.STOP);
     const layout = computeCylinderDoublePistonLayout(geo, pos);
     piston.setAttribute('x', String(layout.px));
     rod.setAttribute('x', String(layout.rodX));

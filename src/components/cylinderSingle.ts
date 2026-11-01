@@ -14,7 +14,8 @@ import {
 } from '../sim/flowModel';
 import { redrawAllConnections } from '../wires/connection';
 import { appState } from '../app/AppState';
-import { drawSensorMarks } from './shared/sensorMarks';
+import { Modes } from '../app/modes';
+import { drawSensorMarks, showSensorMarkStates } from './shared/sensorMarks';
 import { DRAWN_STROKE_SHARE } from './shared/strokeDrawing';
 import {
   isInSensorRange,
@@ -285,8 +286,12 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
   }
   appState.onChange(updateSensorMarks);
   updateSensorMarks();
+  appState.onModeChange(() =>
+    showSensorMarkStates(sensorMarks, sensors, pos, appState.mode !== Modes.STOP),
+  );
 
   function updateVisual(): void {
+    showSensorMarkStates(sensorMarks, sensors, pos, appState.mode !== Modes.STOP);
     const layout = computeCylinderSinglePistonLayout(geo, pos);
     piston.setAttribute('x', String(layout.px));
     rod.setAttribute('x', String(layout.rodX));

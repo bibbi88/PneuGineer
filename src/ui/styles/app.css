@@ -2237,3 +2237,11 @@ body.libraryDragging * {
   font: inherit;
   font-size: 12.5px;
 }
+
+/* A cylinder sensor that is on during a run: its name gets a yellow box (sensorMarks.ts). Canvas
+   only - exports don't carry this style. */
+.sensorMarkActive .sensorMarkBg {
+  fill: #ffe14d;
+  stroke: #d4b000;
+  stroke-width: 1;
+}
