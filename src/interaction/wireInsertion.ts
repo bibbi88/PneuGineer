@@ -19,7 +19,7 @@ import {
 } from '../geometry/routing';
 import { portGlobalPosition } from '../geometry/coords';
 import { WIRE_STUB } from '../sim/constants';
-import { snap } from '../core/grid';
+import { GRID_SIZE, snap } from '../core/grid';
 import { CHECK_VALVE_TYPE } from '../components/checkValve';
 import { QUICK_EXHAUST_VALVE_TYPE } from '../components/quickExhaustValve';
 import { CYLINDER_SINGLE_TYPE } from '../components/cylinderSingle';
@@ -174,6 +174,41 @@ function isCylinder(id: number): boolean {
 }
 
 /**
+ * Slides `comp` along the wire segment a-b so both of its ports `p` and `q` (on the segment's
+ * line) lie within the segment - a drop near a bend would otherwise leave one port past the
+ * corner, and the wire half kept from there would double back over the component. Returns false
+ * when the segment is shorter than the component: its halves then have to route afresh.
+ */
+function fitAlongSegment(comp: Component, p: Point, q: Point, a: Point, b: Point): boolean {
+  const horizontal = a.y === b.y;
+  const along = (pt: Point): number => (horizontal ? pt.x : pt.y);
+  const lo = Math.min(along(a), along(b));
+  const hi = Math.max(along(a), along(b));
+  const pLo = Math.min(along(p), along(q));
+  const pHi = Math.max(along(p), along(q));
+  const room = hi - lo - (pHi - pLo);
+  if (room < 0) return false;
+  const margin = room >= 2 * GRID_SIZE ? GRID_SIZE : 0;
+  let shift = 0;
+  if (pLo < lo + margin) shift = lo + margin - pLo;
+  else if (pHi > hi - margin) shift = hi - margin - pHi;
+  if (shift !== 0) {
+    comp.setPos(horizontal ? comp.x + shift : comp.x, horizontal ? comp.y : comp.y + shift);
+  }
+  return true;
+}
+
+/** The kept guides of the two halves of a split wire - none (route afresh) if the component
+ * didn't fit on the segment. */
+function halfGuides(
+  guides: WireGuide[],
+  bestIdx: number,
+  fits: boolean,
+): [WireGuide[], WireGuide[]] {
+  return fits ? [guides.slice(0, bestIdx), guides.slice(bestIdx)] : [[], []];
+}
+
+/**
  * Splices a quick exhaust valve in: port 1 (supply inlet) takes the wire half on one side, port
  * 2 (outlet) the other, port 3 (exhaust) is left free. Unlike the plain pass-through valves its
  * ports aren't collinear, so it can't avoid a bend: it's kept unrotated (as the library shows
@@ -277,15 +312,24 @@ function spliceThreeTwo(
     // Port 1 is at the split point, so port 2 should be the one farther from the supply end.
     if (dist(p2, supplyEnd) < dist(splitPoint, supplyEnd)) placeAt(second);
   }
+  const fits = fitAlongSegment(
+    comp,
+    portGlobalPosition(viewport, workspaceEl, comp, '1'),
+    portGlobalPosition(viewport, workspaceEl, comp, '2'),
+    a,
+    b,
+  );
+  const [firstGuides, secondGuides] = halfGuides(guides, bestIdx, fits);
+  const join = fits ? 0 : null;
 
   const { from: originalFrom, to: originalTo, stubStartLen, stubEndLen } = conn;
   removeConnection(conn.id);
 
   if (supplyOnFrom) {
     const supplyConn = createConnection(originalFrom, { id: comp.id, port: '1' });
-    supplyConn.guides = guides.slice(0, bestIdx);
+    supplyConn.guides = firstGuides;
     supplyConn.stubStartLen = stubStartLen;
-    supplyConn.stubEndLen = 0;
+    supplyConn.stubEndLen = join;
     redrawConnection(supplyConn);
     const outletConn = createConnection({ id: comp.id, port: '2' }, originalTo);
     outletConn.stubEndLen = stubEndLen;
@@ -295,8 +339,8 @@ function spliceThreeTwo(
     outletConn.stubStartLen = stubStartLen;
     redrawConnection(outletConn);
     const supplyConn = createConnection({ id: comp.id, port: '1' }, originalTo);
-    supplyConn.guides = guides.slice(bestIdx);
-    supplyConn.stubStartLen = 0;
+    supplyConn.guides = secondGuides;
+    supplyConn.stubStartLen = join;
     supplyConn.stubEndLen = stubEndLen;
     redrawConnection(supplyConn);
   }
@@ -398,15 +442,18 @@ function spliceInto(
   // Which physical port (IN or OUT) actually ended up on `a`'s side (the original wire's "from"
   // side) depends on the rotation just applied - rather than re-deriving that by hand, measure
   // where each port really landed and pick whichever is closer to `a`.
-  const inPos = portGlobalPosition(viewport, workspaceEl, comp, 'IN');
-  const outPos = portGlobalPosition(viewport, workspaceEl, comp, 'OUT');
+  let inPos = portGlobalPosition(viewport, workspaceEl, comp, 'IN');
+  let outPos = portGlobalPosition(viewport, workspaceEl, comp, 'OUT');
+  const fits = fitAlongSegment(comp, inPos, outPos, a, b);
+  inPos = portGlobalPosition(viewport, workspaceEl, comp, 'IN');
+  outPos = portGlobalPosition(viewport, workspaceEl, comp, 'OUT');
   const distToA = (p: Point): number => Math.hypot(p.x - a.x, p.y - a.y);
   const fromPort: PortKey = distToA(inPos) <= distToA(outPos) ? 'IN' : 'OUT';
   const toPort: PortKey = fromPort === 'IN' ? 'OUT' : 'IN';
 
   const { from: originalFrom, to: originalTo, stubStartLen, stubEndLen } = conn;
-  const firstGuides = guides.slice(0, bestIdx);
-  const secondGuides = guides.slice(bestIdx);
+  const [firstGuides, secondGuides] = halfGuides(guides, bestIdx, fits);
+  const join = fits ? 0 : null;
 
   removeConnection(conn.id);
 
@@ -416,12 +463,12 @@ function spliceInto(
   const firstConn = createConnection(originalFrom, { id: comp.id, port: fromPort });
   firstConn.guides = firstGuides;
   firstConn.stubStartLen = stubStartLen;
-  firstConn.stubEndLen = 0;
+  firstConn.stubEndLen = join;
   redrawConnection(firstConn);
 
   const secondConn = createConnection({ id: comp.id, port: toPort }, originalTo);
   secondConn.guides = secondGuides;
-  secondConn.stubStartLen = 0;
+  secondConn.stubStartLen = join;
   secondConn.stubEndLen = stubEndLen;
   redrawConnection(secondConn);
 }

@@ -18,6 +18,7 @@ import { PUSH_BUTTON_32_TYPE } from '../components/pushButton32';
 import { AIR_VALVE_32_TYPE } from '../components/airValve32';
 import { LIMIT_VALVE_32_TYPE } from '../components/limitValve32';
 import { portGlobalPosition } from '../geometry/coords';
+import { computeConnectionGeometry } from '../geometry/connectionGeometry';
 import type { ComponentFactoryContext } from '../components/registry';
 import type { ViewportAdapter } from '../ui/viewport';
 
@@ -369,6 +370,40 @@ describe('trySpliceOntoWire', () => {
       id: comp.id,
       port: '1',
     });
+  });
+
+  it('slides a valve dropped near a bend back onto the segment, both ports on it', () => {
+    // Down from a to y=300, across to x=600, down to b: corners at (300,300) and (600,300).
+    const a = createJunction(compLayer(), 300, 100, 'V');
+    const b = createJunction(compLayer(), 600, 400, 'V');
+    appState.addComponent(a);
+    appState.addComponent(b);
+    const conn = createConnection({ id: a.id, port: 'P' }, { id: b.id, port: 'P' });
+    conn.guides = [{ type: 'H', pos: 300 }];
+
+    // Dropped on the horizontal run just short of the corner: one port would pass the bend.
+    const comp = trySpliceOntoWire(CHECK_VALVE_TYPE, ctx, viewport, workspaceEl, {
+      x: 595,
+      y: 300,
+    });
+
+    expect(comp).not.toBeNull();
+    for (const port of ['IN', 'OUT']) {
+      const p = portGlobalPosition(viewport, workspaceEl, comp!, port);
+      expect(p.y).toBe(300);
+      expect(p.x).toBeGreaterThanOrEqual(300);
+      expect(p.x).toBeLessThanOrEqual(600);
+    }
+    // Each half still turns the corner it had - none doubles back over the valve.
+    const toB = appState.connections.find((c) => c.to.id === b.id);
+    const route = computeConnectionGeometry(viewport, workspaceEl, toB!);
+    const xs = route.map((pt) => pt.x);
+    expect(Math.min(...xs)).toBeGreaterThanOrEqual(
+      Math.max(
+        portGlobalPosition(viewport, workspaceEl, comp!, 'IN').x,
+        portGlobalPosition(viewport, workspaceEl, comp!, 'OUT').x,
+      ),
+    );
   });
 
   it('splices a valve already on the canvas when it is dragged onto a wire', () => {

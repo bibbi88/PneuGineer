@@ -148,9 +148,10 @@ export function makeDraggable(comp: Component, viewport: ViewportAdapter): void 
       window.removeEventListener('mousedown', onRightDown, true);
       // Let go on a wire: spliced into it, like a valve dropped there from the library - rather
       // than left lying on top of it, looking connected while the wire runs straight past.
-      if (spliceable && workspaceEl && trySpliceExisting(comp, viewport, workspaceEl)) {
-        redrawAllConnections();
-        appState.markDirty();
+      if (spliceable && workspaceEl) {
+        appState.runSuppressed(() => {
+          if (trySpliceExisting(comp, viewport, workspaceEl)) redrawAllConnections();
+        });
       }
       setWireInsertHighlight(null);
     }
