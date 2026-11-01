@@ -20,6 +20,7 @@ export const VALVE_53_SOLENOID_TYPE = 'valve53Solenoid';
 export const SOLENOID_VALVE_TYPES = new Set<string>([
   // The configurable 5/2 valve (valve52Configurable.ts) keeps coil names in key14/key12 too.
   'valve52Cfg',
+  'valve53Cfg',
   VALVE_52_SOLENOID_TYPE,
   VALVE_52_SOLENOID_DOUBLE_TYPE,
   VALVE_53_SOLENOID_TYPE,

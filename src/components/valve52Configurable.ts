@@ -4,43 +4,27 @@ import { buildComponentShell, createSvgEl } from './shared/svgHelpers';
 import { appState } from '../app/AppState';
 import { Modes } from '../app/modes';
 import { setSilencerState, type SilencerOption } from './shared/silencer';
-import { addSpringZigzag, SPRING_DEFAULT_GEOMETRY } from './shared/spring';
 import { drawValve52Body, VALVE_52_DEFAULT_GEOMETRY } from './valve52';
-import { drawSolenoid, markDuplicateLabel } from './solenoidValves';
-import { getSignal } from '../sim/signals';
-import { flowPressureAt } from '../sim/flowNetwork';
-import { portKey } from '../sim/pressure';
-import { PILOT_MIN_BAR } from '../sim/engine';
 import { isSensorTriggeredAtRest } from './shared/sensorPositions';
+import {
+  ACTUATOR_LABELS,
+  canBePilotOperated,
+  createPilotSupplyPort,
+  drawActuator,
+  isActuator,
+  isEndActuated,
+  readPilotSupply,
+  type Actuator,
+  type PilotSupply,
+} from './shared/valveActuators';
 
 export const VALVE_52_CONFIGURABLE_TYPE = 'valve52Cfg';
 
-/** What shifts a configurable 5/2 valve from one end: an air pilot (port 14/12), a solenoid
- * (a coil name, Y1...), a manual push button, a roller (a cylinder sensor, a0...) - or, on the
- * right, a return spring. */
-export type Actuator52 = 'air' | 'solenoid' | 'button' | 'roller' | 'spring';
-
-export const ACTUATOR_52_LABELS: Record<Actuator52, string> = {
-  air: 'Air pilot',
-  solenoid: 'Solenoid',
-  button: 'Push button',
-  roller: 'Roller',
-  spring: 'Spring',
-};
-export const LEFT_ACTUATORS: Actuator52[] = ['air', 'solenoid', 'button', 'roller'];
-export const RIGHT_ACTUATORS: Actuator52[] = ['air', 'solenoid', 'button', 'roller', 'spring'];
-
-/** Actuators that can work through an internal pilot (servo / pilot-operated): the solenoid,
- * button or roller only opens a small pilot valve, and air taken from port 1 shifts the spool. */
-export function canBePilotOperated(a: Actuator52): boolean {
-  return a === 'solenoid' || a === 'button' || a === 'roller';
-}
-
-function isActuator(v: unknown, allowed: Actuator52[]): v is Actuator52 {
-  return typeof v === 'string' && (allowed as string[]).includes(v);
-}
-
-const STROKE = 2;
+export type Actuator52 = Actuator;
+export const ACTUATOR_52_LABELS = ACTUATOR_LABELS;
+export { canBePilotOperated };
+export const LEFT_ACTUATORS: Actuator[] = ['air', 'solenoid', 'button', 'roller'];
+export const RIGHT_ACTUATORS: Actuator[] = ['air', 'solenoid', 'button', 'roller', 'spring'];
 
 /**
  * A 5/2 valve whose actuation is chosen per end - the inspector draws it with a dropdown at each
@@ -49,9 +33,9 @@ const STROKE = 2;
  * the right, which makes it monostable: it sits in 1->2 unless the left end is actuated.
  * Otherwise it's bistable, staying where it was last shifted, and starts from a chosen position.
  *
- * Pilot-operated: a solenoid, button or roller then only shifts the valve while port 1 has
- * enough pressure to drive the spool (PILOT_MIN_BAR in flow mode; pressurized in logic mode),
- * and the symbol shows the internal pilot as a filled triangle between actuator and body.
+ * Pilot-operated (see shared/valveActuators.ts): an actuated end then only shifts the valve
+ * while the pilot stage has air - from port 1 (internal) or port X (external) - and the symbol
+ * shows the pilot stage as a filled triangle between actuator and body.
  */
 export function createValve52Configurable(compLayer: HTMLElement, x: number, y: number): Component {
   const geo = VALVE_52_DEFAULT_GEOMETRY;
@@ -82,10 +66,20 @@ export function createValve52Configurable(compLayer: HTMLElement, x: number, y: 
 
   const BODY_W = geo.w0 * 2;
   const CY = geo.h0 / 2;
+  /** The pilot ports' distance out from the end face (as drawValve52Body places them). */
+  const PILOT_PORT_OUT = geo.pilotLinkGap + geo.pilotPortOffset;
 
-  let left: Actuator52 = 'air';
-  let right: Actuator52 = 'air';
-  let pilotOperated = false;
+  // External pilot supply: port X under the left end (the left cell, at rest).
+  const supply = createPilotSupplyPort(
+    svg,
+    geo.gx0 - geo.w0 + 20,
+    geo.gy0 + geo.h0,
+    geo.gy0 + geo.h0 + geo.fixedPortLead,
+  );
+
+  let left: Actuator = 'air';
+  let right: Actuator = 'air';
+  let pilot: PilotSupply = 'none';
   let key14 = '';
   let key12 = '';
   let sensor14 = '';
@@ -104,124 +98,43 @@ export function createValve52Configurable(compLayer: HTMLElement, x: number, y: 
   const monostable = (): boolean => right === 'spring';
   const restState = (): 0 | 1 => (monostable() ? 1 : startPos);
 
-  /** Draws one end's actuator into `group`, its body-side edge at `edgeX`. Returns the label
-   * text element, if the actuator has one (a coil name or a sensor). */
-  function drawActuator(
-    group: SVGGElement,
-    side: 'left' | 'right',
-    kind: Actuator52,
-    label: string,
-  ): void {
-    group.replaceChildren();
-    if (kind === 'air') return;
-    const dir = side === 'left' ? -1 : 1;
-    let edge = side === 'left' ? 0 : BODY_W;
-    const line = (x1: number, y1: number, x2: number, y2: number, w = STROKE): SVGElement =>
-      createSvgEl('line', { x1, y1, x2, y2, stroke: '#111', 'stroke-width': w });
-
-    if (kind === 'spring') {
-      addSpringZigzag(
-        group,
-        edge,
-        edge + dir * SPRING_DEFAULT_GEOMETRY.springSpan,
-        CY,
-        STROKE,
-        SPRING_DEFAULT_GEOMETRY,
-      );
-      return;
-    }
-
-    if (pilotOperated) {
-      // The internal pilot: a filled triangle against the end face, in a small box, with the
-      // actuator itself further out (ISO 1219-1 pilot-operated actuation).
-      const boxW = 16;
-      const x0 = Math.min(edge, edge + dir * boxW);
-      group.append(
-        createSvgEl('rect', {
-          x: x0,
-          y: CY - 9,
-          width: boxW,
-          height: 18,
-          fill: '#fff',
-          stroke: '#111',
-          'stroke-width': STROKE,
-        }),
-        createSvgEl('polygon', {
-          points: [
-            [edge + dir * 3, CY],
-            [edge + dir * 12, CY - 5],
-            [edge + dir * 12, CY + 5],
-          ]
-            .map((p) => p.join(','))
-            .join(' '),
-          fill: '#111',
-        }),
-      );
-      edge += dir * boxW;
-    }
-
-    if (kind === 'solenoid') {
-      const sub = createSvgEl('g');
-      group.appendChild(sub);
-      const text = drawSolenoid(sub, side, edge, CY);
-      text.textContent = label;
-      markDuplicateLabel(text, label);
-      return;
-    }
-
-    if (kind === 'button') {
-      // A plunger with a mushroom head.
-      const out = edge + dir * 16;
-      group.append(
-        line(edge, CY, out, CY),
-        line(out, CY - 10, out, CY + 10, 2.5),
-        createSvgEl('path', {
-          d: `M ${out} ${CY - 10} q ${dir * 7} 10 0 20`,
-          fill: 'none',
-          stroke: '#111',
-          'stroke-width': STROKE,
-        }),
-      );
-      return;
-    }
-
-    // Roller lever: two arms out to a roller, the sensor's name above it.
-    const rx = edge + dir * 26;
-    group.append(
-      line(edge, CY - 6, rx, CY - 6),
-      line(edge, CY + 6, rx, CY + 6),
-      createSvgEl('circle', {
-        cx: rx + dir * 4,
-        cy: CY,
-        r: 10,
-        fill: '#fff',
-        stroke: '#111',
-        'stroke-width': STROKE,
-      }),
-      createSvgEl('circle', {
-        cx: rx + dir * 4,
-        cy: CY,
-        r: 4,
-        fill: '#fff',
-        stroke: '#111',
-        'stroke-width': STROKE,
-      }),
-    );
-    const text = createSvgEl('text', {
-      x: rx + dir * 4,
-      y: CY - 15,
-      'text-anchor': 'middle',
-      'font-size': 11,
+  /** The body's own air-pilot artwork shows only for a plain air pilot; the port and its number
+   * stay for a pilot-operated one, the rest drawn with the pilot stage. */
+  function showBodyAir(group: SVGGElement, kind: Actuator): void {
+    group.style.display = kind === 'air' ? '' : 'none';
+    const direct = pilot === 'none';
+    Array.from(group.children).forEach((child, i) => {
+      // [triangle, wall line, pilot line, port, number]
+      if (i < 3) (child as SVGElement).style.display = direct ? '' : 'none';
     });
-    text.textContent = label;
-    group.appendChild(text);
   }
 
   function drawActuators(): void {
-    airLeft.style.display = left === 'air' ? '' : 'none';
-    airRight.style.display = right === 'air' ? '' : 'none';
-    drawActuator(leftGroup, 'left', left, left === 'roller' ? sensor14 : key14);
-    drawActuator(rightGroup, 'right', right, right === 'roller' ? sensor12 : key12);
+    showBodyAir(airLeft, left);
+    showBodyAir(airRight, right);
+    const at = (edgeX: number, dir: number): Parameters<typeof drawActuator>[5] => ({
+      edgeX,
+      cy: CY,
+      portX: edgeX + dir * PILOT_PORT_OUT,
+      bodyBottom: geo.h0,
+    });
+    const draws = (kind: Actuator): boolean => kind !== 'air' || pilot !== 'none';
+    leftGroup.replaceChildren();
+    rightGroup.replaceChildren();
+    if (draws(left)) {
+      drawActuator(leftGroup, 'left', left, left === 'roller' ? sensor14 : key14, pilot, at(0, -1));
+    }
+    if (draws(right)) {
+      drawActuator(
+        rightGroup,
+        'right',
+        right,
+        right === 'roller' ? sensor12 : key12,
+        pilot,
+        at(BODY_W, 1),
+      );
+    }
+    supply.group.style.display = pilot === 'external' ? '' : 'none';
   }
 
   function applyState(shown: 0 | 1 = state): void {
@@ -245,28 +158,12 @@ export function createValve52Configurable(compLayer: HTMLElement, x: number, y: 
   });
   appState.onModeChange(drawRestState);
 
-  /** Whether port 1 has the pressure an internal pilot needs. */
-  function pilotSupply(ctx: ConductivityContext): boolean {
-    if (appState.simulationMode === 'flow') {
-      return (flowPressureAt(portKey(comp.id, '1')) ?? 0) >= PILOT_MIN_BAR;
-    }
-    return ctx.isPressurized('1');
-  }
-
   function actuated(ctx: ConductivityContext, side: 14 | 12): boolean {
-    const kind = side === 14 ? left : right;
-    let on = false;
-    if (kind === 'air') on = ctx.isPressurized(side === 14 ? '14' : '12');
-    else if (kind === 'solenoid') {
-      const key = side === 14 ? key14 : key12;
-      on = key ? getSignal(key) : false;
-    } else if (kind === 'button') on = side === 14 ? pressed14 : pressed12;
-    else if (kind === 'roller') {
-      const sensor = side === 14 ? sensor14 : sensor12;
-      on = sensor ? getSignal(sensor) : false;
-    }
-    if (on && pilotOperated && canBePilotOperated(kind)) on = pilotSupply(ctx);
-    return on;
+    const end =
+      side === 14
+        ? { kind: left, pilotPort: '14', coil: key14, sensor: sensor14, pressed: pressed14 }
+        : { kind: right, pilotPort: '12', coil: key12, sensor: sensor12, pressed: pressed12 };
+    return isEndActuated(comp.id, end, pilot, ctx);
   }
 
   const comp: Component = {
@@ -279,7 +176,7 @@ export function createValve52Configurable(compLayer: HTMLElement, x: number, y: 
     svgH,
     gx: 0,
     gy: 0,
-    ports: { ...fixedPorts, '12': port12, '14': port14 },
+    ports: { ...fixedPorts, '12': port12, '14': port14, X: supply.port },
 
     // State 0: 1->4 and 2->3; state 1: 1->2 and 4->5 - the same cells as the other 5/2 valves.
     conductivityRule(): PortConnection[] {
@@ -316,7 +213,7 @@ export function createValve52Configurable(compLayer: HTMLElement, x: number, y: 
       return {
         left,
         right,
-        pilotOperated,
+        pilotSupply: pilot,
         key14,
         key12,
         sensor14,
@@ -333,7 +230,7 @@ export function createValve52Configurable(compLayer: HTMLElement, x: number, y: 
       const before = `${left}|${right}|${startPos}`;
       left = isActuator(data.left, LEFT_ACTUATORS) ? data.left : 'air';
       right = isActuator(data.right, RIGHT_ACTUATORS) ? data.right : 'air';
-      pilotOperated = Boolean(data.pilotOperated);
+      pilot = readPilotSupply(data);
       key14 = typeof data.key14 === 'string' ? data.key14 : '';
       key12 = typeof data.key12 === 'string' ? data.key12 : '';
       sensor14 = typeof data.sensor14 === 'string' ? data.sensor14 : '';

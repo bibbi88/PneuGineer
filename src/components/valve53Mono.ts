@@ -94,7 +94,7 @@ function line(x1: number, y1: number, x2: number, y2: number, stroke: number): S
 /** A single-headed flow arrow, from (x1,y1) to (x2,y2) with the arrowhead at the end - unlike
  * the 5/2 family's own bidirectional double-arrow, matching the reference symbol's convention of
  * showing which specific port each side cell feeds in that position. */
-function addArrow(
+export function addArrow(
   parent: SVGElement,
   x1: number,
   y1: number,
@@ -120,7 +120,7 @@ function addArrow(
  * perpendicular tick - the closed-center convention for "this port isn't connected to anything
  * while this cell is showing", used both by the center cell (all five ports) and by each side
  * cell (its own one unused port - see the state comments in drawValve53MonoBody). */
-function addDeadEndStub(
+export function addDeadEndStub(
   parent: SVGElement,
   x: number,
   fromTop: boolean,

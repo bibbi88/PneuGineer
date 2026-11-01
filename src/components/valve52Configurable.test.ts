@@ -62,7 +62,7 @@ describe('configurable 5/2 valve', () => {
 
   it('pilot operated: the solenoid only shifts it with pressure at port 1', () => {
     const dry = valve(
-      { left: 'solenoid', right: 'spring', key14: 'Y1', pilotOperated: true },
+      { left: 'solenoid', right: 'spring', key14: 'Y1', pilotSupply: 'internal' },
       false,
     );
     appState.setMode(Modes.PLAY);
@@ -73,7 +73,7 @@ describe('configurable 5/2 valve', () => {
     appState.components = [];
     appState.connections = [];
     appState.setMode(Modes.STOP);
-    const fed = valve({ left: 'solenoid', right: 'spring', key14: 'Y1', pilotOperated: true });
+    const fed = valve({ left: 'solenoid', right: 'spring', key14: 'Y1', pilotSupply: 'internal' });
     appState.setMode(Modes.PLAY);
     step();
     expect(state(fed)).toBe(0);

@@ -79,14 +79,16 @@ const TIP_SECTIONS: TipSection[] = [
         'trade places, so at rest it either blocks the supply or passes 1 → 2; the actuator ' +
         'itself still works the same way round.',
       'A 3/2 valve can be converted between push button, limit switch and air-piloted ' +
-        'actuation, and a 5/2 or 5/3 between pneumatic and solenoid, from the inspector’s ' +
-        'Control mode / Operation dropdown. Wires on ports the new variant also has carry over; ' +
+        'actuation from the inspector’s Control mode dropdown. Wires on ports the new variant ' +
+        'also has carry over; ' +
         'a wire on a port it doesn’t have is dropped.',
-      'Any 5/2 valve shows its actuation in the inspector as a picture of the valve with a ' +
+      'Any 5/2 or 5/3 valve shows its actuation in the inspector as a picture of the valve with a ' +
         'dropdown under each end: air pilot, solenoid, push button or roller (and a spring on ' +
-        'the right for spring return). "Pilot operated" makes a solenoid, button or roller ' +
-        'shift the valve only with pressure at port 1. A valve without a spring starts in the ' +
-        'position chosen under "Starts in".',
+        'the right for spring return). The Pilot choice makes any actuated end ' +
+        'shift the valve only with pilot air: from port 1 (internal pilot) or from its own port ' +
+        'X (external pilot). A 5/2 valve without a spring starts in the position chosen under ' +
+        '"Starts in". Choose 5/3 for a spring-centred valve and pick its centre: closed (all ' +
+        'blocked), exhausted (4→5, 2→3) or pressurized (1→4, 1→2).',
       'Exhaust ports come with a silencer fitted by default - the inspector can take it off.',
       'The pressure reducing valve caps everything downstream of it at its set pressure: port ' +
         'and wire readouts show the reduced figure, and a cylinder behind one develops ' +
