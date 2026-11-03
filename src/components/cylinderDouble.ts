@@ -14,6 +14,7 @@ import {
   type PortFeed,
 } from '../sim/flowModel';
 import { appState } from '../app/AppState';
+import { setSignalMotion } from '../sim/signals';
 import { drawSensorMarks, showSensorMarkStates } from './shared/sensorMarks';
 import { DRAWN_STROKE_SHARE } from './shared/strokeDrawing';
 import { Modes } from '../app/modes';
@@ -192,6 +193,13 @@ export function createCylinderDouble(compLayer: HTMLElement, x: number, y: numbe
   };
 
   let pos = 0;
+  /** Where the piston was when the sensors last reported - which way it's moving since. */
+  let motionFrom: number | null = null;
+  function sensorMotion(): number {
+    const d = motionFrom === null ? 0 : pos - motionFrom;
+    motionFrom = pos;
+    return Math.abs(d) > 1e-9 ? d : 0;
+  }
   /** Rests - and so starts each run - with the rod out rather than in. */
   let startExtended = false;
   const restPos = (): number => (startExtended ? 1 : 0);
@@ -313,8 +321,10 @@ export function createCylinderDouble(compLayer: HTMLElement, x: number, y: numbe
       forceLabelEl.style.display = 'none';
     }
 
+    const motion = sensorMotion();
     for (const sensor of sensors) {
       ctx.emitSignal(sensor.label, isInSensorRange(pos, sensor));
+      setSignalMotion(sensor.label, motion);
     }
   }
 
@@ -440,8 +450,10 @@ export function createCylinderDouble(compLayer: HTMLElement, x: number, y: numbe
         forceLabelEl.style.display = 'none';
       }
 
+      const motion = sensorMotion();
       for (const sensor of sensors) {
         ctx.emitSignal(sensor.label, isInSensorRange(pos, sensor));
+        setSignalMotion(sensor.label, motion);
       }
     },
 
@@ -488,6 +500,7 @@ export function createCylinderDouble(compLayer: HTMLElement, x: number, y: numbe
     },
     reset(): void {
       pos = restPos();
+      motionFrom = null;
       ventingNow = null;
       fillingNow = null;
       flowStarted = false;

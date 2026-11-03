@@ -174,17 +174,12 @@ export function drawActuator(
   }
 
   if (kind === 'button') {
-    // A plunger with a mushroom head.
-    const out = edge + dir * 16;
+    // Push button, as on the 3/2 push-button valve: two arms out to the button's bar.
+    const out = edge + dir * 20;
     group.append(
-      line(edge, cy, out, cy),
-      line(out, cy - 10, out, cy + 10, 2.5),
-      createSvgEl('path', {
-        d: `M ${out} ${cy - 10} q ${dir * 7} 10 0 20`,
-        fill: 'none',
-        stroke: '#111',
-        'stroke-width': STROKE,
-      }),
+      line(edge, cy - 10, out, cy - 10),
+      line(edge, cy + 10, out, cy + 10),
+      line(out, cy - 20, out, cy + 20),
     );
     return;
   }

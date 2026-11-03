@@ -8,13 +8,32 @@ import {
   SLIDING_VALVE_OFFSET_X,
   SLIDING_VALVE_OFFSET_Y,
 } from './shared/slidingValve32';
-import { getSignal } from '../sim/signals';
+import { getSignal, getSignalMotion } from '../sim/signals';
 import { appState } from '../app/AppState';
 import { isSensorKeyBoundElsewhere, isSensorTriggeredAtRest } from './shared/sensorPositions';
 import { Modes } from '../app/modes';
 import { addSpringZigzag, SPRING_DEFAULT_GEOMETRY } from './shared/spring';
 
 export const LIMIT_VALVE_32_TYPE = 'limitValve32';
+
+/** The limit valve's roller: an ordinary roller lever, actuated whenever its sensor is, or a
+ * one-way roller lever (idle return) - tripped only as the cylinder passes it in one direction,
+ * folding out of the way the other way, so it gives a short signal rather than holding one. */
+export type RollerKind = 'roller' | 'oneWayExtend' | 'oneWayRetract';
+
+export const ROLLER_KIND_LABELS: Record<RollerKind, string> = {
+  roller: 'Roller lever',
+  oneWayExtend: 'One-way, trips on extend',
+  oneWayRetract: 'One-way, trips on retract',
+};
+
+export function isRollerKind(v: unknown): v is RollerKind {
+  return v === 'roller' || v === 'oneWayExtend' || v === 'oneWayRetract';
+}
+
+/** Shortest time, s, a one-way roller stays actuated once tripped - long enough for the valve it
+ * signals to switch, even when the cylinder comes to rest right on it. */
+export const ONE_WAY_PULSE_S = 0.3;
 
 // Extra right-side room for the spring symbol, beyond the offset already reserved on the left.
 // (+50/+34 rather than the "natural" +48/+30: chosen so ports 1/2/3 land exactly on the 10px
@@ -56,64 +75,66 @@ export const LIMIT_VALVE_32_DEFAULT_GEOMETRY: LimitValve32Geometry = {
 };
 
 /** Draws the roller lever + arms + spring into the mover, matching the original app's
- * roller-lever limit-switch artwork. Coordinates are local to the mover, not the canvas.
- * `cam` is the cylinder's trip cam pressing the roller, the sign that the valve is held
- * actuated - hidden until the caller shows it. */
+ * roller-lever limit-switch artwork - or, for a one-way roller, the ISO idle-return lever: the
+ * roller on a hinged lever angled up (trips on extend) or down (trips on retract). Coordinates
+ * are local to the mover, not the canvas. `cam` is the cylinder's trip cam pressing the roller,
+ * the sign that the valve is held actuated - hidden until the caller shows it. */
 export function drawLimitValve32Actuator(
   mover: SVGGElement,
   geo: LimitValve32Geometry,
+  kind: RollerKind = 'roller',
 ): { sensorLabel: SVGTextElement; cam: SVGElement } {
   const rollerGroup = createSvgEl('g', {
     transform: `translate(${geo.rollerX}, ${SLIDING_VALVE_H / 2})`,
   });
-  rollerGroup.appendChild(
-    createSvgEl('path', {
-      d: `M ${geo.rollerArmStartX} ${-geo.rollerArmHalfY} L ${geo.rollerArmReach} ${-geo.rollerArmHalfY}`,
-      fill: 'none',
-      stroke: '#111',
-      'stroke-width': 2,
-    }),
-  );
-  rollerGroup.appendChild(
-    createSvgEl('path', {
-      d: `M ${geo.rollerArmStartX} ${geo.rollerArmHalfY} L ${geo.rollerArmReach} ${geo.rollerArmHalfY}`,
-      fill: 'none',
-      stroke: '#111',
-      'stroke-width': 2,
-    }),
-  );
-  rollerGroup.appendChild(
-    createSvgEl('circle', {
-      cx: geo.rollerCenterX,
-      cy: 0,
-      r: geo.rollerOuterR,
-      fill: '#fff',
-      stroke: '#111',
-      'stroke-width': 2,
-    }),
-  );
-  rollerGroup.appendChild(
-    createSvgEl('circle', {
-      cx: geo.rollerCenterX,
-      cy: 0,
-      r: geo.rollerInnerR,
-      fill: '#fff',
-      stroke: '#111',
-      'stroke-width': 2,
-    }),
+  const stroke = { fill: 'none', stroke: '#111', 'stroke-width': 2 };
+  const oneWay = kind !== 'roller';
+  // The two arms from the body out to the roller - to the lever's hinge on a one-way roller.
+  const armStart = oneWay ? ONE_WAY_HINGE_X : geo.rollerArmStartX;
+  for (const y of [-geo.rollerArmHalfY, geo.rollerArmHalfY]) {
+    rollerGroup.appendChild(
+      createSvgEl('path', { d: `M ${armStart} ${y} L ${geo.rollerArmReach} ${y}`, ...stroke }),
+    );
+  }
+
+  let cx = geo.rollerCenterX;
+  let cy = 0;
+  let outerR = geo.rollerOuterR;
+  let innerR = geo.rollerInnerR;
+  let labelY = geo.labelYOffset;
+  if (oneWay) {
+    const up = kind === 'oneWayExtend' ? -1 : 1;
+    cx = ONE_WAY_ROLLER_X;
+    cy = up * ONE_WAY_ROLLER_RISE;
+    outerR = ONE_WAY_ROLLER_R;
+    innerR = 4;
+    // Hinge: a cross-bar closing the arms, the pivot on it, and the lever out to the roller.
+    rollerGroup.append(
+      createSvgEl('path', {
+        d: `M ${ONE_WAY_HINGE_X} ${-geo.rollerArmHalfY} L ${ONE_WAY_HINGE_X} ${geo.rollerArmHalfY}`,
+        ...stroke,
+      }),
+      createSvgEl('path', { d: `M ${ONE_WAY_HINGE_X} 0 L ${cx} ${cy}`, ...stroke }),
+      createSvgEl('circle', { cx: ONE_WAY_HINGE_X, cy: 0, r: 2.5, fill: '#111' }),
+    );
+    labelY = up < 0 ? cy - outerR - 4 : geo.labelYOffset;
+  }
+  rollerGroup.append(
+    createSvgEl('circle', { cx, cy, r: outerR, ...stroke, fill: '#fff' }),
+    createSvgEl('circle', { cx, cy, r: innerR, ...stroke, fill: '#fff' }),
   );
   const sensorLabel = createSvgEl('text', {
-    x: geo.rollerCenterX,
-    y: geo.labelYOffset,
+    x: cx,
+    y: labelY,
     'text-anchor': 'middle',
     'font-size': 11,
   });
   rollerGroup.appendChild(sensorLabel);
 
   // A solid wedge pointing at the roller from outside, its tip touching it.
-  const camTip = geo.rollerCenterX - geo.rollerOuterR - 1;
+  const camTip = cx - outerR - 1;
   const cam = createSvgEl('path', {
-    d: `M ${camTip} 0 L ${camTip - 14} -8 L ${camTip - 14} 8 Z`,
+    d: `M ${camTip} ${cy} L ${camTip - 14} ${cy - 8} L ${camTip - 14} ${cy + 8} Z`,
     fill: '#111',
     class: 'limitValveCam',
   });
@@ -128,6 +149,12 @@ export function drawLimitValve32Actuator(
   mover.append(rollerGroup, spring);
   return { sensorLabel, cam };
 }
+
+/** The one-way roller's hinge, roller and how far off the axis the angled lever lifts it. */
+const ONE_WAY_HINGE_X = 14;
+const ONE_WAY_ROLLER_X = -2;
+const ONE_WAY_ROLLER_RISE = 15;
+const ONE_WAY_ROLLER_R = 10;
 
 export function createLimitValve32(compLayer: HTMLElement, x: number, y: number): Component {
   const geo = LIMIT_VALVE_32_DEFAULT_GEOMETRY;
@@ -148,7 +175,18 @@ export function createLimitValve32(compLayer: HTMLElement, x: number, y: number)
   );
   const valve = buildSlidingValve32Body(shell.svg, `arrow-limit-${uid()}`);
   shell.followFrame(valve.mover, valve.rest.x, valve.rest.y);
-  const { sensorLabel, cam } = drawLimitValve32Actuator(valve.mover, geo);
+  let rollerKind: RollerKind = 'roller';
+  const actuatorG = createSvgEl('g') as SVGGElement;
+  valve.mover.appendChild(actuatorG);
+  let { sensorLabel, cam } = drawLimitValve32Actuator(actuatorG, geo, rollerKind);
+  function setRollerKind(kind: RollerKind): void {
+    if (kind === rollerKind) return;
+    rollerKind = kind;
+    actuatorG.replaceChildren();
+    ({ sensorLabel, cam } = drawLimitValve32Actuator(actuatorG, geo, rollerKind));
+  }
+  /** Time left, s, of a one-way roller's trip pulse. */
+  let pulseLeft = 0;
 
   const id = uid();
 
@@ -199,7 +237,9 @@ export function createLimitValve32(compLayer: HTMLElement, x: number, y: number)
   // `active`, what the simulation and the saved project go by, is untouched.
   function drawRestState(): void {
     if (appState.mode !== Modes.STOP) return;
-    draw(sensorKey !== '' && isSensorTriggeredAtRest(sensorKey));
+    // A one-way roller folds away under a cam resting on it: drawn unactuated.
+    const held = rollerKind === 'roller' && isSensorTriggeredAtRest(sensorKey);
+    draw(sensorKey !== '' && held);
   }
   appState.onChange(drawRestState);
   appState.onModeChange(drawRestState);
@@ -221,8 +261,23 @@ export function createLimitValve32(compLayer: HTMLElement, x: number, y: number)
     },
 
     recompute(): void {
-      active = sensorKey ? getSignal(sensorKey) : manualActive;
+      if (!sensorKey) active = manualActive;
+      else if (rollerKind === 'roller') active = getSignal(sensorKey);
+      else {
+        // Tripped only while its cam passes the way it's set for - and then for at least a
+        // short pulse, so a cylinder stopping right on it still gets its signal through.
+        const on = getSignal(sensorKey);
+        const tripping =
+          on && getSignalMotion(sensorKey) === (rollerKind === 'oneWayExtend' ? 1 : -1);
+        if (tripping) pulseLeft = ONE_WAY_PULSE_S;
+        else if (!on) pulseLeft = 0;
+        active = on && (tripping || pulseLeft > 0);
+      }
       draw(active);
+    },
+
+    step(dt: number): void {
+      pulseLeft = Math.max(0, pulseLeft - dt);
     },
 
     snapshot(): Record<string, unknown> {
@@ -230,6 +285,7 @@ export function createLimitValve32(compLayer: HTMLElement, x: number, y: number)
         active,
         normallyOpen,
         sensorKey,
+        ...(rollerKind === 'roller' ? {} : { roller: rollerKind }),
         showName: shell.getNameVisible(),
         customName: shell.getCustomName(),
         silencer3: valve.getSilencer(),
@@ -239,6 +295,7 @@ export function createLimitValve32(compLayer: HTMLElement, x: number, y: number)
       active = data.active as boolean;
       normallyOpen = Boolean(data.normallyOpen);
       sensorKey = data.sensorKey as string;
+      setRollerKind(isRollerKind(data.roller) ? data.roller : 'roller');
       shell.setNameVisible(Boolean(data.showName));
       shell.setCustomName((data.customName as string | null) ?? null);
       valve.setSilencer((data.silencer3 as 'none' | 'silencer') ?? 'silencer');
@@ -250,6 +307,7 @@ export function createLimitValve32(compLayer: HTMLElement, x: number, y: number)
     reset(): void {
       active = false;
       manualActive = false;
+      pulseLeft = 0;
       draw(false);
       drawRestState();
     },

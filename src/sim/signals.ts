@@ -15,6 +15,19 @@ export function getSignal(key: string): boolean {
   return signals.get(normalize(key)) ?? false;
 }
 
+/** Which way the cylinder carrying each sensor is moving this frame: +1 extending, -1
+ * retracting, 0 still - what a one-way roller lever goes by (it trips one way only). */
+const motions = new Map<string, number>();
+
+export function setSignalMotion(key: string, dir: number): void {
+  motions.set(normalize(key), Math.sign(dir));
+}
+
+export function getSignalMotion(key: string): number {
+  return motions.get(normalize(key)) ?? 0;
+}
+
 export function resetSignals(): void {
   signals.clear();
+  motions.clear();
 }

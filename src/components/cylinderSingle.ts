@@ -14,6 +14,7 @@ import {
 } from '../sim/flowModel';
 import { redrawAllConnections } from '../wires/connection';
 import { appState } from '../app/AppState';
+import { setSignalMotion } from '../sim/signals';
 import { Modes } from '../app/modes';
 import { drawSensorMarks, showSensorMarkStates } from './shared/sensorMarks';
 import { DRAWN_STROKE_SHARE } from './shared/strokeDrawing';
@@ -242,6 +243,13 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
   const ports = { A: portACircle };
 
   let pos = 0;
+  /** Where the piston was when the sensors last reported - which way it's moving since. */
+  let motionFrom: number | null = null;
+  function sensorMotion(): number {
+    const d = motionFrom === null ? 0 : pos - motionFrom;
+    motionFrom = pos;
+    return Math.abs(d) > 1e-9 ? d : 0;
+  }
   let normallyExtended = false;
   let sensors: CylinderSensor[] = defaultSensors(letter);
   let ventingNow = false;
@@ -387,8 +395,10 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
     } else {
       forceLabelEl.style.display = 'none';
     }
+    const motion = sensorMotion();
     for (const sensor of sensors) {
       ctx.emitSignal(sensor.label, isInSensorRange(pos, sensor));
+      setSignalMotion(sensor.label, motion);
     }
   }
 
@@ -465,8 +475,10 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
         forceLabelEl.style.display = 'none';
       }
 
+      const motion = sensorMotion();
       for (const sensor of sensors) {
         ctx.emitSignal(sensor.label, isInSensorRange(pos, sensor));
+        setSignalMotion(sensor.label, motion);
       }
     },
 
@@ -513,6 +525,7 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
     },
     reset(): void {
       pos = normallyExtended ? 1 : 0;
+      motionFrom = null;
       ventingNow = false;
       fillingNow = false;
       flowStarted = false;
@@ -566,6 +579,7 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
       // new mode's own default rest position instead of animating there on the next step.
       normallyExtended = newMode === 'pull';
       pos = normallyExtended ? 1 : 0;
+      motionFrom = null;
       updatePortSide();
       updateLabel();
       updateVisual();

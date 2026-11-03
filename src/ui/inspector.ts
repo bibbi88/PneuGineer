@@ -48,7 +48,11 @@ import { SOURCE_PRESSURE } from '../sim/constants';
 import { QUICK_EXHAUST_VALVE_TYPE } from '../components/quickExhaustValve';
 import { TIME_DELAY_VALVE_TYPE } from '../components/timeDelayValve';
 import { PRESSURE_SEQUENCE_VALVE_TYPE } from '../components/pressureSequenceValve';
-import { LIMIT_VALVE_32_TYPE } from '../components/limitValve32';
+import {
+  LIMIT_VALVE_32_TYPE,
+  ROLLER_KIND_LABELS,
+  type RollerKind,
+} from '../components/limitValve32';
 import { PUSH_BUTTON_32_TYPE } from '../components/pushButton32';
 import { AIR_VALVE_32_TYPE } from '../components/airValve32';
 import { CYLINDER_DOUBLE_TYPE } from '../components/cylinderDouble';
@@ -296,6 +300,15 @@ const INSPECTOR_FIELDS: Record<string, InspectorField[]> = {
     { kind: 'actuatorMode', label: 'Control mode', options: ACTUATOR_MODES },
     { kind: 'checkbox', key: 'normallyOpen', label: 'Normally open (NO)' },
     { kind: 'sensorKeySelect', key: 'sensorKey', label: 'Sensor key' },
+    {
+      kind: 'select',
+      key: 'roller',
+      label: 'Roller',
+      options: (Object.keys(ROLLER_KIND_LABELS) as RollerKind[]).map((value) => ({
+        value,
+        label: ROLLER_KIND_LABELS[value],
+      })),
+    },
     { kind: 'silencer', key: 'silencer3', port: '3', label: 'Port 3 silencer' },
   ],
   [AIR_VALVE_32_TYPE]: [
@@ -513,6 +526,7 @@ function renderSelectField(
   const span = document.createElement('span');
   span.textContent = resolveLabel(field.label, comp);
   const select = document.createElement('select');
+  select.setAttribute('aria-label', span.textContent);
   for (const opt of field.options) {
     const o = document.createElement('option');
     o.value = opt.value;
