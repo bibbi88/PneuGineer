@@ -29,6 +29,7 @@ describe('3/2 limit valve roller', () => {
 
   it('a one-way roller trips on extend, holds a short pulse, then lets go at rest', () => {
     const v = valveWith('oneWayExtend');
+    expect(open(v)).toBe(false);
     setSignal('a1', true);
     setSignalMotion('a1', 1);
     expect(open(v)).toBe(true);
@@ -48,14 +49,36 @@ describe('3/2 limit valve roller', () => {
     expect(open(v)).toBe(false);
   });
 
-  it('the other one-way roller trips on retract only', () => {
+  it('the other one-way roller trips on retract only, as the cam comes over it', () => {
+    const v = valveWith('oneWayRetract');
+    expect(open(v)).toBe(false);
+    setSignal('a1', true);
+    setSignalMotion('a1', -1);
+    expect(open(v)).toBe(true);
+    setSignal('a1', false);
+    expect(open(v)).toBe(false);
+  });
+
+  it('does not trip when the cam starts on it and moves off the trip way', () => {
+    // A sensor at 95-100 % with the cylinder extended onto it, then retracting: the lever is
+    // folded under the cam and never flips back, so nothing happens.
     const v = valveWith('oneWayRetract');
     setSignal('a1', true);
     setSignalMotion('a1', 1);
     expect(open(v)).toBe(false);
+    setSignalMotion('a1', 0);
+    expect(open(v)).toBe(false);
     setSignalMotion('a1', -1);
-    expect(open(v)).toBe(true);
+    expect(open(v)).toBe(false);
     setSignal('a1', false);
+    expect(open(v)).toBe(false);
+  });
+
+  it('does not trip on a cylinder starting on its sensor', () => {
+    const v = valveWith('oneWayExtend');
+    setSignal('a1', true);
+    expect(open(v)).toBe(false);
+    setSignalMotion('a1', 1);
     expect(open(v)).toBe(false);
   });
 

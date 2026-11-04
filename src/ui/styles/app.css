@@ -597,6 +597,29 @@ body.panelResizing * {
   pointer-events: none;
 }
 
+/* A selected picture's corner handles (components/picture.ts), on the selection outline's
+   corners. */
+.pictureHandle {
+  display: none;
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  box-sizing: border-box;
+  background: #fff;
+  border: 2px solid var(--accent);
+  border-radius: 2px;
+  z-index: 2;
+}
+
+.comp.compSelected .pictureHandle {
+  display: block;
+}
+
+.workspace.simulating .pictureHandle {
+  display: none;
+}
+
 /* A component a library drop would swap for the dragged type (AND <-> OR valve) - see
    interaction/libraryDrag.ts. */
 .comp.swapTarget .boundsBox {

@@ -187,6 +187,9 @@ export function createLimitValve32(compLayer: HTMLElement, x: number, y: number)
   }
   /** Time left, s, of a one-way roller's trip pulse. */
   let pulseLeft = 0;
+  /** Whether its sensor was on last time, and whether the cam then came over it the right way. */
+  let wasOn = false;
+  let tripped = false;
 
   const id = uid();
 
@@ -264,14 +267,19 @@ export function createLimitValve32(compLayer: HTMLElement, x: number, y: number)
       if (!sensorKey) active = manualActive;
       else if (rollerKind === 'roller') active = getSignal(sensorKey);
       else {
-        // Tripped only while its cam passes the way it's set for - and then for at least a
-        // short pulse, so a cylinder stopping right on it still gets its signal through.
+        // Tripped only by a cam coming over it from outside its range, the way it's set for -
+        // a cam that starts on it, or comes back over it, finds the lever folded away. Then on
+        // for at least a short pulse, so a cylinder stopping right on it still gets its signal
+        // through.
         const on = getSignal(sensorKey);
-        const tripping =
-          on && getSignalMotion(sensorKey) === (rollerKind === 'oneWayExtend' ? 1 : -1);
-        if (tripping) pulseLeft = ONE_WAY_PULSE_S;
-        else if (!on) pulseLeft = 0;
-        active = on && (tripping || pulseLeft > 0);
+        const motion = getSignalMotion(sensorKey);
+        const way = rollerKind === 'oneWayExtend' ? 1 : -1;
+        if (on && !wasOn) tripped = motion === way;
+        if (!on || motion === -way) tripped = false;
+        if (tripped && motion === way) pulseLeft = ONE_WAY_PULSE_S;
+        if (!tripped) pulseLeft = 0;
+        active = tripped && (motion === way || pulseLeft > 0);
+        wasOn = on;
       }
       draw(active);
     },
@@ -308,6 +316,8 @@ export function createLimitValve32(compLayer: HTMLElement, x: number, y: number)
       active = false;
       manualActive = false;
       pulseLeft = 0;
+      wasOn = false;
+      tripped = false;
       draw(false);
       drawRestState();
     },

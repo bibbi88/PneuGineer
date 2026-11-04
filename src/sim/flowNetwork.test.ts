@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { appState } from '../app/AppState';
 import { initWires, createConnection, removeConnection } from '../wires/connection';
-import { stepSimulation } from './engine';
+import { PILOT_MIN_BAR, stepSimulation } from './engine';
 import { portKey } from './pressure';
 import { flowPressureAt, resetFlowNetwork } from './flowNetwork';
 import { createSource } from '../components/source';
@@ -305,6 +305,33 @@ describe('time delay valve in flow mode', () => {
     const off = timeUntil(valve, false);
     expect(off).toBeGreaterThan(0.7);
     expect(off).toBeLessThan(1.3);
+  });
+
+  it('as a pulse valve, sends no second pulse while its supply line vents', () => {
+    // A limit valve (here a normally open push button, closed again to let go) feeds a
+    // normally open pulse valve, on 1 and on 12; port 2 pilots the next valve.
+    const source = add(createSource(layer(), 0, 0));
+    const signal = add(createPushButton32(layer(), 0, 0));
+    signal.restore({ ...signal.snapshot(), normallyOpen: true });
+    const pulse = add(createTimeDelayValve(layer(), 0, 0));
+    pulse.restore({ ...pulse.snapshot(), normallyOpen: true, delaySec: 0.3 });
+    const next = add(createValve52Mono(layer(), 0, 0));
+    wire(source, 'OUT', signal, '1');
+    wire(signal, '2', pulse, '1');
+    wire(signal, '2', pulse, '12');
+    wire(pulse, '2', next, '14');
+    for (let i = 0; i < 150; i++) stepSimulation(0.01);
+    expect(bar(next, '14')).toBeLessThan(0.5);
+
+    // The signal goes: its line vents through it, and the pulse valve springs back open on
+    // the way down - by then too low to pilot anything.
+    signal.restore({ ...signal.snapshot(), normallyOpen: false });
+    let peak = 0;
+    for (let i = 0; i < 300; i++) {
+      stepSimulation(0.01);
+      peak = Math.max(peak, bar(next, '14'));
+    }
+    expect(peak).toBeLessThan(PILOT_MIN_BAR);
   });
 
   it('as an off-delay, switches at once and holds for about its delay after the signal goes', () => {

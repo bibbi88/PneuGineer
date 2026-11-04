@@ -1,6 +1,8 @@
 import type { Component, PortConnection } from '../core/types';
 import { uid } from '../core/ids';
 import { buildComponentShell, createSvgEl } from './shared/svgHelpers';
+import { appState } from '../app/AppState';
+import { canEdit } from '../app/modes';
 
 export const PICTURE_TYPE = 'picture';
 
@@ -18,7 +20,8 @@ export const MAX_PICTURE_WIDTH = 3000;
  * library (see interaction/pictures.ts). Kept in the project itself, as a data URL, so the file
  * stays self-contained. It takes no part in the circuit.
  *
- * Its width is set in the inspector; the height follows from the picture's own proportions.
+ * Resized by dragging a corner handle of the selected picture - the opposite corner stays put
+ * and the picture keeps its proportions - or by its width in the inspector.
  */
 export function createPicture(compLayer: HTMLElement, x: number, y: number): Component {
   const shell = buildComponentShell(compLayer, PICTURE_TYPE, x, y, EMPTY_W, EMPTY_H, 'Picture');
@@ -118,6 +121,75 @@ export function createPicture(compLayer: HTMLElement, x: number, y: number): Com
     setSelected: shell.setSelected,
   };
 
+  addResizeHandles(comp, {
+    getWidth: () => width,
+    getAspect: () => aspect,
+    setWidth: (w) => {
+      width = Math.min(MAX_PICTURE_WIDTH, Math.max(MIN_PICTURE_WIDTH, Math.round(w)));
+      render();
+    },
+  });
+
   render();
   return comp;
+}
+
+interface Resizable {
+  getWidth(): number;
+  getAspect(): number;
+  setWidth(w: number): void;
+}
+
+/** The four corner handles of a selected picture (shown by CSS, see app.css): dragging one
+ * scales the picture about the opposite corner, proportions kept. One undo step per drag. */
+function addResizeHandles(comp: Component, size: Resizable): void {
+  for (const [sx, sy] of [
+    [-1, -1],
+    [1, -1],
+    [-1, 1],
+    [1, 1],
+  ] as const) {
+    const handle = document.createElement('div');
+    handle.className = 'pictureHandle';
+    handle.style.left = sx < 0 ? '-4px' : 'calc(100% + 4px)';
+    handle.style.top = sy < 0 ? '-4px' : 'calc(100% + 4px)';
+    handle.style.cursor = sx === sy ? 'nwse-resize' : 'nesw-resize';
+    handle.title = 'Drag to resize';
+    comp.el.appendChild(handle);
+
+    handle.addEventListener('mousedown', (e: MouseEvent) => {
+      if (e.button !== 0 || !canEdit(appState.mode)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      // Screen pixels per world unit - the canvas zoom.
+      const scale = comp.el.getBoundingClientRect().width / comp.svgW || 1;
+      const w0 = size.getWidth();
+      const aspect = size.getAspect();
+      // The corner that stays put, in world coordinates (comp.x/y is the centre).
+      const fixedX = comp.x - (sx * w0) / 2;
+      const fixedY = comp.y - (sy * w0 * aspect) / 2;
+      const startX = e.clientX;
+      const startY = e.clientY;
+      let changed = false;
+
+      const onMove = (ev: MouseEvent): void => {
+        const dx = (ev.clientX - startX) / scale;
+        const dy = (ev.clientY - startY) / scale;
+        // Whichever way the corner was moved further - out or in - sets the size.
+        const byX = w0 + sx * dx;
+        const byY = (w0 * aspect + sy * dy) / aspect;
+        size.setWidth(Math.abs(byX - w0) >= Math.abs(byY - w0) ? byX : byY);
+        const w = size.getWidth();
+        comp.setPos(fixedX + (sx * w) / 2, fixedY + (sy * w * aspect) / 2);
+        changed = true;
+      };
+      const onUp = (): void => {
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+        if (changed) appState.markDirty();
+      };
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+    });
+  }
 }

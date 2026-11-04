@@ -20,6 +20,11 @@ import { BAR, fromGaugeBar, isoMassFlow, P_ATM } from '../sim/flowModel';
 const RESERVOIR_VOLUME = 20e-6;
 /** Flow mode: reservoir pressure (gauge, bar) at which the valve switches. */
 const SWITCH_BAR = 3;
+/** Flow mode: reservoir pressure (gauge, bar) below which it switches back - well under the
+ * 1.5 bar a pilot needs (PILOT_MIN_BAR), as a real valve's spring returns it only once the
+ * pilot is nearly gone. Without this gap, used as a pulse valve, it would open again while its
+ * venting supply line still held enough pressure to pilot the next valve. */
+const RELEASE_BAR = 1;
 /** Flow mode: the check valve's free-flow capacity, dm³/(s·bar) - fast enough that the
  * reservoir fills (off-delay) or empties (on-delay) almost at once. */
 const CHECK_CONDUCTANCE = 0.6;
@@ -27,13 +32,13 @@ const RT = 287 * 293.15;
 
 /** Seconds the reservoir takes, through a conductance of 1 dm³/(s·bar), to fill from
  * atmospheric to the switching pressure off a 6 bar line (`filling`), or to empty from 6 bar
- * down to it into an open line. Time scales exactly with 1 / conductance, so the throttle that
+ * down to the release pressure into an open line. Time scales exactly with 1 / conductance, so the throttle that
  * gives a set delay at 6 bar is (this / delay) - and a lower supply then takes longer, as on a
  * real valve. */
 function referenceTime(filling: boolean): number {
   const line = filling ? fromGaugeBar(6) : P_ATM;
   let p = filling ? P_ATM : fromGaugeBar(6);
-  const target = fromGaugeBar(SWITCH_BAR);
+  const target = fromGaugeBar(filling ? SWITCH_BAR : RELEASE_BAR);
   const h = 1e-5;
   let t = 0;
   while (filling ? p < target : p > target) {
@@ -360,9 +365,12 @@ export function createTimeDelayValve(compLayer: HTMLElement, x: number, y: numbe
 
     step(dt: number, ctx: SimStepContext): void {
       if (ctx.flowMode) {
-        // The reservoir does the timing (see flowDevice): switched while it's above the
-        // switching pressure, on- and off-delay alike.
-        active = (reservoir - P_ATM) / BAR >= SWITCH_BAR;
+        // The reservoir does the timing (see flowDevice): switched once it's up to the
+        // switching pressure, back once it's down to the release pressure - on- and off-delay
+        // alike.
+        const gauge = (reservoir - P_ATM) / BAR;
+        if (gauge >= SWITCH_BAR) active = true;
+        else if (gauge <= RELEASE_BAR) active = false;
         valve.setActive(active);
         return;
       }
