@@ -1,6 +1,7 @@
 import { appState } from '../app/AppState';
 import { Modes } from '../app/modes';
 import { requestSingleStep } from '../sim/loop';
+import { resetSignals } from '../sim/signals';
 import { undo, redo, canUndo, canRedo, onHistoryChange } from '../history/historyStore';
 import { redrawAllConnections } from '../wires/connection';
 import { iconButton } from './iconButton';
@@ -15,6 +16,8 @@ export function renderToolbar(container: HTMLElement): void {
     const nextMode = appState.mode === Modes.PLAY ? Modes.STOP : Modes.PLAY;
     if (nextMode === Modes.STOP) {
       for (const c of appState.components) c.reset();
+      // The next run starts from the reset positions, not from this run's last sensor states.
+      resetSignals();
       // A component's own visual reset (e.g. the 5/2 valve's pilot ports sliding back to their
       // default position) doesn't go through any of the normal edit-time triggers that redraw
       // wires - without this, a wire attached to one of those ports stays stuck at wherever it

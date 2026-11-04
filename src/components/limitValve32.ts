@@ -8,17 +8,23 @@ import {
   SLIDING_VALVE_OFFSET_X,
   SLIDING_VALVE_OFFSET_Y,
 } from './shared/slidingValve32';
-import { getSignal, getSignalMotion } from '../sim/signals';
+import { getSignal, getSignalMotion, hasSignal } from '../sim/signals';
 import { appState } from '../app/AppState';
-import { isSensorKeyBoundElsewhere, isSensorTriggeredAtRest } from './shared/sensorPositions';
+import {
+  isSensorKeyBoundElsewhere,
+  isSensorTriggeredAtRest,
+  sensorRangeOf,
+} from './shared/sensorPositions';
 import { Modes } from '../app/modes';
 import { addSpringZigzag, SPRING_DEFAULT_GEOMETRY } from './shared/spring';
 
 export const LIMIT_VALVE_32_TYPE = 'limitValve32';
 
 /** The limit valve's roller: an ordinary roller lever, actuated whenever its sensor is, or a
- * one-way roller lever (idle return) - tripped only as the cylinder passes it in one direction,
- * folding out of the way the other way, so it gives a short signal rather than holding one. */
+ * one-way roller lever (idle return). A cam coming onto that one the way it's set for presses
+ * it, and it stays pressed while the cam is on it - stopped there, or moving back off; a cam
+ * coming onto it the other way folds it away until the cam has gone. Mounted just short of the
+ * end of the stroke, the cam passes over and leaves it: a short signal. */
 export type RollerKind = 'roller' | 'oneWayExtend' | 'oneWayRetract';
 
 export const ROLLER_KIND_LABELS: Record<RollerKind, string> = {
@@ -30,10 +36,6 @@ export const ROLLER_KIND_LABELS: Record<RollerKind, string> = {
 export function isRollerKind(v: unknown): v is RollerKind {
   return v === 'roller' || v === 'oneWayExtend' || v === 'oneWayRetract';
 }
-
-/** Shortest time, s, a one-way roller stays actuated once tripped - long enough for the valve it
- * signals to switch, even when the cylinder comes to rest right on it. */
-export const ONE_WAY_PULSE_S = 0.3;
 
 // Extra right-side room for the spring symbol, beyond the offset already reserved on the left.
 // (+50/+34 rather than the "natural" +48/+30: chosen so ports 1/2/3 land exactly on the 10px
@@ -156,6 +158,14 @@ const ONE_WAY_ROLLER_X = -2;
 const ONE_WAY_ROLLER_RISE = 15;
 const ONE_WAY_ROLLER_R = 10;
 
+/** Whether a cam resting on the sensor `key` can only have got there moving `way` (+1
+ * extending, -1 retracting): its range reaches the end of the stroke that way. */
+function camArrivesTripping(key: string, way: 1 | -1): boolean {
+  const range = sensorRangeOf(key);
+  if (!range) return false;
+  return way === 1 ? range.maxPct >= 100 : range.minPct <= 0;
+}
+
 export function createLimitValve32(compLayer: HTMLElement, x: number, y: number): Component {
   const geo = LIMIT_VALVE_32_DEFAULT_GEOMETRY;
   const shell = buildComponentShell(
@@ -185,11 +195,11 @@ export function createLimitValve32(compLayer: HTMLElement, x: number, y: number)
     actuatorG.replaceChildren();
     ({ sensorLabel, cam } = drawLimitValve32Actuator(actuatorG, geo, rollerKind));
   }
-  /** Time left, s, of a one-way roller's trip pulse. */
-  let pulseLeft = 0;
-  /** Whether its sensor was on last time, and whether the cam then came over it the right way. */
+  /** One-way roller: whether this run's sensor states have been read yet, whether its sensor
+   * was on last time, and whether the cam on it holds the lever pressed. */
+  let started = false;
   let wasOn = false;
-  let tripped = false;
+  let pressed = false;
 
   const id = uid();
 
@@ -240,8 +250,12 @@ export function createLimitValve32(compLayer: HTMLElement, x: number, y: number)
   // `active`, what the simulation and the saved project go by, is untouched.
   function drawRestState(): void {
     if (appState.mode !== Modes.STOP) return;
-    // A one-way roller folds away under a cam resting on it: drawn unactuated.
-    const held = rollerKind === 'roller' && isSensorTriggeredAtRest(sensorKey);
+    // A one-way roller is held down by a cam resting on it only if the cam got there the way
+    // that presses it.
+    const held =
+      isSensorTriggeredAtRest(sensorKey) &&
+      (rollerKind === 'roller' ||
+        camArrivesTripping(sensorKey, rollerKind === 'oneWayExtend' ? 1 : -1));
     draw(sensorKey !== '' && held);
   }
   appState.onChange(drawRestState);
@@ -267,25 +281,26 @@ export function createLimitValve32(compLayer: HTMLElement, x: number, y: number)
       if (!sensorKey) active = manualActive;
       else if (rollerKind === 'roller') active = getSignal(sensorKey);
       else {
-        // Tripped only by a cam coming over it from outside its range, the way it's set for -
-        // a cam that starts on it, or comes back over it, finds the lever folded away. Then on
-        // for at least a short pulse, so a cylinder stopping right on it still gets its signal
-        // through.
-        const on = getSignal(sensorKey);
-        const motion = getSignalMotion(sensorKey);
         const way = rollerKind === 'oneWayExtend' ? 1 : -1;
-        if (on && !wasOn) tripped = motion === way;
-        if (!on || motion === -way) tripped = false;
-        if (tripped && motion === way) pulseLeft = ONE_WAY_PULSE_S;
-        if (!tripped) pulseLeft = 0;
-        active = tripped && (motion === way || pulseLeft > 0);
-        wasOn = on;
+        // Before its cylinder has reported this run, the lever stays as it was.
+        if (hasSignal(sensorKey)) {
+          const on = getSignal(sensorKey);
+          if (!started) {
+            // The run starts with the cam on it: pressed if it can only have got there the
+            // way that presses it.
+            started = true;
+            pressed = on && camArrivesTripping(sensorKey, way);
+          } else if (on && !wasOn) {
+            // The cam comes onto it: pressed coming the trip way, folded away the other way.
+            const motion = getSignalMotion(sensorKey);
+            pressed = motion === way || (motion === 0 && camArrivesTripping(sensorKey, way));
+          }
+          if (!on) pressed = false;
+          wasOn = on;
+        }
+        active = pressed;
       }
       draw(active);
-    },
-
-    step(dt: number): void {
-      pulseLeft = Math.max(0, pulseLeft - dt);
     },
 
     snapshot(): Record<string, unknown> {
@@ -315,9 +330,9 @@ export function createLimitValve32(compLayer: HTMLElement, x: number, y: number)
     reset(): void {
       active = false;
       manualActive = false;
-      pulseLeft = 0;
+      started = false;
       wasOn = false;
-      tripped = false;
+      pressed = false;
       draw(false);
       drawRestState();
     },

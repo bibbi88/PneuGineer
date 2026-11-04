@@ -175,6 +175,19 @@ export function isSensorTriggeredAtRest(key: string): boolean {
   return false;
 }
 
+/** The range of the sensor `key` (matched case-insensitively) on whichever cylinder has it. */
+export function sensorRangeOf(key: string): CylinderSensor | null {
+  const target = key.trim().toUpperCase();
+  if (!target) return null;
+  for (const comp of appState.components) {
+    const data = comp.snapshot() as Record<string, unknown>;
+    if (!isValidSensorArray(data.sensors)) continue;
+    const found = data.sensors.find((s) => s.label.trim().toUpperCase() === target);
+    if (found) return found;
+  }
+  return null;
+}
+
 /** Whether anything reads the sensor `label` (matched case-insensitively): a limit valve's
  * sensor key, or an electrical contact's signal. */
 export function isSensorLabelBound(label: string): boolean {

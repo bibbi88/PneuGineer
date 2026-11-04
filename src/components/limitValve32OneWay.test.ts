@@ -1,85 +1,93 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createLimitValve32 } from './limitValve32';
+import { createCylinderDouble } from './cylinderDouble';
+import { appState } from '../app/AppState';
 import { resetSignals, setSignal, setSignalMotion } from '../sim/signals';
 import type { Component } from '../core/types';
 
-function valveWith(roller: string): Component {
+/** A cylinder carrying sensor a1 over [minPct, maxPct], and a limit valve reading it. */
+function valveWith(roller: string, minPct = 95, maxPct = 100): Component {
+  const cyl = createCylinderDouble(document.createElement('div'), 0, 0);
+  cyl.restore({ ...cyl.snapshot(), sensors: [{ label: 'a1', minPct, maxPct }] });
+  appState.addComponent(cyl);
   const v = createLimitValve32(document.createElement('div'), 0, 0);
   v.restore({ ...v.snapshot(), sensorKey: 'a1', roller });
+  appState.addComponent(v);
   return v;
 }
 
-/** Whether 1 is through to 2 (the valve actuated - it's normally closed). */
-function open(v: Component): boolean {
+/** The cylinder reports a1 (`on`) moving `motion`; whether the valve is then actuated (1 to 2 -
+ * it's normally closed). */
+function report(v: Component, on: boolean, motion: number): boolean {
+  setSignal('a1', on);
+  setSignalMotion('a1', motion);
   v.recompute?.();
   return v.conductivityRule({ isPressurized: () => false }).some((c) => c.a === '2' && c.b === '1');
 }
 
 describe('3/2 limit valve roller', () => {
-  beforeEach(() => resetSignals());
+  beforeEach(() => {
+    appState.components = [];
+    appState.connections = [];
+    resetSignals();
+  });
 
   it('an ordinary roller follows its sensor whichever way the cylinder moves', () => {
     const v = valveWith('roller');
-    setSignal('a1', true);
-    setSignalMotion('a1', -1);
-    expect(open(v)).toBe(true);
-    setSignalMotion('a1', 0);
-    expect(open(v)).toBe(true);
+    expect(report(v, true, -1)).toBe(true);
+    expect(report(v, true, 0)).toBe(true);
+    expect(report(v, false, -1)).toBe(false);
   });
 
-  it('a one-way roller trips on extend, holds a short pulse, then lets go at rest', () => {
+  it('one-way on extend: pressed coming on extending, held stopped and moving back, until off', () => {
     const v = valveWith('oneWayExtend');
-    expect(open(v)).toBe(false);
-    setSignal('a1', true);
-    setSignalMotion('a1', 1);
-    expect(open(v)).toBe(true);
-    // The cylinder stops on it: still on for the pulse...
-    setSignalMotion('a1', 0);
-    v.step?.(0.1, {} as never);
-    expect(open(v)).toBe(true);
-    // ...then released, though the cam still rests on it.
-    v.step?.(0.5, {} as never);
-    expect(open(v)).toBe(false);
+    expect(report(v, false, 1)).toBe(false);
+    expect(report(v, true, 1)).toBe(true);
+    expect(report(v, true, 0)).toBe(true);
+    expect(report(v, true, -1)).toBe(true);
+    expect(report(v, false, -1)).toBe(false);
   });
 
-  it('a one-way roller set for extend folds away when the cylinder retracts past it', () => {
-    const v = valveWith('oneWayExtend');
-    setSignal('a1', true);
-    setSignalMotion('a1', -1);
-    expect(open(v)).toBe(false);
-  });
-
-  it('the other one-way roller trips on retract only, as the cam comes over it', () => {
+  it('one-way on retract, at the end of the stroke: the cam only ever arrives extending, folded', () => {
     const v = valveWith('oneWayRetract');
-    expect(open(v)).toBe(false);
-    setSignal('a1', true);
-    setSignalMotion('a1', -1);
-    expect(open(v)).toBe(true);
-    setSignal('a1', false);
-    expect(open(v)).toBe(false);
+    expect(report(v, false, 1)).toBe(false);
+    expect(report(v, true, 1)).toBe(false);
+    expect(report(v, true, 0)).toBe(false);
+    expect(report(v, true, -1)).toBe(false);
+    expect(report(v, false, -1)).toBe(false);
   });
 
-  it('does not trip when the cam starts on it and moves off the trip way', () => {
-    // A sensor at 95-100 % with the cylinder extended onto it, then retracting: the lever is
-    // folded under the cam and never flips back, so nothing happens.
-    const v = valveWith('oneWayRetract');
-    setSignal('a1', true);
-    setSignalMotion('a1', 1);
-    expect(open(v)).toBe(false);
-    setSignalMotion('a1', 0);
-    expect(open(v)).toBe(false);
-    setSignalMotion('a1', -1);
-    expect(open(v)).toBe(false);
-    setSignal('a1', false);
-    expect(open(v)).toBe(false);
+  it('one-way mid-stroke: pressed passing the trip way, folded passing the other way', () => {
+    const v = valveWith('oneWayRetract', 40, 50);
+    expect(report(v, false, -1)).toBe(false);
+    expect(report(v, true, -1)).toBe(true);
+    expect(report(v, true, -1)).toBe(true);
+    expect(report(v, false, -1)).toBe(false);
+    expect(report(v, true, 1)).toBe(false);
+    expect(report(v, true, 1)).toBe(false);
+    expect(report(v, false, 1)).toBe(false);
   });
 
-  it('does not trip on a cylinder starting on its sensor', () => {
+  it('a run starting with the cam on it: pressed if it can only have come the trip way', () => {
+    // a1 at the end of the stroke, the cylinder starting extended, then retracting at once.
+    expect(report(valveWith('oneWayExtend'), true, -1)).toBe(true);
+    appState.components = [];
+    resetSignals();
+    expect(report(valveWith('oneWayRetract'), true, -1)).toBe(false);
+    appState.components = [];
+    resetSignals();
+    // Mid-stroke, there's no telling: not pressed.
+    expect(report(valveWith('oneWayExtend', 40, 50), true, 0)).toBe(false);
+  });
+
+  it('stays as it is until its cylinder has reported, then starts over after a reset', () => {
     const v = valveWith('oneWayExtend');
-    setSignal('a1', true);
-    expect(open(v)).toBe(false);
-    setSignalMotion('a1', 1);
-    expect(open(v)).toBe(false);
+    v.recompute?.();
+    expect(v.conductivityRule({ isPressurized: () => false })).toEqual([{ a: '2', b: '3' }]);
+    expect(report(v, true, 1)).toBe(true);
+    v.reset();
+    resetSignals();
+    expect(report(v, false, 0)).toBe(false);
   });
 
   it('saves the roller kind, and an ordinary roller saves as before', () => {

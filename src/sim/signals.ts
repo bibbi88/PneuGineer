@@ -15,6 +15,12 @@ export function getSignal(key: string): boolean {
   return signals.get(normalize(key)) ?? false;
 }
 
+/** Whether anything has reported `key` since the signals were last reset - false in a run's
+ * first frame, before the cylinders have stepped. */
+export function hasSignal(key: string): boolean {
+  return signals.has(normalize(key));
+}
+
 /** Which way the cylinder carrying each sensor is moving this frame: +1 extending, -1
  * retracting, 0 still - what a one-way roller lever goes by (it trips one way only). */
 const motions = new Map<string, number>();
