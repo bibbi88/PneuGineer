@@ -147,9 +147,23 @@ export const componentRegistry = new Map<string, RegistryEntry>([
   [
     VALVE_52_CONFIGURABLE_TYPE,
     {
-      factory: (ctx, x, y) => createValve52Configurable(ctx.compLayer, x, y),
-      label: '5/2 valve, any actuation',
-      keywords: ['roller', 'push button', 'pilot operated', 'servo', 'configurable', 'manual'],
+      // Placed as a push button with spring return; any other actuation is set in its
+      // inspector, which also turns it into a 5/3 valve.
+      factory: (ctx, x, y) => {
+        const valve = createValve52Configurable(ctx.compLayer, x, y);
+        valve.restore({ ...valve.snapshot(), left: 'button', right: 'spring' });
+        return valve;
+      },
+      label: '5/2 push button',
+      keywords: [
+        'manual',
+        'spring return',
+        'roller',
+        'pilot operated',
+        'servo',
+        'configurable',
+        'any actuation',
+      ],
       placeable: true,
       category: ComponentCategory.DIRECTIONAL_MANUAL,
     },
@@ -157,18 +171,11 @@ export const componentRegistry = new Map<string, RegistryEntry>([
   [
     VALVE_53_CONFIGURABLE_TYPE,
     {
+      // Not in the library: reached from a 5/2 valve's inspector (Valve: 5/3), and still
+      // loaded from saved projects.
       factory: (ctx, x, y) => createValve53Configurable(ctx.compLayer, x, y),
       label: '5/3 valve, any actuation',
-      keywords: [
-        'closed centre',
-        'exhaust centre',
-        'pressure centre',
-        'mid position',
-        'pilot operated',
-        'configurable',
-      ],
-      placeable: true,
-      category: ComponentCategory.DIRECTIONAL_MANUAL,
+      placeable: false,
     },
   ],
   [
@@ -482,12 +489,12 @@ export function createComponent(
 
 const CATEGORY_ORDER: ComponentCategoryName[] = [
   ComponentCategory.SOURCES,
+  ComponentCategory.ACTUATORS,
   ComponentCategory.DIRECTIONAL_MANUAL,
   ComponentCategory.DIRECTIONAL_AIR,
   ComponentCategory.DIRECTIONAL_SOLENOID,
   ComponentCategory.LOGIC,
   ComponentCategory.FLOW,
-  ComponentCategory.ACTUATORS,
   ComponentCategory.ELECTRICAL,
   ComponentCategory.ANNOTATIONS,
 ];
