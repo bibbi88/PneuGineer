@@ -58,14 +58,21 @@ function onCopy(e: ClipboardEvent): void {
   e.preventDefault();
 }
 
+/** The browser's paste decides what Ctrl+V pastes: a picture it carries, or else the copied
+ * components. Deciding here, rather than on the key, means a slow paste - a big screenshot can
+ * take a moment to arrive - can't end up pasting both. */
 function onPaste(e: ClipboardEvent): void {
   if (isTypingTarget(document.activeElement) || document.querySelector('.modalBackdrop')) return;
+  clearTimeout(pendingPaste);
+  pendingPaste = undefined;
   if (!canEdit(appState.mode)) return;
-  if (pastePictureFrom(e.clipboardData)) {
-    clearTimeout(pendingPaste);
-    e.preventDefault();
-  }
+  e.preventDefault();
+  if (!pastePictureFrom(e.clipboardData)) pasteClipboard();
 }
+
+/** How long Ctrl+V waits for the browser's paste before pasting the copied components itself -
+ * only for a browser that sends none. */
+const PASTE_FALLBACK_MS = 400;
 
 /** Idempotent: a second call (e.g. a test re-initializing between cases) replaces the previous
  * listener instead of stacking another one alongside it - two listeners both reacting to the
@@ -112,10 +119,13 @@ export function initKeyboard(): void {
     }
 
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') {
-      // The copied components are pasted unless the browser's paste, which comes straight
-      // after this key, turns out to carry a picture - or doesn't come at all.
+      // The browser's paste that follows this key does the pasting (see onPaste); only if it
+      // never comes are the copied components pasted from here.
       clearTimeout(pendingPaste);
-      pendingPaste = setTimeout(pasteClipboard, 0);
+      pendingPaste = setTimeout(() => {
+        pendingPaste = undefined;
+        pasteClipboard();
+      }, PASTE_FALLBACK_MS);
       return;
     }
 
