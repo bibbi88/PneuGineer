@@ -48,6 +48,7 @@ import { SOURCE_PRESSURE } from '../sim/constants';
 import { QUICK_EXHAUST_VALVE_TYPE } from '../components/quickExhaustValve';
 import { TIME_DELAY_VALVE_TYPE } from '../components/timeDelayValve';
 import { PRESSURE_SEQUENCE_VALVE_TYPE } from '../components/pressureSequenceValve';
+import { COUNTER_TYPE, MAX_PRESET } from '../components/counter';
 import {
   LIMIT_VALVE_32_TYPE,
   ROLLER_KIND_LABELS,
@@ -278,6 +279,10 @@ const INSPECTOR_FIELDS: Record<string, InspectorField[]> = {
     { kind: 'number', key: 'delaySec', label: 'Delay (s)', min: 0, max: 30, step: 0.1 },
     { kind: 'checkbox', key: 'normallyOpen', label: 'Normally open (NO)' },
     { kind: 'checkbox', key: 'offDelay', label: 'Off-delay' },
+    { kind: 'silencer', key: 'silencer3', port: '3', label: 'Port 3 silencer' },
+  ],
+  [COUNTER_TYPE]: [
+    { kind: 'number', key: 'preset', label: 'Preset count', min: 1, max: MAX_PRESET, step: 1 },
     { kind: 'silencer', key: 'silencer3', port: '3', label: 'Port 3 silencer' },
   ],
   [PRESSURE_SEQUENCE_VALVE_TYPE]: [

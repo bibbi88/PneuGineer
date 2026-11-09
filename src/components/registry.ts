@@ -14,6 +14,7 @@ import { createCylinderSingle, CYLINDER_SINGLE_TYPE } from './cylinderSingle';
 import { createJunction, JUNCTION_TYPE } from './junction';
 import { createPressureSequenceValve, PRESSURE_SEQUENCE_VALVE_TYPE } from './pressureSequenceValve';
 import { createTimeDelayValve, TIME_DELAY_VALVE_TYPE } from './timeDelayValve';
+import { COUNTER_TYPE, createCounter } from './counter';
 import { createQuickExhaustValve, QUICK_EXHAUST_VALVE_TYPE } from './quickExhaustValve';
 import {
   createOneWayFlowControlValve,
@@ -70,6 +71,8 @@ export const ComponentCategory = {
   DIRECTIONAL_AIR: 'Air operated',
   DIRECTIONAL_SOLENOID: 'Solenoid operated',
   LOGIC: 'Logic',
+  // Valves that switch on a time, a count or a pressure.
+  SIGNAL: 'Signal processing',
   FLOW: 'Flow control',
   ACTUATORS: 'Actuators',
   ELECTRICAL: 'Electrical',
@@ -268,7 +271,17 @@ export const componentRegistry = new Map<string, RegistryEntry>([
         'TOF',
       ],
       placeable: true,
-      category: ComponentCategory.FLOW,
+      category: ComponentCategory.SIGNAL,
+    },
+  ],
+  [
+    COUNTER_TYPE,
+    {
+      factory: (ctx, x, y) => createCounter(ctx.compLayer, x, y),
+      label: 'Counter',
+      keywords: ['preset counter', 'pneumatic counter', 'count', 'räknare', 'CTU'],
+      placeable: true,
+      category: ComponentCategory.SIGNAL,
     },
   ],
   [
@@ -288,7 +301,7 @@ export const componentRegistry = new Map<string, RegistryEntry>([
       label: 'Pressure sequence valve',
       keywords: ['sequence valve', 'pressure switch valve', 'sekvensventil'],
       placeable: true,
-      category: ComponentCategory.FLOW,
+      category: ComponentCategory.SIGNAL,
     },
   ],
   [
@@ -494,6 +507,7 @@ const CATEGORY_ORDER: ComponentCategoryName[] = [
   ComponentCategory.DIRECTIONAL_AIR,
   ComponentCategory.DIRECTIONAL_SOLENOID,
   ComponentCategory.LOGIC,
+  ComponentCategory.SIGNAL,
   ComponentCategory.FLOW,
   ComponentCategory.ELECTRICAL,
   ComponentCategory.ANNOTATIONS,
