@@ -1,3 +1,4 @@
+import { unixNow } from './project';
 import type { ProjectFileV1, ComponentSnapshot, ConnectionSnapshot } from './schema';
 import { CURRENT_SCHEMA_VERSION } from './schema';
 import { createComponent } from '../components/registry';
@@ -51,7 +52,8 @@ function circuit(name: string, build: (b: Builder) => void): ProjectFileV1 {
     },
   };
   build(b);
-  return { schemaVersion: CURRENT_SCHEMA_VERSION, name, comps, conns };
+  // Opening an example starts a new project: created now.
+  return { schemaVersion: CURRENT_SCHEMA_VERSION, name, ct: unixNow(), comps, conns };
 }
 
 interface Builder {
