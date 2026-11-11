@@ -80,9 +80,15 @@ describe('connecting ports', () => {
   it('connects when let go near a port, without having to hit its circle', () => {
     mouse('mousedown', source.ports.OUT!.el, 100, 100);
     expect(isLinking()).toBe(true);
-    mouse('mouseup', window, 315, 112); // ~19 px off the junction's port
+    mouse('mouseup', window, 310, 108); // ~13 px off the junction's port
     expect(appState.connections).toHaveLength(1);
     expect(appState.connections[0]?.to).toEqual({ id: junction.id, port: 'P' });
+  });
+
+  it('does not snap from further than the snap radius', () => {
+    mouse('mousedown', source.ports.OUT!.el, 100, 100);
+    mouse('mouseup', window, 315, 112); // ~19 px off the junction's port
+    expect(appState.connections).toHaveLength(0);
   });
 
   it('does not connect when let go well away from any port', () => {
