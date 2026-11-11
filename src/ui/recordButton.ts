@@ -85,7 +85,10 @@ export function renderRecordButton(container: HTMLElement, deps: RecordButtonDep
     btn.disabled = true;
     btn.title = 'Record video - not supported in this browser';
   }
-  container.append(btn, time);
+  // Right after the Step button, with the other run controls.
+  const step = container.querySelector('.iconBtn[aria-label="Step one cycle"]');
+  if (step) step.after(btn, time);
+  else container.append(btn, time);
 
   // Shown only while simulating (running or paused); stopping the simulation also ends the
   // recording and saves it.

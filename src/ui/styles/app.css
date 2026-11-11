@@ -2275,7 +2275,8 @@ body.libraryDragging * {
   display: none;
 }
 
-.iconBtn.iconBtn--recording {
+.iconBtn.iconBtn--recording,
+.iconBtn.iconBtn--recording:hover:not(:disabled) {
   color: #fff;
   background: #d00;
   border-color: #d00;
