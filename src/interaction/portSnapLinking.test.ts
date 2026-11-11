@@ -37,6 +37,7 @@ describe('connecting ports', () => {
   let rectSpy: ReturnType<typeof vi.spyOn>;
   let source: Component;
   let junction: Component;
+  let workspace: HTMLElement;
 
   beforeEach(() => {
     appState.components = [];
@@ -61,7 +62,7 @@ describe('connecting ports', () => {
     });
     // Not in jsdom; nothing is under the pointer but what the ports' positions say.
     document.elementFromPoint = () => null;
-    const workspace = document.createElement('div');
+    workspace = document.createElement('div');
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     initWires(svg, viewport, workspace);
     initLinking(svg, viewport, workspace);
@@ -83,6 +84,18 @@ describe('connecting ports', () => {
     mouse('mouseup', window, 310, 108); // ~13 px off the junction's port
     expect(appState.connections).toHaveLength(1);
     expect(appState.connections[0]?.to).toEqual({ id: junction.id, port: 'P' });
+  });
+
+  it('marks the port a wire would connect to in red, and clears it when let go', () => {
+    const target = junction.ports.P!.el;
+    mouse('mousedown', source.ports.OUT!.el, 100, 100);
+    mouse('mousemove', workspace, 310, 108);
+    expect(target.classList.contains('portSnapTarget')).toBe(true);
+    mouse('mousemove', workspace, 340, 100);
+    expect(target.classList.contains('portSnapTarget')).toBe(false);
+    mouse('mousemove', workspace, 310, 108);
+    mouse('mouseup', window, 310, 108);
+    expect(target.classList.contains('portSnapTarget')).toBe(false);
   });
 
   it('does not snap from further than the snap radius', () => {
