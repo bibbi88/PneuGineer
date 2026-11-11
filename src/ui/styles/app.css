@@ -2269,7 +2269,12 @@ body.libraryDragging * {
   stroke-width: 1;
 }
 
-/* Record video (ui/recordButton.ts): red while recording, the time beside it. */
+/* Record video (ui/recordButton.ts): only while simulating, red while recording, the time
+   beside it. */
+.iconBtn[hidden] {
+  display: none;
+}
+
 .iconBtn.iconBtn--recording {
   color: #fff;
   background: #d00;

@@ -1,5 +1,7 @@
 import type { ViewportAdapter } from './viewport';
 import { iconButton } from './iconButton';
+import { appState } from '../app/AppState';
+import { Modes } from '../app/modes';
 import { createIcon } from './icons';
 import {
   canRecordVideo,
@@ -23,8 +25,9 @@ function formatTime(s: number): string {
 
 /**
  * Record video: films the circuit - with the simulation's colours, and every press on the
- * canvas - until pressed again, then saves the video (see persistence/recordVideo.ts). While
- * recording it turns red and shows how long it has been going.
+ * canvas - until pressed again or the simulation is stopped, then saves the video (see
+ * persistence/recordVideo.ts). Shown only while simulating. While recording it turns red and
+ * shows how long it has been going.
  */
 export function renderRecordButton(container: HTMLElement, deps: RecordButtonDeps): void {
   let recording: VideoRecording | null = null;
@@ -83,4 +86,14 @@ export function renderRecordButton(container: HTMLElement, deps: RecordButtonDep
     btn.title = 'Record video - not supported in this browser';
   }
   container.append(btn, time);
+
+  // Shown only while simulating (running or paused); stopping the simulation also ends the
+  // recording and saves it.
+  function followMode(): void {
+    const simulating = appState.mode !== Modes.STOP;
+    btn.hidden = !simulating;
+    if (!simulating && recording) recording.stop();
+  }
+  appState.onModeChange(followMode);
+  followMode();
 }
