@@ -9,6 +9,7 @@ simulation with a live pressure overlay.
 **⬇ Download the desktop app:**
 [Windows installer](https://github.com/bibbi88/PneuGineer/releases/latest/download/PneuGineer-Setup.exe) ·
 [Linux Flatpak](https://github.com/bibbi88/PneuGineer/releases/latest/download/PneuGineer.flatpak) ·
+[standalone HTML file](https://github.com/bibbi88/PneuGineer/releases/latest/download/PneuGineer.html) ·
 [all releases](https://github.com/bibbi88/PneuGineer/releases)
 
 ![PneuGineer editor with an A+B+C+C-B-A- cylinder sequence circuit](docs/screenshot.png)
@@ -49,8 +50,9 @@ The site is rebuilt and redeployed automatically on every push to `main`.
 ### 2. Offline, from a single file
 
 The production build is one self-contained HTML file, [`dist/index.html`](dist/index.html), with
-all scripts and styles inlined. Download it (on GitHub: open the file, then **Download raw file**)
-and double-click it to open it in your browser. It needs no server and no internet connection,
+all scripts and styles inlined.
+[Download it](https://github.com/bibbi88/PneuGineer/releases/latest/download/PneuGineer.html)
+(`PneuGineer.html`, from the latest release) and double-click it to open it in your browser. It needs no server and no internet connection,
 so it can be copied to a USB stick or shared by email.
 
 ### 3. As a desktop app (Windows, Linux)

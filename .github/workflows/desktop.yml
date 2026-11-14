@@ -5,6 +5,7 @@
 #   the newest build:
 #     https://github.com/bibbi88/PneuGineer/releases/latest/download/PneuGineer-Setup.exe
 #     https://github.com/bibbi88/PneuGineer/releases/latest/download/PneuGineer.flatpak
+#     https://github.com/bibbi88/PneuGineer/releases/latest/download/PneuGineer.html
 # - pushing a version tag (git tag v1.2.3 && git push origin v1.2.3) makes a release of its own.
 #
 # Can also be started by hand on any branch (Actions > Desktop apps > Run workflow); such runs
@@ -94,6 +95,15 @@ jobs:
           name: PneuGineer-flatpak
           path: desktop/release/*.flatpak
           if-no-files-found: error
+      # The web app as one standalone file too, published beside the installers: opens in any
+      # browser, nothing to install.
+      - name: Standalone HTML
+        run: cp dist/index.html PneuGineer.html
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PneuGineer-html
+          path: PneuGineer.html
+          if-no-files-found: error
 
   release:
     name: GitHub Release
@@ -128,8 +138,10 @@ jobs:
               Windows may warn about an unknown publisher: choose *More info → Run anyway*.
             - **Linux:** download **PneuGineer.flatpak**, then
               `flatpak install --user PneuGineer.flatpak` and start PneuGineer from the app menu.
+            - **Any computer, no install:** download **PneuGineer.html** and open it in a browser.
+              It's the whole app in one file, and works offline - from a USB stick, too.
 
-            Or use it in the browser, nothing to install: https://bibbi88.github.io/PneuGineer/
+            Or use it online: https://bibbi88.github.io/PneuGineer/
       - name: Versioned release (from a tag)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
