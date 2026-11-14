@@ -27,7 +27,13 @@ import { snap } from './core/grid';
 import { canEdit } from './app/modes';
 import { initConfirmBeforeUnload } from './app/confirmClose';
 import { desktopBridge } from './app/desktopBridge';
-import { initDocuments, onDocumentsChange, storeDocumentsSoon } from './app/documents';
+import {
+  initDocuments,
+  onDocumentsChange,
+  readStoredDocuments,
+  storeDocumentsNow,
+  storeDocumentsSoon,
+} from './app/documents';
 import { onSettingsChange } from './app/settings';
 import { renderDocumentTabs } from './ui/documentTabs';
 import { initPanelResize } from './ui/panelResize';
@@ -149,34 +155,47 @@ onSettingsChange(refreshTabs);
 // one circuit was kept (autosave) - offered back once, into the first document.
 // The desktop app starts with one empty circuit, as desktop programs do - its circuits are files.
 const isDesktop = desktopBridge() !== null;
-const restored = initDocuments(
-  {
-    ctx: factoryCtx,
-    viewport,
-    getName: () => projectBar.getName(),
-    setName: (name) => projectBar.setName(name),
-  },
-  { fresh: isDesktop },
-);
-const autosaved = isDesktop ? null : readAutosave();
-if (restored) {
-  clearAutosave();
-} else if (autosaved) {
-  showRestoreBanner(
-    () => {
-      resetHistory();
-      loadProject(autosaved.file, factoryCtx, viewport);
-      projectBar.setName(autosaved.file.name);
-      clearAutosave();
+
+// Kept documents are read back from IndexedDB, which takes a moment: everything else is set up
+// first, then they come back (persistence/docStore.ts).
+async function restoreDocuments(): Promise<void> {
+  const stored = isDesktop ? null : await readStoredDocuments().catch(() => null);
+  const restored = initDocuments(
+    {
+      ctx: factoryCtx,
+      viewport,
+      getName: () => projectBar.getName(),
+      setName: (name) => projectBar.setName(name),
     },
-    () => clearAutosave(),
+    { fresh: isDesktop, stored },
   );
+  const autosaved = isDesktop ? null : readAutosave();
+  if (restored) {
+    clearAutosave();
+  } else if (autosaved) {
+    showRestoreBanner(
+      () => {
+        resetHistory();
+        loadProject(autosaved.file, factoryCtx, viewport);
+        projectBar.setName(autosaved.file.name);
+        clearAutosave();
+      },
+      () => clearAutosave(),
+    );
+  }
+  refreshTabs();
+
+  // The desktop app greets with its start screen: new, open, recent files, examples. A project
+  // file the app was started with closes it again as it opens (see ui/fileActions.ts).
+  if (isDesktop) projectBar.showStartScreen?.();
+
+  // Last, so the terms sit on top of everything else that opens with the app.
+  if (termsNeedAgreement()) openTermsDialog({ requireAgreement: true });
 }
-refreshTabs();
+void restoreDocuments();
 
-// The desktop app greets with its start screen: new, open, recent files, examples. A project
-// file the app was started with closes it again as it opens (see ui/fileActions.ts).
-if (isDesktop) projectBar.showStartScreen?.();
-
-// Last, so the terms sit on top of everything else that opens with the app.
-if (termsNeedAgreement()) openTermsDialog({ requireAgreement: true });
+// Hidden or closed: whatever changed in the last moment is kept now, not lost with the page.
+window.addEventListener('pagehide', storeDocumentsNow);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') storeDocumentsNow();
+});
