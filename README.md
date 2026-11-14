@@ -34,7 +34,7 @@ in a new tab. Every open circuit is kept in the browser and is back after a relo
 
 ## Running PneuGineer
 
-There are three ways to run the app, from simplest to most involved.
+There are four ways to run the app, from simplest to most involved.
 
 ### 1. In the browser
 
@@ -48,7 +48,31 @@ all scripts and styles inlined. Download it (on GitHub: open the file, then **Do
 and double-click it to open it in your browser. It needs no server and no internet connection,
 so it can be copied to a USB stick or shared by email.
 
-### 3. From source
+### 3. As a desktop app (Windows, Linux)
+
+A Windows installer (`PneuGineer-Setup-<version>.exe`) and a Linux Flatpak
+(`PneuGineer-<version>.flatpak`) are on the [Releases](https://github.com/bibbi88/PneuGineer/releases)
+page. They open the same app in its own window, without a browser.
+
+- **Windows:** run the installer. It's not code-signed, so Windows SmartScreen may warn that it's
+  from an unknown publisher: choose **More info → Run anyway**.
+- **Linux:** `flatpak install --user PneuGineer-<version>.flatpak`, then start it from the app
+  menu or with `flatpak run io.github.bibbi88.PneuGineer`. The Freedesktop runtime it needs is
+  fetched from Flathub on install.
+
+They're built by GitHub Actions ([`.github/workflows/desktop.yml`](.github/workflows/desktop.yml))
+from [`desktop/`](desktop/) - an Electron shell around the built `dist/index.html`. To publish a
+release, push a version tag:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+The workflow can also be run by hand (**Actions → Desktop apps → Run workflow**); each run keeps
+the installer and the Flatpak as downloadable artifacts for a while.
+
+### 4. From source
 
 Requires [Node.js](https://nodejs.org/) 22 or newer.
 

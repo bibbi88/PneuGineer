@@ -1,0 +1,74 @@
+{
+  "name": "pneugineer-desktop",
+  "productName": "PneuGineer",
+  "version": "0.1.0",
+  "description": "Pneumatic circuit editor and simulator",
+  "author": "bibbi88",
+  "license": "SEE LICENSE IN LICENSE",
+  "private": true,
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "dist:win": "electron-builder --win nsis --publish never",
+    "dist:flatpak": "electron-builder --linux flatpak --publish never"
+  },
+  "devDependencies": {
+    "electron": "45.3.2",
+    "electron-builder": "26.18.0"
+  },
+  "build": {
+    "appId": "io.github.bibbi88.PneuGineer",
+    "productName": "PneuGineer",
+    "copyright": "bibbi88",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.cjs",
+      "app/**/*",
+      "build/icon.png"
+    ],
+    "fileAssociations": [
+      {
+        "ext": "pgcl",
+        "name": "PneuGineer project",
+        "description": "PneuGineer project",
+        "mimeType": "application/x-pneugineer"
+      }
+    ],
+    "win": {
+      "icon": "build/icon.png",
+      "artifactName": "PneuGineer-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "PneuGineer"
+    },
+    "linux": {
+      "icon": "build/icon.png",
+      "category": "Education",
+      "synopsis": "Pneumatic circuit editor and simulator",
+      "description": "Draw pneumatic and electro-pneumatic circuits with ISO 1219 symbols and simulate them.",
+      "artifactName": "PneuGineer-${version}.${ext}"
+    },
+    "flatpak": {
+      "runtime": "org.freedesktop.Platform",
+      "runtimeVersion": "25.08",
+      "sdk": "org.freedesktop.Sdk",
+      "base": "org.electronjs.Electron2.BaseApp",
+      "baseVersion": "25.08",
+      "finishArgs": [
+        "--share=ipc",
+        "--socket=x11",
+        "--socket=wayland",
+        "--device=dri",
+        "--filesystem=home"
+      ]
+    }
+  }
+}
