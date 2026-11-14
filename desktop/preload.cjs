@@ -12,6 +12,7 @@ ipcRenderer.on('open-file', (_event, file) => {
 
 contextBridge.exposeInMainWorld('pneugineerDesktop', {
   openFile: () => ipcRenderer.invoke('open-file'),
+  openPath: (path) => ipcRenderer.invoke('open-path', path),
   saveFile: (path, text) => ipcRenderer.invoke('save-file', path, text),
   saveFileAs: (suggestedName, text) => ipcRenderer.invoke('save-file-as', suggestedName, text),
   onOpenFile: (cb) => {

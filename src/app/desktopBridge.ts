@@ -13,6 +13,8 @@ export interface DesktopFile {
 export interface DesktopBridge {
   /** Shows an Open dialog for a project file; null if cancelled. */
   openFile(): Promise<DesktopFile | null>;
+  /** Reads the project file at `path` - a recent file; null if it's no longer there. */
+  openPath(path: string): Promise<DesktopFile | null>;
   /** Writes `text` to `path`; whether it worked. */
   saveFile(path: string, text: string): Promise<boolean>;
   /** Shows a Save As dialog starting at `suggestedName` and writes `text` there; the chosen

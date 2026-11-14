@@ -51,6 +51,15 @@ ipcMain.handle('open-file', async () => {
   return readProject(result.filePaths[0]);
 });
 
+// A recent file from the start screen: null if it's gone (moved, deleted, renamed).
+ipcMain.handle('open-path', async (_event, file) => {
+  try {
+    return await readProject(file);
+  } catch {
+    return null;
+  }
+});
+
 ipcMain.handle('save-file', async (_event, file, text) => {
   try {
     await fs.writeFile(file, text, 'utf8');

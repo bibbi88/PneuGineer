@@ -172,5 +172,9 @@ if (restored) {
 }
 refreshTabs();
 
+// The desktop app greets with its start screen: new, open, recent files, examples. A project
+// file the app was started with closes it again as it opens (see ui/fileActions.ts).
+if (isDesktop) projectBar.showStartScreen?.();
+
 // Last, so the terms sit on top of everything else that opens with the app.
 if (termsNeedAgreement()) openTermsDialog({ requireAgreement: true });
