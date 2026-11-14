@@ -2,6 +2,7 @@ import type { Component } from '../core/types';
 import type { ProjectBarRefs } from './projectBar';
 import { openTipsDialog } from './tipsDialog';
 import { openTermsDialog } from './termsDialog';
+import { desktopBridge } from '../app/desktopBridge';
 import { MAX_PICTURE_WIDTH, MIN_PICTURE_WIDTH, PICTURE_TYPE } from '../components/picture';
 import { choosePictureFor } from '../interaction/pictures';
 import { renderValveConfigurator } from './valveConfigurator';
@@ -1298,8 +1299,23 @@ function renderTipsSection(container: HTMLElement): void {
   termsBtn.addEventListener('click', () => openTermsDialog());
   section.appendChild(termsBtn);
 
+  // In the browser: where the desktop app is (the latest GitHub release).
+  if (!desktopBridge()) {
+    const desktop = document.createElement('a');
+    desktop.className = 'btn inspectorTipsBtn';
+    desktop.href = DESKTOP_DOWNLOAD_URL;
+    desktop.target = '_blank';
+    desktop.rel = 'noopener';
+    desktop.title = 'Windows installer and Linux Flatpak, on GitHub';
+    desktop.append(createIcon('download'), document.createTextNode('Desktop app'));
+    section.appendChild(desktop);
+  }
+
   container.appendChild(section);
 }
+
+/** The desktop app's downloads: the latest release on GitHub (.github/workflows/desktop.yml). */
+const DESKTOP_DOWNLOAD_URL = 'https://github.com/bibbi88/PneuGineer/releases/latest';
 
 const ALIGN_BUTTONS: Array<{ icon: IconName; label: string; mode: AlignMode }> = [
   { icon: 'alignLeft', label: 'Align left edges', mode: 'left' },

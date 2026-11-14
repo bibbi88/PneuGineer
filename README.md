@@ -6,6 +6,11 @@ simulation with a live pressure overlay.
 
 **▶ Try it in your browser: [bibbi88.github.io/PneuGineer](https://bibbi88.github.io/PneuGineer/)**
 
+**⬇ Download the desktop app:**
+[Windows installer](https://github.com/bibbi88/PneuGineer/releases/latest/download/PneuGineer-Setup.exe) ·
+[Linux Flatpak](https://github.com/bibbi88/PneuGineer/releases/latest/download/PneuGineer.flatpak) ·
+[all releases](https://github.com/bibbi88/PneuGineer/releases)
+
 ![PneuGineer editor with an A+B+C+C-B-A- cylinder sequence circuit](docs/screenshot.png)
 
 This is an educational project focused on flow _logic_, not flow _calculations_ — pressure is
@@ -50,27 +55,31 @@ so it can be copied to a USB stick or shared by email.
 
 ### 3. As a desktop app (Windows, Linux)
 
-A Windows installer (`PneuGineer-Setup-<version>.exe`) and a Linux Flatpak
-(`PneuGineer-<version>.flatpak`) are on the [Releases](https://github.com/bibbi88/PneuGineer/releases)
-page. They open the same app in its own window, without a browser.
+The same app in its own window, without a browser - it opens and saves project files like any
+desktop program, and greets you with recent files and the examples.
 
-- **Windows:** run the installer. It's not code-signed, so Windows SmartScreen may warn that it's
-  from an unknown publisher: choose **More info → Run anyway**.
-- **Linux:** `flatpak install --user PneuGineer-<version>.flatpak`, then start it from the app
-  menu or with `flatpak run io.github.bibbi88.PneuGineer`. The Freedesktop runtime it needs is
-  fetched from Flathub on install.
+- **Windows:** download the
+  [installer](https://github.com/bibbi88/PneuGineer/releases/latest/download/PneuGineer-Setup.exe)
+  and run it. It isn't code-signed, so Windows SmartScreen may warn that it's from an unknown
+  publisher: choose **More info → Run anyway**.
+- **Linux:** download the
+  [Flatpak](https://github.com/bibbi88/PneuGineer/releases/latest/download/PneuGineer.flatpak),
+  then `flatpak install --user PneuGineer.flatpak` and start PneuGineer from the app menu (or
+  `flatpak run io.github.bibbi88.PneuGineer`). The Freedesktop runtime it needs is fetched from
+  Flathub on install.
 
-They're built by GitHub Actions ([`.github/workflows/desktop.yml`](.github/workflows/desktop.yml))
-from [`desktop/`](desktop/) - an Electron shell around the built `dist/index.html`. To publish a
-release, push a version tag:
+Both are built by GitHub Actions ([`.github/workflows/desktop.yml`](.github/workflows/desktop.yml))
+from [`desktop/`](desktop/) - an Electron shell around the built `dist/index.html` - on every push
+to `main`, into the [latest release](https://github.com/bibbi88/PneuGineer/releases/latest). The
+links above always fetch the newest. For a numbered release of its own, push a version tag:
 
 ```bash
 git tag v1.0.0
 git push origin v1.0.0
 ```
 
-The workflow can also be run by hand (**Actions → Desktop apps → Run workflow**); each run keeps
-the installer and the Flatpak as downloadable artifacts for a while.
+The workflow can also be run by hand on any branch (**Actions → Desktop apps → Run workflow**);
+such a run keeps the installer and the Flatpak as downloadable artifacts, without a release.
 
 ### 4. From source
 

@@ -40,7 +40,7 @@
     ],
     "win": {
       "icon": "build/icon.png",
-      "artifactName": "PneuGineer-Setup-${version}.${ext}"
+      "artifactName": "PneuGineer-Setup.${ext}"
     },
     "nsis": {
       "oneClick": false,
@@ -55,7 +55,7 @@
       "category": "Education",
       "synopsis": "Pneumatic circuit editor and simulator",
       "description": "Draw pneumatic and electro-pneumatic circuits with ISO 1219 symbols and simulate them.",
-      "artifactName": "PneuGineer-${version}.${ext}"
+      "artifactName": "PneuGineer.${ext}"
     },
     "flatpak": {
       "runtime": "org.freedesktop.Platform",

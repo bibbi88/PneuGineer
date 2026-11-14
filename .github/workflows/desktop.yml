@@ -1,20 +1,20 @@
 # Builds PneuGineer as a desktop app (desktop/: Electron + electron-builder) - a Windows installer
-# and a Linux Flatpak. Every run keeps both as downloadable artifacts; pushing a version tag
-# (v1.2.3) also publishes them on a GitHub Release.
+# and a Linux Flatpak - and publishes them as a GitHub Release:
 #
-#   git tag v1.0.0 && git push origin v1.0.0
+# - every push to main updates the "latest" release (tag desktop-latest), so these always fetch
+#   the newest build:
+#     https://github.com/bibbi88/PneuGineer/releases/latest/download/PneuGineer-Setup.exe
+#     https://github.com/bibbi88/PneuGineer/releases/latest/download/PneuGineer.flatpak
+# - pushing a version tag (git tag v1.2.3 && git push origin v1.2.3) makes a release of its own.
 #
-# Can also be started by hand (Actions > Desktop apps > Run workflow), and runs when the desktop
-# packaging itself changes on dev or main.
+# Can also be started by hand on any branch (Actions > Desktop apps > Run workflow); such runs
+# keep both files as downloadable artifacts without publishing a release.
 name: Desktop apps
 
 on:
   push:
+    branches: [main]
     tags: ['v*']
-    branches: [dev, main]
-    paths:
-      - 'desktop/**'
-      - '.github/workflows/desktop.yml'
   workflow_dispatch:
 
 permissions:
@@ -97,17 +97,43 @@ jobs:
 
   release:
     name: GitHub Release
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main'
     needs: [windows, flatpak]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
           merge-multiple: true
-      - uses: softprops/action-gh-release@v2
+      - name: Point desktop-latest at this commit
+        if: github.ref == 'refs/heads/main'
+        run: |
+          git tag -f desktop-latest
+          git push -f origin desktop-latest
+      - name: Latest build (from main)
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
         with:
+          tag_name: desktop-latest
+          name: PneuGineer desktop app (latest)
+          make_latest: true
+          files: artifacts/*
+          body: |
+            The newest PneuGineer desktop app, built from `main` (${{ github.sha }}).
+
+            - **Windows:** download **PneuGineer-Setup.exe** and run it. It isn't code-signed, so
+              Windows may warn about an unknown publisher: choose *More info → Run anyway*.
+            - **Linux:** download **PneuGineer.flatpak**, then
+              `flatpak install --user PneuGineer.flatpak` and start PneuGineer from the app menu.
+
+            Or use it in the browser, nothing to install: https://bibbi88.github.io/PneuGineer/
+      - name: Versioned release (from a tag)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          make_latest: true
           files: artifacts/*
           generate_release_notes: true

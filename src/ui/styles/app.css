@@ -485,6 +485,15 @@ body.panelResizing * {
   text-align: left;
 }
 
+/* A link dressed as the buttons beside it (the desktop app's downloads): their font, too. */
+a.inspectorTipsBtn {
+  color: inherit;
+  text-decoration: none;
+  font:
+    13.3333px Arial,
+    sans-serif;
+}
+
 .workspace {
   grid-column: 2;
   grid-row: 3;
