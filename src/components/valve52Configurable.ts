@@ -1,4 +1,5 @@
 import type { Component, ConductivityContext, PortConnection } from '../core/types';
+import { listenWindow } from '../app/componentLifetime';
 import { uid } from '../core/ids';
 import { buildComponentShell, createSvgEl } from './shared/svgHelpers';
 import { appState } from '../app/AppState';
@@ -155,8 +156,8 @@ export function createValve52Configurable(compLayer: HTMLElement, x: number, y: 
   appState.onChange(() => {
     drawActuators();
     drawRestState();
-  });
-  appState.onModeChange(drawRestState);
+  }, shell.el);
+  appState.onModeChange(drawRestState, shell.el);
 
   function actuated(ctx: ConductivityContext, side: 14 | 12): boolean {
     const end =
@@ -299,8 +300,8 @@ export function createValve52Configurable(compLayer: HTMLElement, x: number, y: 
     latched = e.ctrlKey;
     setPressed(side, true);
   });
-  window.addEventListener('mouseup', release);
-  window.addEventListener('keyup', (e) => {
+  listenWindow(shell.el, 'mouseup', release);
+  listenWindow(shell.el, 'keyup', (e) => {
     if (e.key === 'Control' && latched) {
       latched = false;
       pressed14 = false;

@@ -21,10 +21,8 @@ export function applyToDom(graph: FrameGraph): void {
       const active = isActive(key);
       port.el.classList.toggle('pressurized', active);
       // The pressure actually at this port, which a regulator upstream will have reduced.
-      port.el.setAttribute(
-        'title',
-        `${port.key}: ${active ? pressureOf(key).toFixed(1) : '0.0'} bar`,
-      );
+      const title = `${port.key}: ${active ? pressureOf(key).toFixed(1) : '0.0'} bar`;
+      if (port.el.getAttribute('title') !== title) port.el.setAttribute('title', title);
     }
   }
 
@@ -40,7 +38,8 @@ export function applyToDom(graph: FrameGraph): void {
     // while a change propagates - show the higher, so a freshly pressurized line doesn't
     // momentarily read as regulated when it isn't.
     const wirePressure = Math.max(pressureOf(fromKey), pressureOf(toKey));
-    conn.labelEl.textContent = active ? `${wirePressure.toFixed(1)} bar` : '';
+    const label = active ? `${wirePressure.toFixed(1)} bar` : '';
+    if (conn.labelEl.textContent !== label) conn.labelEl.textContent = label;
 
     const exhausting = graph.exhausting.has(fromKey) && graph.exhausting.has(toKey);
     conn.pathEl.classList.toggle('exhausting', exhausting);

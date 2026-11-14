@@ -1,4 +1,5 @@
 import type { Component, PortConnection } from '../core/types';
+import { listenWindow } from '../app/componentLifetime';
 import { uid } from '../core/ids';
 import { buildComponentShell, createSvgEl } from './shared/svgHelpers';
 import { appState } from '../app/AppState';
@@ -194,13 +195,13 @@ export function createPushButton32(compLayer: HTMLElement, x: number, y: number)
     }
     setActive(true);
   });
-  window.addEventListener('mouseup', () => {
+  listenWindow(shell.el, 'mouseup', () => {
     if (!latched) setActive(false);
   });
   shell.svg.addEventListener('mouseleave', () => {
     if (!latched) setActive(false);
   });
-  window.addEventListener('keyup', (e) => {
+  listenWindow(shell.el, 'keyup', (e) => {
     if (e.key === 'Control' && latched) {
       latched = false;
       setActive(false);

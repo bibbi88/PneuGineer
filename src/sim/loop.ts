@@ -6,11 +6,13 @@ import { emptyFrameGraph } from './pressure';
 import { clearElectrical } from './electrical';
 import { resetFlowNetwork } from './flowNetwork';
 import { MAX_DT } from './constants';
-import { redrawAllConnections } from '../wires/connection';
+import { redrawMovedConnections } from '../wires/connection';
 import { getSimSpeed } from '../app/simSpeed';
 
 let lastTime = performance.now();
 let stepOnce = false;
+/** Whether the stopped circuit has been drawn at rest since it last ran or changed. */
+let restShown = false;
 
 export function requestSingleStep(): void {
   stepOnce = true;
@@ -34,17 +36,18 @@ function tick(now: number): void {
   if ((appState.mode === Modes.PLAY || stepOnce) && dt > 0) {
     const graph = stepSimulation(dt);
     applyToDom(graph);
-    // A component can move its own ports in response to simulation state (e.g. the 5/2 valve's
-    // sliding pilot ports) without going through any of the normal edit-time triggers that
-    // redraw wires (drag, handle-drag, undo/redo) - so any wire attached to one would otherwise
-    // stay stuck at its pre-slide path. Cheap even every frame: geometry is measured from live
-    // DOM/cached per endpoint position, so nothing recomputes for a wire whose ports didn't move.
-    redrawAllConnections();
+    // A component can move its own ports in response to simulation state (a valve's spool
+    // sliding its pilot ports along) without any of the edit-time triggers that redraw wires -
+    // only the wires on ports that actually moved are redrawn (wires/connection.ts).
+    redrawMovedConnections();
     stepOnce = false;
-  } else if (appState.mode === Modes.STOP) {
+    restShown = false;
+  } else if (appState.mode === Modes.STOP && !restShown) {
+    // Stopped: the circuit shown at rest - once, when it stops or changes, not every frame.
     clearElectrical();
     resetFlowNetwork();
     applyToDom(emptyFrameGraph());
+    restShown = true;
   }
 
   requestAnimationFrame(tick);
@@ -52,5 +55,12 @@ function tick(now: number): void {
 
 export function startSimLoop(): void {
   lastTime = performance.now();
+  // Shown at rest again after any change or mode switch.
+  appState.onChange(() => {
+    restShown = false;
+  });
+  appState.onModeChange(() => {
+    restShown = false;
+  });
   requestAnimationFrame(tick);
 }

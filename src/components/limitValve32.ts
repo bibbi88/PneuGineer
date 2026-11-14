@@ -235,7 +235,7 @@ export function createLimitValve32(compLayer: HTMLElement, x: number, y: number)
     sensorLabel.classList.toggle('sensorLabelDuplicate', duplicate);
   }
   updateLabel();
-  appState.onChange(updateLabel);
+  appState.onChange(updateLabel, shell.el);
 
   /** Shows the valve actuated (or not), with the cam on its roller when it's its cylinder
    * holding it there. */
@@ -258,8 +258,8 @@ export function createLimitValve32(compLayer: HTMLElement, x: number, y: number)
         camArrivesTripping(sensorKey, rollerKind === 'oneWayExtend' ? 1 : -1));
     draw(sensorKey !== '' && held);
   }
-  appState.onChange(drawRestState);
-  appState.onModeChange(drawRestState);
+  appState.onChange(drawRestState, shell.el);
+  appState.onModeChange(drawRestState, shell.el);
 
   const comp: Component = {
     id,

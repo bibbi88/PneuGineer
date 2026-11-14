@@ -193,7 +193,7 @@ export function createValve52Solenoid(compLayer: HTMLElement, x: number, y: numb
   refreshLabel();
   // Also re-check when some *other* valve is renamed: this one's label has to turn red (or stop
   // being red) on a change it never sees itself.
-  appState.onChange(refreshLabel);
+  appState.onChange(refreshLabel, shell.el);
   applyState();
 
   const comp: Component = {
@@ -314,7 +314,7 @@ export function createValve52SolenoidDouble(
     markDuplicateLabel(rightName, key12);
   }
   refreshLabels();
-  appState.onChange(refreshLabels);
+  appState.onChange(refreshLabels, shell.el);
   applyState();
 
   const comp: Component = {
@@ -472,7 +472,7 @@ export function createValve53Solenoid(compLayer: HTMLElement, x: number, y: numb
     markDuplicateLabel(name12, key12);
   }
   refreshLabels();
-  appState.onChange(refreshLabels);
+  appState.onChange(refreshLabels, shell.el);
   applyState();
 
   const comp: Component = {

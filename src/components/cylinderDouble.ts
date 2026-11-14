@@ -1,6 +1,11 @@
 import type { Component, SimStepContext, PortConnection } from '../core/types';
 import { uid } from '../core/ids';
-import { buildComponentShell, createSvgEl, createPort } from './shared/svgHelpers';
+import {
+  buildComponentShell,
+  createPort,
+  createSvgEl,
+  setAttrIfChanged,
+} from './shared/svgHelpers';
 import { nextCylinderLetter, isCylinderLetterInUse } from './shared/letters';
 import { BASE_CYL_SPEED } from '../sim/constants';
 import type { FlowDevice } from '../sim/flowNetwork';
@@ -346,19 +351,20 @@ export function createCylinderDouble(compLayer: HTMLElement, x: number, y: numbe
       geo.h / 2 - geo.rodTipHeight / 2,
     );
   }
-  appState.onChange(updateSensorMarks);
+  appState.onChange(updateSensorMarks, shell.el);
   updateSensorMarks();
-  appState.onModeChange(() =>
-    showSensorMarkStates(sensorMarks, sensors, pos, appState.mode !== Modes.STOP),
+  appState.onModeChange(
+    () => showSensorMarkStates(sensorMarks, sensors, pos, appState.mode !== Modes.STOP),
+    shell.el,
   );
 
   function updateVisual(): void {
     showSensorMarkStates(sensorMarks, sensors, pos, appState.mode !== Modes.STOP);
     const layout = computeCylinderDoublePistonLayout(geo, pos);
-    piston.setAttribute('x', String(layout.px));
-    rod.setAttribute('x', String(layout.rodX));
-    rod.setAttribute('width', String(layout.rodWidth));
-    rodTip.setAttribute('x', String(layout.tipX));
+    setAttrIfChanged(piston, 'x', String(layout.px));
+    setAttrIfChanged(rod, 'x', String(layout.rodX));
+    setAttrIfChanged(rod, 'width', String(layout.rodWidth));
+    setAttrIfChanged(rodTip, 'x', String(layout.tipX));
   }
   updateVisual();
 

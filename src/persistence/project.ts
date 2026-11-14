@@ -10,7 +10,7 @@ import {
   setComponentMirrored,
   setComponentRotation,
 } from '../interaction/componentContextMenu';
-import { createConnection, redrawAllConnections } from '../wires/connection';
+import { createConnection, forgetAllDrawnRoutes, redrawAllConnections } from '../wires/connection';
 import { clearSelection } from '../interaction/selection';
 import { renderPageFrame } from '../ui/pageFrame';
 import { getDeviceId } from '../app/deviceId';
@@ -94,6 +94,7 @@ export function clearProject(): void {
   for (const comp of [...appState.components]) {
     appState.removeComponent(comp.id);
   }
+  forgetAllDrawnRoutes();
   clearSelection();
 }
 
