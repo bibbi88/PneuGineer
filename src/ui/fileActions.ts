@@ -2,6 +2,7 @@ import type { ComponentFactoryContext } from '../components/registry';
 import type { ViewportAdapter } from './viewport';
 import type { ProjectFileV1 } from '../persistence/schema';
 import { appState } from '../app/AppState';
+import { stopSimulation } from '../sim/stopSimulation';
 import { getDeviceId } from '../app/deviceId';
 import { desktopBridge, fileBaseName, type DesktopFile } from '../app/desktopBridge';
 import {
@@ -9,12 +10,14 @@ import {
   activeDocumentPath,
   forEachDocumentOnCanvas,
   listDocuments,
+  markDocumentSaved,
   onDocumentsChange,
   prepareToOpen,
   setActiveDocumentPath,
   setDocumentPath,
   snapshotDocuments,
   switchDocument,
+  unsavedDocuments,
   updateDocumentFile,
 } from '../app/documents';
 import { resetHistory } from '../history/historyStore';
@@ -119,6 +122,8 @@ export function createFileActions(deps: FileActionDeps): FileActions {
     loadProject(file, deps.ctx, deps.viewport);
     deps.setName(path ? fileBaseName(path) : file.name || 'project');
     setActiveDocumentPath(path);
+    // Just as in its file: nothing to save yet.
+    markDocumentSaved(activeDocumentId(), serializeProject(deps.getName()));
   }
 
   function openFromOutside(f: DesktopFile): void {
@@ -133,10 +138,13 @@ export function createFileActions(deps: FileActionDeps): FileActions {
 
   async function saveAsDesktop(): Promise<boolean> {
     if (!bridge) return false;
+    // A file holds the circuit at rest, never mid-run.
+    stopSimulation();
     const file = stamped(serializeProject(deps.getName()));
     const path = await bridge.saveFileAs(`${safeFileName(deps.getName())}.pgcl`, json(file));
     if (!path) return false;
     commitActiveSaved(file);
+    markDocumentSaved(activeDocumentId(), file);
     setActiveDocumentPath(path);
     deps.setName(fileBaseName(path));
     rememberRecentFile(path);
@@ -144,6 +152,8 @@ export function createFileActions(deps: FileActionDeps): FileActions {
   }
 
   async function save(): Promise<void> {
+    // A file holds the circuit at rest, never mid-run.
+    stopSimulation();
     if (!bridge) {
       await saveProjectToFile(deps.getName());
       return;
@@ -156,36 +166,20 @@ export function createFileActions(deps: FileActionDeps): FileActions {
     const file = stamped(serializeProject(deps.getName()));
     if (await bridge.saveFile(path, json(file))) {
       commitActiveSaved(file);
+      markDocumentSaved(activeDocumentId(), file);
       rememberRecentFile(path);
     } else window.alert(`Couldn't save to ${path}.`);
   }
 
   async function saveAll(): Promise<void> {
-    const docs = snapshotDocuments();
-    const activeId = activeDocumentId();
+    // A file holds the circuit at rest, never mid-run.
+    stopSimulation();
     if (bridge) {
-      for (const doc of docs) {
-        const file = stamped(doc.file);
-        let path: string | null | undefined = doc.path;
-        if (path) {
-          if (!(await bridge.saveFile(path, json(file)))) {
-            window.alert(`Couldn't save to ${path}.`);
-            continue;
-          }
-        } else {
-          // Never saved: asked where, with the tab shown so it's clear which one.
-          switchDocument(doc.id);
-          path = await bridge.saveFileAs(`${safeFileName(doc.name)}.pgcl`, json(file));
-          if (!path) continue;
-          setDocumentPath(doc.id, path);
-        }
-        rememberRecentFile(path);
-        if (doc.id === activeDocumentId()) commitActiveSaved(file);
-        else updateDocumentFile(doc.id, file);
-      }
-      switchDocument(activeId);
+      await saveDocumentsDesktop();
       return;
     }
+    const docs = snapshotDocuments();
+    const activeId = activeDocumentId();
 
     // Browser: into a folder chosen once, where the browser can (Chrome, Edge); else each one
     // downloaded.
@@ -220,6 +214,41 @@ export function createFileActions(deps: FileActionDeps): FileActions {
     }
     for (const { file } of files) downloadText(json(file), nameFor(file.name));
     markSaved(files, activeId);
+  }
+
+  /** Desktop: saves the open documents - only those in `only`, if given - each back to its own
+   * file, asking where for one never saved. Whether every one of them got saved. */
+  async function saveDocumentsDesktop(only?: Set<string>): Promise<boolean> {
+    if (!bridge) return false;
+    const docs = snapshotDocuments().filter((d) => !only || only.has(d.id));
+    const activeId = activeDocumentId();
+    let all = true;
+    for (const doc of docs) {
+      const file = stamped(doc.file);
+      let path: string | null | undefined = doc.path;
+      if (path) {
+        if (!(await bridge.saveFile(path, json(file)))) {
+          window.alert(`Couldn't save to ${path}.`);
+          all = false;
+          continue;
+        }
+      } else {
+        // Never saved: asked where, with the tab shown so it's clear which one.
+        switchDocument(doc.id);
+        path = await bridge.saveFileAs(`${safeFileName(doc.name)}.pgcl`, json(file));
+        if (!path) {
+          all = false;
+          continue;
+        }
+        setDocumentPath(doc.id, path);
+      }
+      rememberRecentFile(path);
+      markDocumentSaved(doc.id, file);
+      if (doc.id === activeDocumentId()) commitActiveSaved(file);
+      else updateDocumentFile(doc.id, file);
+    }
+    switchDocument(activeId);
+    return all;
   }
 
   function markSaved(files: Array<{ doc: { id: string }; file: ProjectFileV1 }>, activeId: string) {
@@ -283,6 +312,13 @@ export function createFileActions(deps: FileActionDeps): FileActions {
 
   if (bridge) {
     bridge.onOpenFile(openFromOutside);
+    // Closing the window: the desktop app asks which circuits have unsaved changes, and - if the
+    // user chooses Save - has them saved before it closes (desktop/main.cjs).
+    bridge.onCloseRequest(async (step) => {
+      if (step === 'list') return unsavedDocuments().map((d) => d.name);
+      stopSimulation();
+      return saveDocumentsDesktop(new Set(unsavedDocuments().map((d) => d.id)));
+    });
     // The window's title names the circuit, as a desktop program's does.
     const title = (): void => {
       document.title = `${deps.getName()} - PneuGineer`;
@@ -290,6 +326,35 @@ export function createFileActions(deps: FileActionDeps): FileActions {
     onDocumentsChange(title);
     title();
   }
+
+  // A file dropped on the window never replaces the app (in the desktop app it would navigate
+  // away from it): a project file opens, as with Open; pictures dropped on the canvas are
+  // handled there (interaction/pictures.ts); anything else is ignored.
+  window.addEventListener('dragover', (e) => {
+    if (e.dataTransfer?.types.includes('Files')) e.preventDefault();
+  });
+  window.addEventListener('drop', (e) => {
+    if (!e.dataTransfer?.types.includes('Files')) return;
+    if (e.defaultPrevented) return;
+    e.preventDefault();
+    const file = Array.from(e.dataTransfer.files).find((f) => /\.(pgcl|json)$/i.test(f.name));
+    if (!file || document.querySelector('.modalBackdrop')) return;
+    if (bridge) {
+      void bridge.openPath(bridge.pathForFile(file)).then((f) => {
+        if (f) openFromOutside(f);
+      });
+      return;
+    }
+    void file
+      .text()
+      .then((text) => {
+        closeStartScreen();
+        openText(text);
+      })
+      .catch((err: unknown) => {
+        window.alert(`Couldn't open ${file.name}: ${err instanceof Error ? err.message : err}`);
+      });
+  });
 
   // The usual file shortcuts. Not while typing in a field or with a dialog open.
   window.addEventListener('keydown', (e) => {

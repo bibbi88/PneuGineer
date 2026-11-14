@@ -23,6 +23,8 @@ export default tseslint.config(
         __dirname: 'readonly',
         module: 'writable',
         process: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
       },
     },
     rules: { '@typescript-eslint/no-require-imports': 'off' },

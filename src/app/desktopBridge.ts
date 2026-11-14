@@ -15,6 +15,8 @@ export interface DesktopBridge {
   openFile(): Promise<DesktopFile | null>;
   /** Reads the project file at `path` - a recent file; null if it's no longer there. */
   openPath(path: string): Promise<DesktopFile | null>;
+  /** The path on disk of a file dropped on the window. */
+  pathForFile(file: File): string;
   /** Writes `text` to `path`; whether it worked. */
   saveFile(path: string, text: string): Promise<boolean>;
   /** Shows a Save As dialog starting at `suggestedName` and writes `text` there; the chosen
@@ -23,6 +25,9 @@ export interface DesktopBridge {
   /** Project files handed to the app from outside - double-clicked, or given on the command
    * line - including any it was started with. */
   onOpenFile(cb: (file: DesktopFile) => void): void;
+  /** The window is about to close. 'list': the names of the circuits with unsaved changes;
+   * 'save': save those (the user chose Save) and say whether all of them were. */
+  onCloseRequest(cb: (step: 'list' | 'save') => Promise<string[] | boolean>): void;
 }
 
 export function desktopBridge(): DesktopBridge | null {

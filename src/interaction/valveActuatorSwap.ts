@@ -54,7 +54,7 @@ export function swapComponentType(comp: Component, newType: string): Component |
     .map((c) => ({
       from: c.from,
       to: c.to,
-      guides: c.guides,
+      guides: c.guides.map((g) => ({ ...g })),
       stubStartLen: c.stubStartLen,
       stubEndLen: c.stubEndLen,
     }));
@@ -80,7 +80,7 @@ export function swapComponentType(comp: Component, newType: string): Component |
       const from = fromMoved ? { id: next.id, port: saved.from.port } : saved.from;
       const to = toMoved ? { id: next.id, port: saved.to.port } : saved.to;
       const conn = createConnection(from, to);
-      conn.guides = saved.guides;
+      conn.guides = saved.guides.map((g) => ({ ...g }));
       conn.stubStartLen = saved.stubStartLen;
       conn.stubEndLen = saved.stubEndLen;
       redrawConnection(conn);

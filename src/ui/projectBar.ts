@@ -14,6 +14,7 @@ import {
   listDocuments,
   newDocument,
   prepareToOpen,
+  setActiveDocumentPath,
 } from '../app/documents';
 import { openStartScreen } from './startScreen';
 import { createFileActions } from './fileActions';
@@ -127,6 +128,9 @@ export function renderProjectBar(
     if (!ex || !canEdit(appState.mode)) return;
     const file = ex.file();
     prepareToOpen();
+    // An example is a new circuit: it doesn't belong to the file this tab may have come from, so
+    // Save asks where to put it instead of writing over that file (desktop app).
+    setActiveDocumentPath(undefined);
     loadProject(file, ctx, viewport);
     projectName = file.name;
     activeNameChanged();
