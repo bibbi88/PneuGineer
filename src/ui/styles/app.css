@@ -2394,11 +2394,17 @@ body.libraryDragging * {
   color: #fff;
 }
 
-.startBrand svg {
-  display: block;
+.startMarkTile {
+  display: inline-block;
   margin-bottom: 14px;
+  padding: 6px;
   border-radius: 14px;
+  background: #fff;
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.25);
+}
+
+.startMarkTile svg {
+  display: block;
 }
 
 .startName {
