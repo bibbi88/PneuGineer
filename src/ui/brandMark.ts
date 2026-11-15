@@ -1,5 +1,5 @@
 /** The mark's blue - also the "Pneu" in the app's name and the start screen. */
-export const BRAND_COLOR = '#1d3b8b';
+export const BRAND_COLOR = '#2f5bc4';
 /** The air-blue piston. */
 export const BRAND_ACCENT = '#5fa8ff';
 
@@ -12,23 +12,23 @@ export const BRAND_ACCENT = '#5fa8ff';
  */
 export const MARK =
   '<g transform="translate(0 1.4)">' +
-  '<rect x="2.6" y="6.2" width="2" height="3.2" fill="#1d3b8b" stroke="#4a6fc7" stroke-width="0.5"/>' +
-  '<rect x="17.4" y="6.2" width="2" height="3.2" fill="#1d3b8b" stroke="#4a6fc7" stroke-width="0.5"/>' +
-  '<rect x="4.5" y="10.2" width="16" height="11.6" fill="#1d3b8b" stroke="#4a6fc7" stroke-width="0.6"/>' +
-  '<line x1="5" y1="11.6" x2="20" y2="11.6" stroke="#3557b0" stroke-width="0.8"/>' +
-  '<rect x="1.2" y="9" width="4.2" height="14" rx="1" fill="#142a63" stroke="#4a6fc7" stroke-width="0.6"/>' +
-  '<rect x="16.4" y="9" width="4.2" height="14" rx="1" fill="#142a63" stroke="#4a6fc7" stroke-width="0.6"/>' +
-  '<circle cx="3.3" cy="10.6" r="0.6" fill="#a9bdf0"/>' +
-  '<circle cx="3.3" cy="21.4" r="0.6" fill="#a9bdf0"/>' +
-  '<circle cx="18.5" cy="10.6" r="0.6" fill="#a9bdf0"/>' +
-  '<circle cx="18.5" cy="21.4" r="0.6" fill="#a9bdf0"/>' +
-  '<rect x="20.6" y="14.3" width="7" height="3.4" fill="#c9ced6" stroke="#1d3b8b" stroke-width="0.6"/>' +
+  '<rect x="2.6" y="6.2" width="2" height="3.2" fill="#2f5bc4" stroke="#6f92e0" stroke-width="0.5"/>' +
+  '<rect x="17.4" y="6.2" width="2" height="3.2" fill="#2f5bc4" stroke="#6f92e0" stroke-width="0.5"/>' +
+  '<rect x="4.5" y="10.2" width="16" height="11.6" fill="#2f5bc4" stroke="#6f92e0" stroke-width="0.6"/>' +
+  '<line x1="5" y1="11.6" x2="20" y2="11.6" stroke="#4b72d4" stroke-width="0.8"/>' +
+  '<rect x="1.2" y="9" width="4.2" height="14" rx="1" fill="#23479f" stroke="#6f92e0" stroke-width="0.6"/>' +
+  '<rect x="16.4" y="9" width="4.2" height="14" rx="1" fill="#23479f" stroke="#6f92e0" stroke-width="0.6"/>' +
+  '<circle cx="3.3" cy="10.6" r="0.6" fill="#c9d7f7"/>' +
+  '<circle cx="3.3" cy="21.4" r="0.6" fill="#c9d7f7"/>' +
+  '<circle cx="18.5" cy="10.6" r="0.6" fill="#c9d7f7"/>' +
+  '<circle cx="18.5" cy="21.4" r="0.6" fill="#c9d7f7"/>' +
+  '<rect x="20.6" y="14.3" width="7" height="3.4" fill="#c9ced6" stroke="#2f5bc4" stroke-width="0.6"/>' +
   '<line x1="20.9" y1="15.2" x2="27.4" y2="15.2" stroke="#eef1f5" stroke-width="0.6"/>' +
   '<rect x="9" y="11.4" width="3.4" height="9.2" rx="0.6" fill="#5fa8ff"/>' +
   '<line x1="10.7" y1="11.4" x2="10.7" y2="20.6" stroke="#2f74d0" stroke-width="0.7"/>' +
   '<rect x="12.4" y="14.6" width="4" height="2.8" fill="#c9ced6"/>' +
-  '<circle cx="29" cy="16" r="2.1" fill="none" stroke="#1d3b8b" stroke-width="1.4"/>' +
-  '<circle cx="29" cy="16" r="2.1" fill="none" stroke="#4a6fc7" stroke-width="0.4"/>' +
+  '<circle cx="29" cy="16" r="2.1" fill="none" stroke="#2f5bc4" stroke-width="1.4"/>' +
+  '<circle cx="29" cy="16" r="2.1" fill="none" stroke="#6f92e0" stroke-width="0.4"/>' +
   '</g>';
 
 export function createBrandMark(size: number, className?: string): SVGSVGElement {
