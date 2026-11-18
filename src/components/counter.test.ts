@@ -53,9 +53,12 @@ describe('counter', () => {
     expect(c.snapshot().preset).toBe(2);
   });
 
-  it('is in the library under Signal processing, with the timer and the sequence valve', () => {
-    expect(componentRegistry.get('counter')?.category).toBe('Signal processing');
-    expect(componentRegistry.get('timeDelayValve')?.category).toBe('Signal processing');
-    expect(componentRegistry.get('pressureSequenceValve')?.category).toBe('Signal processing');
+  it('is in the library under Logic & signal processing, with the timer, the sequence valve and AND/OR', () => {
+    expect(componentRegistry.get('counter')?.category).toBe('Logic & signal processing');
+    expect(componentRegistry.get('timeDelayValve')?.category).toBe('Logic & signal processing');
+    expect(componentRegistry.get('pressureSequenceValve')?.category).toBe(
+      'Logic & signal processing',
+    );
+    expect(componentRegistry.get('andValve')?.category).toBe('Logic & signal processing');
   });
 });

@@ -70,9 +70,9 @@ export const ComponentCategory = {
   DIRECTIONAL_MANUAL: 'Mechanical/Manual',
   DIRECTIONAL_AIR: 'Air operated',
   DIRECTIONAL_SOLENOID: 'Solenoid operated',
-  LOGIC: 'Logic',
-  // Valves that switch on a time, a count or a pressure.
-  SIGNAL: 'Signal processing',
+  // AND/OR, and the valves that switch on a time, a count or a pressure: one section, as the
+  // signal-processing stage of a circuit.
+  LOGIC: 'Logic & signal processing',
   FLOW: 'Flow control',
   ACTUATORS: 'Actuators',
   ELECTRICAL: 'Electrical',
@@ -271,7 +271,7 @@ export const componentRegistry = new Map<string, RegistryEntry>([
         'TOF',
       ],
       placeable: true,
-      category: ComponentCategory.SIGNAL,
+      category: ComponentCategory.LOGIC,
     },
   ],
   [
@@ -281,7 +281,7 @@ export const componentRegistry = new Map<string, RegistryEntry>([
       label: 'Counter',
       keywords: ['preset counter', 'pneumatic counter', 'count', 'räknare', 'CTU'],
       placeable: true,
-      category: ComponentCategory.SIGNAL,
+      category: ComponentCategory.LOGIC,
     },
   ],
   [
@@ -301,7 +301,7 @@ export const componentRegistry = new Map<string, RegistryEntry>([
       label: 'Pressure sequence valve',
       keywords: ['sequence valve', 'pressure switch valve', 'sekvensventil'],
       placeable: true,
-      category: ComponentCategory.SIGNAL,
+      category: ComponentCategory.LOGIC,
     },
   ],
   [
@@ -507,7 +507,6 @@ const CATEGORY_ORDER: ComponentCategoryName[] = [
   ComponentCategory.DIRECTIONAL_AIR,
   ComponentCategory.DIRECTIONAL_SOLENOID,
   ComponentCategory.LOGIC,
-  ComponentCategory.SIGNAL,
   ComponentCategory.FLOW,
   ComponentCategory.ELECTRICAL,
   ComponentCategory.ANNOTATIONS,
