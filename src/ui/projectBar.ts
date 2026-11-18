@@ -14,10 +14,11 @@ import {
   listDocuments,
   newDocument,
   prepareToOpen,
-  setActiveDocumentPath,
 } from '../app/documents';
 import { openStartScreen } from './startScreen';
 import { createFileActions } from './fileActions';
+import { createSaveButton } from './saveButton';
+import { fileHandles } from '../app/fileHandles';
 import { showContextMenu, type ContextMenuItem } from '../interaction/contextMenu';
 
 /** A narrow ▾ button beside a toolbar button, opening a menu of related actions under it. */
@@ -80,15 +81,8 @@ export function renderProjectBar(
     },
   });
 
-  const saveBtn = iconButton('save', 'Save project', () => void files.save());
-  const saveMenu = menuArrow('More ways to save', () => [
-    { label: 'Save', onClick: () => void files.save() },
-    ...(files.isDesktop ? [{ label: 'Save as…', onClick: () => void files.saveAs() }] : []),
-    {
-      label: listDocuments().length > 1 ? `Save all (${listDocuments().length})` : 'Save all',
-      onClick: () => void files.saveAll(),
-    },
-  ]);
+  // Save: one button and its menu (Save, Save as…, Save all) - saveButton.ts.
+  const saveButton = createSaveButton(files);
 
   const loadBtn = iconButton('folderOpen', 'Open project', () => void files.open());
 
@@ -129,8 +123,8 @@ export function renderProjectBar(
     const file = ex.file();
     prepareToOpen();
     // An example is a new circuit: it doesn't belong to the file this tab may have come from, so
-    // Save asks where to put it instead of writing over that file (desktop app).
-    setActiveDocumentPath(undefined);
+    // Save asks where to put it instead of writing over that file.
+    fileHandles.delete(activeDocumentId());
     loadProject(file, ctx, viewport);
     projectName = file.name;
     activeNameChanged();
@@ -144,13 +138,7 @@ export function renderProjectBar(
     if (value !== '') openExample(Number(value));
   });
 
-  container.append(
-    newBtn,
-    splitButton(saveBtn, saveMenu),
-    loadBtn,
-    splitButton(exportBtn, exportMenu),
-    examples,
-  );
+  container.append(newBtn, saveButton, loadBtn, splitButton(exportBtn, exportMenu), examples);
 
   return {
     showStartScreen: () =>

@@ -20,6 +20,7 @@ import {
 import { appState } from './AppState';
 import { stopSimulation } from '../sim/stopSimulation';
 import { getSettings } from './settings';
+import { fileHandles } from './fileHandles';
 import { readDocuments, writeDocuments } from '../persistence/docStore';
 import { migrate } from '../persistence/migrations';
 
@@ -38,9 +39,6 @@ export interface ProjectDocument {
   view?: DocumentView;
   /** Undo/redo while another document is open; not kept across reloads. */
   history?: HistoryState;
-  /** The desktop app: the file on disk this document was opened from or last saved to, which
-   * Save writes back to. Never set in the browser, which has no file paths. */
-  path?: string;
   /** How it looked when last opened from or saved to a file (projectSignature) - for telling
    * whether closing the desktop app would lose anything. */
   savedSignature?: string;
@@ -309,13 +307,14 @@ export function closeDocument(id: string): void {
     only.file = emptyFile(only.name);
     only.view = undefined;
     only.history = undefined;
-    only.path = undefined;
+    fileHandles.delete(only.id);
     showDocument(only);
     notify();
     store();
     return;
   }
   if (id === activeId) switchDocument((docs[i + 1] ?? docs[i - 1])!.id);
+  fileHandles.delete(id);
   docs.splice(
     docs.findIndex((d) => d.id === id),
     1,
@@ -327,6 +326,7 @@ export function closeDocument(id: string): void {
 export function closeOtherDocuments(id: string): void {
   if (!docs.some((d) => d.id === id)) return;
   switchDocument(id);
+  for (const d of docs) if (d.id !== id) fileHandles.delete(d.id);
   docs = docs.filter((d) => d.id === id);
   notify();
   store();
@@ -356,26 +356,10 @@ export function duplicateDocument(id: string): void {
   newDocument(name, { ...copy, name, ct: unixNow() });
 }
 
-/** The desktop app: the file the active document belongs to, if any. */
-export function activeDocumentPath(): string | undefined {
-  return active()?.path;
-}
-
-/** The desktop app: the active document now belongs to `path` (opened from it, or saved to it). */
-export function setActiveDocumentPath(path: string | undefined): void {
-  const doc = active();
-  if (doc) doc.path = path;
-}
-
 /** Every open document as it is now - the active one fresh from the canvas - for Save all. */
-export function snapshotDocuments(): Array<{
-  id: string;
-  name: string;
-  file: ProjectFileV1;
-  path?: string;
-}> {
+export function snapshotDocuments(): Array<{ id: string; name: string; file: ProjectFileV1 }> {
   captureActive();
-  return docs.map(({ id, name, file, path }) => ({ id, name, file, ...(path ? { path } : {}) }));
+  return docs.map(({ id, name, file }) => ({ id, name, file }));
 }
 
 /** Replaces the kept copy of a document that isn't on the canvas - Save all stamping the time it
@@ -403,12 +387,6 @@ export function unsavedDocuments(): Array<{ id: string; name: string }> {
       return projectSignature(d.file) !== d.savedSignature;
     })
     .map(({ id, name }) => ({ id, name }));
-}
-
-/** The desktop app: document `id` now belongs to `path`. */
-export function setDocumentPath(id: string, path: string): void {
-  const doc = docs.find((d) => d.id === id);
-  if (doc) doc.path = path;
 }
 
 /** Puts each document on the canvas in turn, tab order, and runs `fn` on it - then goes back to

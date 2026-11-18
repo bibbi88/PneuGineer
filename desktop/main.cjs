@@ -82,24 +82,21 @@ ipcMain.handle('save-file', async (_event, file, text) => {
   }
 });
 
-ipcMain.handle('save-file-as', async (_event, suggestedName, text) => {
+// The page's Save dialog (its showSaveFilePicker stand-in): where to save. The chosen path may
+// then be written with save-file.
+ipcMain.handle('choose-save-path', async (_event, suggestedName) => {
   const result = await dialog.showSaveDialog(win, {
     title: 'Save project',
-    defaultPath: path.join(lastDir ?? app.getPath('documents'), suggestedName),
+    defaultPath: path.join(lastDir ?? app.getPath('documents'), String(suggestedName)),
     filters: FILTERS,
   });
   if (result.canceled || !result.filePath) return null;
   let file = result.filePath;
   if (!/\.[^\\/.]+$/.test(path.basename(file))) file += '.pgcl';
-  try {
-    await fs.writeFile(file, text, 'utf8');
-  } catch (err) {
-    dialog.showErrorBox('PneuGineer', `Couldn't save to ${file}:\n${err.message}`);
-    return null;
-  }
-  lastDir = path.dirname(file);
-  allowedPaths.add(path.resolve(file));
-  return file;
+  const full = path.resolve(file);
+  lastDir = path.dirname(full);
+  allowedPaths.add(full);
+  return full;
 });
 
 // Updates (Windows installer, Linux AppImage): checked only when the page asks - it does, at start, while

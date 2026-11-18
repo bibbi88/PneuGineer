@@ -18,7 +18,7 @@ import {
 } from '../app/documents';
 import { getSettings } from '../app/settings';
 import { showContextMenu, type ContextMenuItem } from '../interaction/contextMenu';
-import { saveProjectToFile } from '../persistence/save';
+import { saveDocumentById } from './fileActions';
 
 /** Whether the documents are shown at all - with only one open, only if the setting asks. */
 function documentsShown(): boolean {
@@ -26,9 +26,8 @@ function documentsShown(): boolean {
 }
 
 function saveToFile(doc: ProjectDocument): void {
-  // Saving goes by what's on the canvas, so the document goes there first.
-  switchDocument(doc.id);
-  void saveProjectToFile(doc.name || 'project');
+  // As Save does: back to its file, or picked / downloaded (ui/fileActions.ts).
+  void saveDocumentById(doc.id);
 }
 
 /** Closes `doc` - straight away if there's nothing in it, otherwise after asking, since its

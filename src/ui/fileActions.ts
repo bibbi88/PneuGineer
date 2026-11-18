@@ -4,27 +4,26 @@ import type { ProjectFileV1 } from '../persistence/schema';
 import { appState } from '../app/AppState';
 import { stopSimulation } from '../sim/stopSimulation';
 import { getDeviceId } from '../app/deviceId';
-import { desktopBridge, fileBaseName, type DesktopFile } from '../app/desktopBridge';
+import { desktopBridge, type DesktopFile } from '../app/desktopBridge';
 import {
   activeDocumentId,
-  activeDocumentPath,
   forEachDocumentOnCanvas,
   listDocuments,
   markDocumentSaved,
   onDocumentsChange,
   prepareToOpen,
-  setActiveDocumentPath,
-  setDocumentPath,
+  renameDocument,
   snapshotDocuments,
   switchDocument,
   unsavedDocuments,
   updateDocumentFile,
 } from '../app/documents';
+import { canWriteBack, fileHandles, saveFilePicker, type FileHandleLike } from '../app/fileHandles';
+import { desktopFileHandle, installDesktopFilePicker } from '../app/desktopFilePicker';
+import { showToast } from './toast';
 import { resetHistory } from '../history/historyStore';
 import { loadProject, serializeProject, unixNow } from '../persistence/project';
 import { migrate } from '../persistence/migrations';
-import { saveProjectToFile } from '../persistence/save';
-import { loadProjectFromPicker } from '../persistence/load';
 import { downloadPdf, renderPdfPage, type PdfPaper } from '../persistence/exportImage';
 import { getPageFrameWorldBounds } from './pageFrame';
 import { forgetRecentFile, rememberRecentFile } from '../app/recentFiles';
@@ -41,8 +40,9 @@ export interface FileActionDeps {
 }
 
 export interface FileActions {
+  /** Ctrl+S: write back to the active document's file, or pick one (or download) first. */
   save(): Promise<void>;
-  /** Desktop only: save under a new name. */
+  /** Ctrl+Shift+S: always a new file, which later Saves then go to. */
   saveAs(): Promise<void>;
   saveAll(): Promise<void>;
   open(): Promise<void>;
@@ -55,6 +55,12 @@ export interface FileActions {
 /** Margin round a page frame's sheet in an exported page - as the export dialog's. */
 const FRAME_EXPORT_PADDING = 40;
 
+/** The browser's save dialog remembers its last folder under this. */
+const PICKER_ID = 'pneugineer-files';
+const PICKER_TYPES = [
+  { description: 'PneuGineer project', accept: { 'application/json': ['.pgcl'] } },
+];
+
 function safeFileName(name: string): string {
   return (
     name
@@ -62,6 +68,11 @@ function safeFileName(name: string): string {
       .replace(/\p{Cc}/gu, '')
       .trim() || 'project'
   );
+}
+
+/** "beam.pgcl" -> "beam": what a document is called once it has a file. */
+function nameOfFile(fileName: string): string {
+  return fileName.replace(/\.(pgcl|json)$/i, '') || fileName;
 }
 
 /** `file` as saved by this browser, now. */
@@ -88,40 +99,203 @@ function commitActiveSaved(file: ProjectFileV1): void {
   appState.projectLastSavedAt = file.lst ?? null;
 }
 
-interface DirectoryHandleLike {
-  getFileHandle(
-    name: string,
-    opts: { create: boolean },
-  ): Promise<{
-    createWritable(): Promise<{ write(data: string): Promise<void>; close(): Promise<void> }>;
-  }>;
+async function writeToHandle(handle: FileHandleLike, text: string): Promise<void> {
+  const writable = await handle.createWritable();
+  await writable.write(new Blob([text], { type: 'application/json' }));
+  await writable.close();
 }
-type ShowDirectoryPicker = (opts?: { mode?: 'readwrite' }) => Promise<DirectoryHandleLike>;
+
+const isAbort = (err: unknown): boolean => err instanceof DOMException && err.name === 'AbortError';
+
+interface DocToSave {
+  id: string;
+  name: string;
+  file: ProjectFileV1;
+}
+
+/** What a save came to: written (to a file, or downloaded), cancelled, or failed. */
+type SaveOutcome = 'saved' | 'cancelled' | 'failed';
+
+/** The live actions, for parts of the UI that save a given document (the tab menu). */
+let current: FileActions | null = null;
+let saveById: ((id: string) => Promise<boolean>) | null = null;
+
+export function getFileActions(): FileActions | null {
+  return current;
+}
+
+/** Saves document `id` - as Save does for the active one. Whether it got saved. */
+export function saveDocumentById(id: string): Promise<boolean> {
+  return saveById ? saveById(id) : Promise.resolve(false);
+}
 
 /**
- * Save, Save as, Save all, Open and Export all sheets - for the toolbar's buttons and their ▾
- * menus, and Ctrl+S / Ctrl+Shift+S / Ctrl+O. In the desktop app they work on files on disk, as
- * a desktop program does: Open uses the computer's own dialog, Save writes back to the file a
- * circuit came from. In the browser, Save downloads (or uses the browser's save dialog), as
- * before.
+ * Save, Save as, Save all, Open and Export all sheets - for the toolbar and its menus, the tab
+ * menu, and Ctrl+S / Ctrl+Shift+S / Ctrl+O.
+ *
+ * Save writes back to the document's file without asking, once it has one (fileHandles); the
+ * first time - or with Save as, always - a file is picked, and later Saves go there. That needs a
+ * browser that can write files (Chrome, Edge: showSaveFilePicker) or the desktop app, which gets
+ * a stand-in for it (app/desktopFilePicker.ts) - one code path for both. Firefox and Safari
+ * can't: every save there asks for a name and downloads.
  */
 export function createFileActions(deps: FileActionDeps): FileActions {
   const bridge = desktopBridge();
+  if (bridge) installDesktopFilePicker(bridge);
 
-  function openText(text: string, path?: string): void {
+  /** The document a save of the active one writes: fresh from the canvas, at rest. */
+  function activeDoc(): DocToSave {
+    return {
+      id: activeDocumentId(),
+      name: deps.getName(),
+      file: serializeProject(deps.getName()),
+    };
+  }
+
+  /** `doc` has just been written as `file` (to `handle`, or downloaded). */
+  function afterSaved(doc: DocToSave, file: ProjectFileV1, handle: FileHandleLike | null): void {
+    if (doc.id === activeDocumentId()) commitActiveSaved(file);
+    else updateDocumentFile(doc.id, file);
+    markDocumentSaved(doc.id, file);
+    if (handle?.path) rememberRecentFile(handle.path);
+  }
+
+  /** A document saved to a new file takes that file's name. */
+  function takeFileName(doc: DocToSave, handle: FileHandleLike): void {
+    const name = nameOfFile(handle.name);
+    if (doc.id === activeDocumentId()) deps.setName(name);
+    else renameDocument(doc.id, name);
+  }
+
+  /**
+   * Saves `doc`: (1) back to its file, if it has one and asNew isn't set; else (2) to a file
+   * picked now, which it then keeps; else - where files can't be written (Firefox, Safari) - (3)
+   * as a download, under a name asked for (unless `quiet`).
+   */
+  async function saveDoc(
+    doc: DocToSave,
+    opts: { asNew?: boolean; quiet?: boolean } = {},
+  ): Promise<SaveOutcome> {
+    const file = stamped(doc.file);
+    const text = json(file);
+
+    // 1. Write back to the file it has.
+    const known = opts.asNew ? undefined : fileHandles.get(doc.id);
+    if (known) {
+      try {
+        if (known.requestPermission) {
+          const permission = await known.requestPermission({ mode: 'readwrite' });
+          if (permission !== 'granted') throw new Error('No permission to write the file');
+        }
+        await writeToHandle(known, text);
+        afterSaved(doc, file, known);
+        showToast(`Saved ${known.name}`);
+        return 'saved';
+      } catch {
+        // Moved, deleted, or permission withdrawn: forget it and pick a file as if new.
+        fileHandles.delete(doc.id);
+      }
+    }
+
+    // 2. Pick a file, write it, and keep it for later Saves.
+    const pick = canWriteBack() ? saveFilePicker() : null;
+    if (pick) {
+      let handle: FileHandleLike;
+      try {
+        handle = await pick({
+          suggestedName: `${safeFileName(doc.name)}.pgcl`,
+          types: PICKER_TYPES,
+          id: PICKER_ID,
+        });
+      } catch (err) {
+        if (isAbort(err)) return 'cancelled';
+        handle = null as unknown as FileHandleLike;
+      }
+      if (handle) {
+        try {
+          await writeToHandle(handle, text);
+        } catch (err) {
+          window.alert(
+            `Couldn't save to ${handle.name}: ${err instanceof Error ? err.message : err}`,
+          );
+          return 'failed';
+        }
+        fileHandles.set(doc.id, handle);
+        takeFileName(doc, handle);
+        afterSaved(doc, file, handle);
+        showToast(`Saved ${handle.name}`);
+        return 'saved';
+      }
+    }
+
+    // 3. Download, under a name asked for.
+    let fileName = `${safeFileName(doc.name)}.pgcl`;
+    if (!opts.quiet) {
+      const answer = window.prompt('Save as', fileName);
+      if (answer === null || !answer.trim()) return 'cancelled';
+      fileName = safeFileName(answer.trim());
+      if (!/\.pgcl$/i.test(fileName)) fileName += '.pgcl';
+    }
+    downloadText(text, fileName);
+    afterSaved(doc, file, null);
+    return 'saved';
+  }
+
+  async function save(): Promise<void> {
+    // A file holds the circuit at rest, never mid-run.
+    stopSimulation();
+    await saveDoc(activeDoc());
+  }
+
+  async function saveAs(): Promise<void> {
+    stopSimulation();
+    await saveDoc(activeDoc(), { asNew: true });
+  }
+
+  /** Saves the open documents - only those in `only`, if given - each back to its own file,
+   * picking one (with its tab shown, so it's clear which) for those that have none. Whether
+   * every one of them got saved. */
+  async function saveDocuments(only?: Set<string>): Promise<boolean> {
+    stopSimulation();
+    const startId = activeDocumentId();
+    const quiet = !canWriteBack(); // downloads: under their own names, without a question each
+    let all = true;
+    for (const doc of snapshotDocuments().filter((d) => !only || only.has(d.id))) {
+      if (!fileHandles.has(doc.id) && canWriteBack()) switchDocument(doc.id);
+      const target = doc.id === activeDocumentId() ? activeDoc() : doc;
+      if ((await saveDoc(target, { quiet })) !== 'saved') all = false;
+    }
+    switchDocument(startId);
+    return all;
+  }
+
+  async function saveAll(): Promise<void> {
+    await saveDocuments();
+  }
+
+  saveById = async (id) => {
+    if (id !== activeDocumentId()) switchDocument(id);
+    stopSimulation();
+    return (await saveDoc(activeDoc())) === 'saved';
+  };
+
+  /** Puts a project on the canvas - in a new tab, or the empty/current one (see prepareToOpen) -
+   * belonging to `handle`, if it came from a file Save can write back to. */
+  function openText(text: string, handle?: FileHandleLike): void {
     // Already open: just show it.
-    if (path) {
-      const open = listDocuments().find((d) => d.path === path);
-      if (open) {
-        switchDocument(open.id);
+    if (handle?.path) {
+      const openId = [...fileHandles.entries()].find(([, h]) => h.path === handle.path)?.[0];
+      if (openId && listDocuments().some((d) => d.id === openId)) {
+        switchDocument(openId);
         return;
       }
     }
     const file = migrate(JSON.parse(text));
     if (prepareToOpen() === 'current') resetHistory();
     loadProject(file, deps.ctx, deps.viewport);
-    deps.setName(path ? fileBaseName(path) : file.name || 'project');
-    setActiveDocumentPath(path);
+    deps.setName(handle ? nameOfFile(handle.name) : file.name || 'project');
+    if (handle) fileHandles.set(activeDocumentId(), handle);
+    else fileHandles.delete(activeDocumentId());
     // Just as in its file: nothing to save yet.
     markDocumentSaved(activeDocumentId(), serializeProject(deps.getName()));
   }
@@ -129,145 +303,61 @@ export function createFileActions(deps: FileActionDeps): FileActions {
   function openFromOutside(f: DesktopFile): void {
     closeStartScreen();
     try {
-      openText(f.text, f.path);
+      openText(f.text, bridge ? desktopFileHandle(bridge, f.path) : undefined);
       rememberRecentFile(f.path);
     } catch (err) {
       window.alert(`Couldn't open ${f.path}: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
-  async function saveAsDesktop(): Promise<boolean> {
-    if (!bridge) return false;
-    // A file holds the circuit at rest, never mid-run.
-    stopSimulation();
-    const file = stamped(serializeProject(deps.getName()));
-    const path = await bridge.saveFileAs(`${safeFileName(deps.getName())}.pgcl`, json(file));
-    if (!path) return false;
-    commitActiveSaved(file);
-    markDocumentSaved(activeDocumentId(), file);
-    setActiveDocumentPath(path);
-    deps.setName(fileBaseName(path));
-    rememberRecentFile(path);
-    return true;
+  function openFailed(name: string, err: unknown): void {
+    window.alert(`Couldn't open ${name} (${err instanceof Error ? err.message : String(err)}).`);
   }
 
-  async function save(): Promise<void> {
-    // A file holds the circuit at rest, never mid-run.
-    stopSimulation();
-    if (!bridge) {
-      await saveProjectToFile(deps.getName());
-      return;
-    }
-    const path = activeDocumentPath();
-    if (!path) {
-      await saveAsDesktop();
-      return;
-    }
-    const file = stamped(serializeProject(deps.getName()));
-    if (await bridge.saveFile(path, json(file))) {
-      commitActiveSaved(file);
-      markDocumentSaved(activeDocumentId(), file);
-      rememberRecentFile(path);
-    } else window.alert(`Couldn't save to ${path}.`);
-  }
-
-  async function saveAll(): Promise<void> {
-    // A file holds the circuit at rest, never mid-run.
-    stopSimulation();
-    if (bridge) {
-      await saveDocumentsDesktop();
-      return;
-    }
-    const docs = snapshotDocuments();
-    const activeId = activeDocumentId();
-
-    // Browser: into a folder chosen once, where the browser can (Chrome, Edge); else each one
-    // downloaded.
-    const files = docs.map((d) => ({ doc: d, file: stamped(d.file) }));
-    const names = new Set<string>();
-    const nameFor = (name: string): string => {
-      let n = `${safeFileName(name)}.pgcl`;
-      for (let i = 2; names.has(n.toLowerCase()); i++) n = `${safeFileName(name)} (${i}).pgcl`;
-      names.add(n.toLowerCase());
-      return n;
-    };
-    const pickDir = (window as unknown as { showDirectoryPicker?: ShowDirectoryPicker })
-      .showDirectoryPicker;
-    if (pickDir) {
-      let dir: DirectoryHandleLike;
-      try {
-        dir = await pickDir({ mode: 'readwrite' });
-      } catch (err) {
-        if (err instanceof DOMException && err.name === 'AbortError') return;
-        dir = null as unknown as DirectoryHandleLike;
-      }
-      if (dir) {
-        for (const { file } of files) {
-          const handle = await dir.getFileHandle(nameFor(file.name), { create: true });
-          const w = await handle.createWritable();
-          await w.write(json(file));
-          await w.close();
-        }
-        markSaved(files, activeId);
-        return;
-      }
-    }
-    for (const { file } of files) downloadText(json(file), nameFor(file.name));
-    markSaved(files, activeId);
-  }
-
-  /** Desktop: saves the open documents - only those in `only`, if given - each back to its own
-   * file, asking where for one never saved. Whether every one of them got saved. */
-  async function saveDocumentsDesktop(only?: Set<string>): Promise<boolean> {
-    if (!bridge) return false;
-    const docs = snapshotDocuments().filter((d) => !only || only.has(d.id));
-    const activeId = activeDocumentId();
-    let all = true;
-    for (const doc of docs) {
-      const file = stamped(doc.file);
-      let path: string | null | undefined = doc.path;
-      if (path) {
-        if (!(await bridge.saveFile(path, json(file)))) {
-          window.alert(`Couldn't save to ${path}.`);
-          all = false;
-          continue;
-        }
-      } else {
-        // Never saved: asked where, with the tab shown so it's clear which one.
-        switchDocument(doc.id);
-        path = await bridge.saveFileAs(`${safeFileName(doc.name)}.pgcl`, json(file));
-        if (!path) {
-          all = false;
-          continue;
-        }
-        setDocumentPath(doc.id, path);
-      }
-      rememberRecentFile(path);
-      markDocumentSaved(doc.id, file);
-      if (doc.id === activeDocumentId()) commitActiveSaved(file);
-      else updateDocumentFile(doc.id, file);
-    }
-    switchDocument(activeId);
-    return all;
-  }
-
-  function markSaved(files: Array<{ doc: { id: string }; file: ProjectFileV1 }>, activeId: string) {
-    for (const { doc, file } of files) {
-      if (doc.id === activeId) commitActiveSaved(file);
-      else updateDocumentFile(doc.id, file);
-    }
+  /** Firefox and Safari: the plain file chooser - the file opens, without a handle to write
+   * back to (its first Save asks for a name). */
+  function openViaInput(): Promise<void> {
+    return new Promise((resolve) => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.pgcl,.json,application/json';
+      input.addEventListener('change', () => {
+        const picked = input.files?.[0];
+        if (!picked) return resolve();
+        picked
+          .text()
+          .then((text) => openText(text))
+          .catch((err: unknown) => openFailed(picked.name, err))
+          .finally(() => resolve());
+      });
+      input.click();
+    });
   }
 
   async function open(): Promise<void> {
-    if (!bridge) {
-      const loadedName = await loadProjectFromPicker(deps.ctx, deps.viewport, () => {
-        if (prepareToOpen() === 'current') resetHistory();
-      });
-      if (loadedName) deps.setName(loadedName);
+    if (bridge) {
+      const f = await bridge.openFile();
+      if (f) openFromOutside(f);
       return;
     }
-    const f = await bridge.openFile();
-    if (f) openFromOutside(f);
+    type OpenPicker = (
+      opts: unknown,
+    ) => Promise<Array<FileHandleLike & { getFile(): Promise<File> }>>;
+    const pick = (window as unknown as { showOpenFilePicker?: OpenPicker }).showOpenFilePicker;
+    if (!pick || !canWriteBack()) return openViaInput();
+    let handle: (FileHandleLike & { getFile(): Promise<File> }) | undefined;
+    try {
+      [handle] = await pick({ types: PICKER_TYPES, id: PICKER_ID });
+    } catch (err) {
+      if (isAbort(err)) return;
+      return openViaInput();
+    }
+    if (!handle) return;
+    try {
+      openText(await (await handle.getFile()).text(), handle);
+    } catch (err) {
+      openFailed(handle.name, err);
+    }
   }
 
   /** A file from the start screen's recent list. One that's gone is taken off the list. */
@@ -316,8 +406,7 @@ export function createFileActions(deps: FileActionDeps): FileActions {
     // user chooses Save - has them saved before it closes (desktop/main.cjs).
     bridge.onCloseRequest(async (step) => {
       if (step === 'list') return unsavedDocuments().map((d) => d.name);
-      stopSimulation();
-      return saveDocumentsDesktop(new Set(unsavedDocuments().map((d) => d.id)));
+      return saveDocuments(new Set(unsavedDocuments().map((d) => d.id)));
     });
     // The window's title names the circuit, as a desktop program's does.
     const title = (): void => {
@@ -366,23 +455,21 @@ export function createFileActions(deps: FileActionDeps): FileActions {
     const key = e.key.toLowerCase();
     if (key === 's') {
       e.preventDefault();
-      void (e.shiftKey && bridge ? saveAsDesktop() : save());
+      void (e.shiftKey ? saveAs() : save());
     } else if (key === 'o' && !e.shiftKey) {
       e.preventDefault();
       void open();
     }
   });
 
-  return {
+  current = {
     save,
-    saveAs: async () => {
-      if (bridge) await saveAsDesktop();
-      else await save();
-    },
+    saveAs,
     saveAll,
     open,
     openRecent,
     exportAllSheets,
     isDesktop: bridge !== null,
   };
+  return current;
 }

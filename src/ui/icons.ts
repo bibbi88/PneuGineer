@@ -12,6 +12,8 @@
 export type IconName =
   | 'newDocument'
   | 'save'
+  | 'saveAs'
+  | 'saveAll'
   | 'folderOpen'
   | 'download'
   | 'play'
@@ -57,6 +59,19 @@ const ICONS: Record<IconName, Shape[]> = {
     ['path', { d: 'M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z' }],
     ['path', { d: 'M17 21v-8H7v8' }],
     ['path', { d: 'M7 3v5h8' }],
+  ],
+  // A disk with a pen: save under a new name.
+  saveAs: [
+    ['path', { d: 'M12 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v4' }],
+    ['path', { d: 'M7 3v5h8' }],
+    ['path', { d: 'M7 21v-6h5' }],
+    ['path', { d: 'm20.5 14.5-5.5 5.5-2.5.5.5-2.5 5.5-5.5a1.4 1.4 0 0 1 2 2Z' }],
+  ],
+  // Two disks: save every open document.
+  saveAll: [
+    ['path', { d: 'M17 21H7a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h8l4 4v8a2 2 0 0 1-2 2Z' }],
+    ['path', { d: 'M15 21v-5H9v5' }],
+    ['path', { d: 'M9 3h8l4 4v8' }],
   ],
   folderOpen: [
     [

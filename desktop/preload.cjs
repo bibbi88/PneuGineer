@@ -29,7 +29,7 @@ contextBridge.exposeInMainWorld('pneugineerDesktop', {
   // A file dropped on the window: its path on disk, to open it from there.
   pathForFile: (file) => webUtils.getPathForFile(file),
   saveFile: (path, text) => ipcRenderer.invoke('save-file', path, text),
-  saveFileAs: (suggestedName, text) => ipcRenderer.invoke('save-file-as', suggestedName, text),
+  chooseSavePath: (suggestedName) => ipcRenderer.invoke('choose-save-path', suggestedName),
   // Updates (desktop/main.cjs): whether this install can update itself, a check, its progress,
   // and installing a downloaded update.
   updates: {

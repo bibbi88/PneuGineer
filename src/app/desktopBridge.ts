@@ -36,9 +36,10 @@ export interface DesktopBridge {
   pathForFile(file: File): string;
   /** Writes `text` to `path`; whether it worked. */
   saveFile(path: string, text: string): Promise<boolean>;
-  /** Shows a Save As dialog starting at `suggestedName` and writes `text` there; the chosen
-   * path, or null if cancelled. */
-  saveFileAs(suggestedName: string, text: string): Promise<string | null>;
+  /** Shows a Save dialog starting at `suggestedName`; the chosen path (allowed for saveFile
+   * from then on), or null if cancelled. Behind the showSaveFilePicker stand-in
+   * (app/desktopFilePicker.ts). */
+  chooseSavePath(suggestedName: string): Promise<string | null>;
   /** Project files handed to the app from outside - double-clicked, or given on the command
    * line - including any it was started with. */
   onOpenFile(cb: (file: DesktopFile) => void): void;
