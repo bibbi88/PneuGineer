@@ -1,4 +1,5 @@
 import type { Component, SimStepContext, PortConnection } from '../core/types';
+import { defaultLosses, lossSpec, readLosses, rodForce } from './cylinderLosses';
 import { uid } from '../core/ids';
 import {
   buildComponentShell,
@@ -217,6 +218,7 @@ export function createCylinderDouble(compLayer: HTMLElement, x: number, y: numbe
   let strokeMm = DEFAULT_STROKE_MM;
   let massKg = DEFAULT_MASS_KG;
   let loadN = DEFAULT_LOAD_N;
+  let losses = defaultLosses();
   // Flow mode's physical state - chamber pressures and piston motion. Not saved: like the
   // logic model's own state, it starts from rest each time the simulation does.
   let flow = atRest(0);
@@ -259,8 +261,8 @@ export function createCylinderDouble(compLayer: HTMLElement, x: number, y: numbe
       load: loadN,
       // 10 mm worth of bore at each end (the tubing to the valve is the line's own volume).
       deadVolume: areaA * 0.01 + 1e-6,
-      // Seal friction grows with the bore; a few percent of the force at 6 bar.
-      friction: 0.03 * areaA * 6e5 + 5,
+      // Typical seal friction grows with the bore: a few percent of the force at 6 bar.
+      ...lossSpec(losses, 0.03 * areaA * 6e5 + 5),
       damping: 50,
     };
   }
@@ -319,7 +321,9 @@ export function createCylinderDouble(compLayer: HTMLElement, x: number, y: numbe
     pressureLabels.B.style.display = '';
 
     if (showForce) {
-      const force = (flow.pA - P_ATM) * spec.areaA - (flow.pB - P_ATM) * spec.areaB;
+      const fA = (flow.pA - P_ATM) * spec.areaA;
+      const fB = (flow.pB - P_ATM) * spec.areaB;
+      const force = rodForce(losses, fA - fB, Math.max(fA, fB));
       forceLabelEl.textContent = `${force.toFixed(0)} N`;
       forceLabelEl.style.display = '';
     } else {
@@ -450,7 +454,7 @@ export function createCylinderDouble(compLayer: HTMLElement, x: number, y: numbe
             : drivingPort === 'B'
               ? forceFromArea(annularAreaMm2(boreDiameter, rodDiameter), drivePressure)
               : 0;
-        forceLabelEl.textContent = `${force.toFixed(0)} N`;
+        forceLabelEl.textContent = `${rodForce(losses, force).toFixed(0)} N`;
         forceLabelEl.style.display = '';
       } else {
         forceLabelEl.style.display = 'none';
@@ -476,6 +480,7 @@ export function createCylinderDouble(compLayer: HTMLElement, x: number, y: numbe
         strokeMm,
         massKg,
         loadN,
+        ...losses,
         startExtended,
       };
     },
@@ -497,6 +502,7 @@ export function createCylinderDouble(compLayer: HTMLElement, x: number, y: numbe
       strokeMm = Number(data.strokeMm) || DEFAULT_STROKE_MM;
       massKg = Number(data.massKg) || DEFAULT_MASS_KG;
       loadN = Number.isFinite(Number(data.loadN)) ? Number(data.loadN) : DEFAULT_LOAD_N;
+      losses = readLosses(data, losses);
       // The actual force value depends on live pressurization, only known during step() - this
       // just gets the checkbox's own on/off state to take effect immediately (showing 0 N until
       // the sim's next tick recomputes it) instead of waiting on that next tick to even appear.

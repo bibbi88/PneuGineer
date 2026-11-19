@@ -1,4 +1,5 @@
 import type { Component, SimStepContext, PortConnection } from '../core/types';
+import { defaultLosses, lossSpec, readLosses, rodForce } from './cylinderLosses';
 import { uid } from '../core/ids';
 import {
   buildComponentShell,
@@ -265,6 +266,7 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
   let strokeMm = DEFAULT_STROKE_MM;
   let massKg = DEFAULT_MASS_KG;
   let loadN = DEFAULT_LOAD_N;
+  let losses = defaultLosses();
   // Flow mode's physical state (not saved - it starts from rest each run, like the logic
   // model's own state).
   let flow: SingleCylinderState = { p: P_ATM, x: 0, v: 0 };
@@ -341,7 +343,8 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
       mass: Math.max(massKg, 0.05),
       load: loadN,
       deadVolume: bore * 0.01 + 1e-6,
-      friction: 0.03 * bore * 6e5 + 5,
+      // Typical seal friction grows with the bore: a few percent of the force at 6 bar.
+      ...lossSpec(losses, 0.03 * bore * 6e5 + 5),
       damping: 50,
       restX: normallyExtended ? stroke : 0,
       springPreload: SPRING_AT_REST * fullForce,
@@ -396,7 +399,7 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
     pressureLabel.style.display = '';
 
     if (showForce) {
-      forceLabelEl.textContent = `${((flow.p - P_ATM) * spec.area).toFixed(0)} N`;
+      forceLabelEl.textContent = `${rodForce(losses, (flow.p - P_ATM) * spec.area).toFixed(0)} N`;
       forceLabelEl.style.display = '';
     } else {
       forceLabelEl.style.display = 'none';
@@ -475,7 +478,7 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
             ? forceFromArea(boreAreaMm2(boreDiameter), drivePressure)
             : forceFromArea(annularAreaMm2(boreDiameter, rodDiameter), drivePressure)
           : 0;
-        forceLabelEl.textContent = `${force.toFixed(0)} N`;
+        forceLabelEl.textContent = `${rodForce(losses, force).toFixed(0)} N`;
         forceLabelEl.style.display = '';
       } else {
         forceLabelEl.style.display = 'none';
@@ -503,6 +506,7 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
         strokeMm,
         massKg,
         loadN,
+        ...losses,
       };
     },
     restore(data: Record<string, unknown>): void {
@@ -520,6 +524,7 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
       strokeMm = Number(data.strokeMm) || DEFAULT_STROKE_MM;
       massKg = Number(data.massKg) || DEFAULT_MASS_KG;
       loadN = Number.isFinite(Number(data.loadN)) ? Number(data.loadN) : DEFAULT_LOAD_N;
+      losses = readLosses(data, losses);
       // The actual force value depends on live pressurization, only known during step() - this
       // just gets the checkbox's own on/off state to take effect immediately (showing 0 N until
       // the sim's next tick recomputes it) instead of waiting on that next tick to even appear.

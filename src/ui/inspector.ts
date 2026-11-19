@@ -1,4 +1,9 @@
 import type { Component } from '../core/types';
+import {
+  DEFAULT_EFFICIENCY_PCT,
+  MAX_EFFICIENCY_PCT,
+  MIN_EFFICIENCY_PCT,
+} from '../components/cylinderLosses';
 import type { ProjectBarRefs } from './projectBar';
 import { openTipsDialog } from './tipsDialog';
 import { openTermsDialog } from './termsDialog';
@@ -182,6 +187,11 @@ interface SelectField {
   options: Array<{ value: string; label: string }>;
 }
 
+/** A cylinder's losses: typical seal friction, or an efficiency η (components/cylinderLosses.ts). */
+interface CylinderLossesField {
+  kind: 'cylinderLosses';
+}
+
 /** A cylinder's size on one row - Ø bore / rod - stroke, in mm - under a line saying so. */
 interface CylinderDimsField {
   kind: 'cylinderDims';
@@ -213,6 +223,7 @@ interface MultilineTextField {
 }
 
 type InspectorField =
+  | CylinderLossesField
   | ValveConfiguratorField
   | ActionField
   | CylinderDimsField
@@ -332,6 +343,7 @@ const INSPECTOR_FIELDS: Record<string, InspectorField[]> = {
     { kind: 'cylinderDims' },
     { kind: 'number', key: 'massKg', label: 'Moving mass (kg)', min: 0.1, max: 1000, step: 0.5 },
     { kind: 'number', key: 'loadN', label: 'Load force (N)', min: -10000, max: 10000, step: 10 },
+    { kind: 'cylinderLosses' },
     {
       kind: 'checkboxRow',
       boxes: [
@@ -347,6 +359,7 @@ const INSPECTOR_FIELDS: Record<string, InspectorField[]> = {
     { kind: 'cylinderDims' },
     { kind: 'number', key: 'massKg', label: 'Moving mass (kg)', min: 0.1, max: 1000, step: 0.5 },
     { kind: 'number', key: 'loadN', label: 'Load force (N)', min: -10000, max: 10000, step: 10 },
+    { kind: 'cylinderLosses' },
     { kind: 'checkbox', key: 'showForce', label: 'Show force' },
     { kind: 'sensorList', arrayKey: 'sensors', min: 0, max: 100, step: 1 },
   ],
@@ -591,6 +604,62 @@ function renderNumberOrTextField(
 
   row.append(span, input);
   container.appendChild(row);
+}
+
+/** "Losses given as": typical seal friction (worked out from the bore), or an efficiency η - the
+ * rod then gives F = p·A·η. Only flow simulation and the force display use it. */
+function renderCylinderLossesField(
+  container: HTMLElement,
+  comp: Component,
+  snap: Record<string, unknown>,
+  refresh: () => void,
+): void {
+  const mode = snap.lossMode === 'efficiency' ? 'efficiency' : 'friction';
+  const row = document.createElement('label');
+  row.className = 'inspectorRow';
+  const span = document.createElement('span');
+  span.textContent = 'Losses given as';
+  const select = document.createElement('select');
+  select.setAttribute('aria-label', 'Losses given as');
+  select.append(
+    new Option('Typical seal friction', 'friction'),
+    new Option('Efficiency η (%)', 'efficiency'),
+  );
+  select.value = mode;
+  select.addEventListener('change', () => {
+    updateComponentField(comp, 'lossMode', select.value);
+    refresh();
+  });
+  row.append(span, select);
+  container.appendChild(row);
+
+  const hint = document.createElement('p');
+  hint.className = 'inspectorHint tipText';
+  if (mode === 'efficiency') {
+    renderNumberOrTextField(
+      container,
+      comp,
+      {
+        kind: 'number',
+        key: 'efficiencyPct',
+        label: 'Efficiency η (%)',
+        min: MIN_EFFICIENCY_PCT,
+        max: MAX_EFFICIENCY_PCT,
+        step: 1,
+      },
+      snap,
+    );
+    const eta = Number(snap.efficiencyPct ?? DEFAULT_EFFICIENCY_PCT);
+    hint.textContent =
+      `The seals take ${(100 - eta).toFixed(0)} % of the driving chamber's force: the rod ` +
+      'gives F = p·A·η, and the piston moves only once that exceeds the load. Used in Flow ' +
+      'simulation and by Show force.';
+  } else {
+    hint.textContent =
+      'Seal friction of a typical cylinder this size: a few percent of its force at 6 bar. ' +
+      'Used in Flow simulation.';
+  }
+  container.appendChild(hint);
 }
 
 /** Ø bore / rod - stroke, in mm, as three small boxes on one row under a line naming them. */
@@ -1414,6 +1483,8 @@ export function renderInspector(container: HTMLElement, projectBar: ProjectBarRe
       else if (field.kind === 'action') renderActionField(container, comp, field);
       else if (field.kind === 'valveConfigurator') renderValveConfigurator(container, comp);
       else if (field.kind === 'cylinderDims') renderCylinderDimsField(container, comp, snap);
+      else if (field.kind === 'cylinderLosses')
+        renderCylinderLossesField(container, comp, snap, refresh);
       else if (field.kind === 'readonlyText') renderReadonlyTextField(container, comp, field, snap);
       else if (field.kind === 'select') renderSelectField(container, comp, field, snap);
       else if (field.kind === 'multilineText')

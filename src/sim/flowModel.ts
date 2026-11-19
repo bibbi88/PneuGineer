@@ -100,6 +100,9 @@ export interface CylinderSpec {
   deadVolume: number;
   /** Coulomb (dry) friction of the seals, N. */
   friction: number;
+  /** Efficiency (0…1), instead of or besides `friction`: the seals then also take (1 − η) of
+   * the driving chamber's pressure force, so the rod gives F = p·A·η. */
+  efficiency?: number;
   /** Viscous friction, N per m/s. */
   damping: number;
 }
@@ -169,27 +172,42 @@ export function stepCylinder(
     state.pB = Math.max(state.pB, 1);
 
     // Pressure force (gauge on both sides: atmosphere acts on the rod's own cross-section).
-    const drive = (state.pA - P_ATM) * spec.areaA - (state.pB - P_ATM) * spec.areaB - spec.load;
-    movePiston(state, drive, spec, h);
+    const forceA = (state.pA - P_ATM) * spec.areaA;
+    const forceB = (state.pB - P_ATM) * spec.areaB;
+    const drive = forceA - forceB - spec.load;
+    const friction = sealFriction(spec, Math.max(forceA, forceB));
+    movePiston(state, drive, spec, friction, h);
   }
 
   return { qA: sumA / steps, qB: sumB / steps };
 }
 
+/** The seals' friction (N): the set friction, plus the share (1 − η) of the driving chamber's
+ * pressure force `chamberForce` (N) when the cylinder is given an efficiency η. */
+export function sealFriction(
+  spec: { friction: number; efficiency?: number },
+  chamberForce: number,
+): number {
+  if (spec.efficiency === undefined) return spec.friction;
+  const eta = Math.min(1, Math.max(0.05, spec.efficiency));
+  return spec.friction + (1 - eta) * Math.max(0, chamberForce);
+}
+
 /** One integration step of the piston: `drive` is the net force on it (N, positive extending)
- * before friction. Static friction holds it until `drive` exceeds it; moving, it's opposed by
+ * before `friction` (N). Static friction holds it until `drive` exceeds it; moving, it's opposed by
  * friction and damping, and it stops dead at either end stop. */
 function movePiston(
   state: { x: number; v: number },
   drive: number,
-  spec: { mass: number; friction: number; damping: number; stroke: number },
+  spec: { mass: number; damping: number; stroke: number },
+  friction: number,
   h: number,
 ): void {
-  if (Math.abs(state.v) < 1e-6 && Math.abs(drive) <= spec.friction) {
+  if (Math.abs(state.v) < 1e-6 && Math.abs(drive) <= friction) {
     state.v = 0;
   } else {
     const dir = state.v !== 0 ? Math.sign(state.v) : Math.sign(drive);
-    const accel = (drive - dir * spec.friction - spec.damping * state.v) / spec.mass;
+    const accel = (drive - dir * friction - spec.damping * state.v) / spec.mass;
     const vNext = state.v + accel * h;
     // Friction can stop the piston, never push it back the other way.
     state.v = state.v !== 0 && Math.sign(vNext) !== Math.sign(state.v) ? 0 : vNext;
@@ -217,6 +235,8 @@ export interface SingleCylinderSpec {
   load: number;
   deadVolume: number;
   friction: number;
+  /** See CylinderSpec.efficiency. */
+  efficiency?: number;
   damping: number;
   /** Where the spring returns the piston to, m (0 or stroke). */
   restX: number;
@@ -258,8 +278,9 @@ export function stepSingleCylinder(
     const springToward =
       spec.restX > state.x || (spec.restX === state.x && spec.restX > 0) ? 1 : -1;
     const spring = springToward * (spec.springPreload + spec.springRate * compressed);
-    const drive = spec.airDirection * (state.p - P_ATM) * spec.area + spring - spec.load;
-    movePiston(state, drive, spec, h);
+    const airForce = (state.p - P_ATM) * spec.area;
+    const drive = spec.airDirection * airForce + spring - spec.load;
+    movePiston(state, drive, spec, sealFriction(spec, airForce), h);
   }
   return sum / steps;
 }
