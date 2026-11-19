@@ -117,6 +117,10 @@ body.panelResizing * {
   border-right: 1px solid var(--line);
 }
 
+.topbarSection[hidden] {
+  display: none;
+}
+
 .topbarSection:first-child {
   padding-left: 0;
 }

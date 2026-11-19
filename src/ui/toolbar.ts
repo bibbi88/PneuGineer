@@ -66,9 +66,13 @@ export function renderToolbar(container: HTMLElement): void {
   onSettingsChange(followSimulationModel);
 
   // Undo and redo rebuild the circuit: only while it's stopped.
+  // Hidden while simulating, like the other editing buttons (Arrange).
   function updateUndoRedoButtons(): void {
-    undoBtn.disabled = !canUndo() || !canEdit(appState.mode);
-    redoBtn.disabled = !canRedo() || !canEdit(appState.mode);
+    const editable = canEdit(appState.mode);
+    undoBtn.hidden = !editable;
+    redoBtn.hidden = !editable;
+    undoBtn.disabled = !canUndo() || !editable;
+    redoBtn.disabled = !canRedo() || !editable;
   }
   onHistoryChange(updateUndoRedoButtons);
   appState.onModeChange(updateUndoRedoButtons);
