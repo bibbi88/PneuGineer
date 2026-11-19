@@ -125,6 +125,11 @@ body.panelResizing * {
   padding-left: 0;
 }
 
+/* A narrow window: the brand goes before the toolbar has to scroll (ui/topbar.ts, fitBrand). */
+.topbar--noBrand .brand {
+  display: none;
+}
+
 /* App name and version at the far left of the toolbar. */
 .brand {
   display: flex;
