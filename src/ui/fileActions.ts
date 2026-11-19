@@ -7,7 +7,6 @@ import { getDeviceId } from '../app/deviceId';
 import { desktopBridge, type DesktopFile } from '../app/desktopBridge';
 import {
   activeDocumentId,
-  forEachDocumentOnCanvas,
   listDocuments,
   markDocumentSaved,
   onDocumentsChange,
@@ -24,8 +23,6 @@ import { showToast } from './toast';
 import { resetHistory } from '../history/historyStore';
 import { loadProject, serializeProject, unixNow } from '../persistence/project';
 import { migrate } from '../persistence/migrations';
-import { downloadPdf, renderPdfPage, type PdfPaper } from '../persistence/exportImage';
-import { getPageFrameWorldBounds } from './pageFrame';
 import { forgetRecentFile, listRecentFiles, rememberRecentFile } from '../app/recentFiles';
 import {
   forgetRecentHandle,
@@ -34,7 +31,6 @@ import {
   type FileHandleRef,
 } from '../app/recentHandles';
 import { closeStartScreen } from './startScreen';
-import { computeContentBounds } from '../geometry/contentBounds';
 
 export interface FileActionDeps {
   ctx: ComponentFactoryContext;
@@ -64,12 +60,8 @@ export interface FileActions {
   openRecent(path: string): Promise<boolean>;
   /** The most recently opened or saved files, for the Open button's menu. */
   recentFiles(max?: number): Promise<RecentEntry[]>;
-  exportAllSheets(): Promise<void>;
   isDesktop: boolean;
 }
-
-/** Margin round a page frame's sheet in an exported page - as the export dialog's. */
-const FRAME_EXPORT_PADDING = 40;
 
 /** The browser's save dialog remembers its last folder under this. */
 const PICKER_ID = 'pneugineer-files';
@@ -146,7 +138,7 @@ export function saveDocumentById(id: string): Promise<boolean> {
 }
 
 /**
- * Save, Save as, Save all, Open and Export all sheets - for the toolbar and its menus, the tab
+ * Save, Save as, Save all and Open - for the toolbar and its menus, the tab
  * menu, and Ctrl+S / Ctrl+Shift+S / Ctrl+O.
  *
  * Save writes back to the document's file without asking, once it has one (fileHandles); the
@@ -437,33 +429,6 @@ export function createFileActions(deps: FileActionDeps): FileActions {
     return true;
   }
 
-  /** Every open circuit as one PDF, a page each: its page frame's sheet on that paper if it has
-   * one, else the whole circuit on A4. Empty circuits are left out. */
-  async function exportAllSheets(): Promise<void> {
-    const pages: NonNullable<Awaited<ReturnType<typeof renderPdfPage>>>[] = [];
-    const first = listDocuments()[0]?.name ?? 'circuits';
-    await forEachDocumentOnCanvas(async (doc) => {
-      if (computeContentBounds() === null && getPageFrameWorldBounds() === null) return;
-      const frame = getPageFrameWorldBounds();
-      const region = frame
-        ? {
-            minX: frame.minX - FRAME_EXPORT_PADDING,
-            minY: frame.minY - FRAME_EXPORT_PADDING,
-            maxX: frame.maxX + FRAME_EXPORT_PADDING,
-            maxY: frame.maxY + FRAME_EXPORT_PADDING,
-          }
-        : 'auto';
-      const paper: PdfPaper = appState.pageFrameSize === 'a3' ? 'a3' : 'a4';
-      const page = await renderPdfPage(doc.name, deps.connLayer, deps.frameLayer, region, paper);
-      if (page) pages.push(page);
-    });
-    if (pages.length === 0) {
-      window.alert('Nothing to export - every open circuit is empty.');
-      return;
-    }
-    downloadPdf(`${safeFileName(first)} - all sheets`, pages);
-  }
-
   if (bridge) {
     bridge.onOpenFile(openFromOutside);
     // Closing the window: the desktop app asks which circuits have unsaved changes, and - if the
@@ -533,7 +498,6 @@ export function createFileActions(deps: FileActionDeps): FileActions {
     open,
     openRecent,
     recentFiles,
-    exportAllSheets,
     isDesktop: bridge !== null,
   };
   return current;

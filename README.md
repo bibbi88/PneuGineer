@@ -31,13 +31,22 @@ modeled as a simple pressurized/not-pressurized graph, not real fluid dynamics.
 - Click a port, then click another port to wire them together. Click a wire while linking to
   split it into a junction. Double-click a wire to drag its bend.
 - Use Play / Pause / Step / Stop to run the simulation, and Undo / Redo to step through edits.
-- Save / Load a project as JSON, or export the circuit as an SVG or PNG. Work is autosaved
-  locally and offered back if you return to an unsaved session.
+  While paused, Pause reads Play and resumes. A video recording pauses with the simulation.
+- **Save** writes back to the circuit's file once it has one (Chrome, Edge, the desktop app);
+  the ▾ beside it has Save as and Save all. **Open**'s ▾ lists the five most recent files and
+  the examples.
+- **Export** the circuit as PDF, SVG or PNG, with a zoom (fit to page, or 25-400 %). The ▾
+  beside it has **Export several circuits**: tick which open circuits, one PDF with a page each,
+  a PDF each, or PNG/SVG images, with a page preview and settings of its own per circuit.
+- Each cylinder's losses are typical seal friction, or an efficiency η (the rod gives
+  F = p·A·η).
+- The toolbar shows each button's name under its icon; **Settings → Toolbar** can show icons
+  only. Work is autosaved locally and offered back if you return to an unsaved session.
 
 Several circuits can be open at once, as **tabs** above the canvas (or listed in the inspector -
 see **Settings**, the gear in the toolbar), each with its own undo history. **New circuit** in
-the toolbar (or + on the tab bar) opens an empty one; the **Examples** menu and loaded files open
-in a new tab. Every open circuit is kept in the browser and is back after a reload.
+the toolbar (or + on the tab bar) opens an empty one; the examples (under Open's ▾) and loaded files
+open in a new tab. Every open circuit is kept in the browser and is back after a reload.
 
 ## Running PneuGineer
 
