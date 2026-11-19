@@ -2345,6 +2345,16 @@ body.libraryDragging * {
   color: #d00;
 }
 
+/* Paused with the simulation: the time stands still, greyed. */
+.recordTime--paused {
+  color: var(--muted);
+}
+
+.recordTime--paused::after {
+  content: ' ❚❚';
+  font-size: 9px;
+}
+
 /* The desktop app's start screen (ui/startScreen.ts): over the app, under dialogs such as the
    terms (z-index 2000). */
 .startScreen {
@@ -2615,8 +2625,14 @@ body.libraryDragging * {
   grid-template-columns: 34px 1fr auto;
   align-items: center;
   gap: 10px;
+  width: 100%;
   padding: 8px 10px;
+  border: 0;
   border-radius: 8px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
   cursor: pointer;
   outline: none;
 }
@@ -2697,6 +2713,85 @@ body.libraryDragging * {
 
 .saveMenuFooter b {
   color: var(--ink);
+}
+
+/* The Open menu: recent files, then the examples (a scrolling list of their own). */
+.menuHeading {
+  padding: 8px 10px 4px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.menuNote {
+  padding: 4px 10px 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.menuScroll {
+  max-height: min(320px, 45vh);
+  overflow-y: auto;
+}
+
+.saveMenu .saveMenuItem + .menuSection,
+.saveMenu .menuSection + .menuHeading {
+  margin-top: 4px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.saveMenuItem--compact {
+  grid-template-columns: 24px 1fr auto;
+  padding: 5px 10px;
+}
+
+.saveMenuItem--compact .saveMenuIcon {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+}
+
+.saveMenuItem--compact .saveMenuIcon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.saveMenuItem--compact .saveMenuText b {
+  font-weight: 500;
+  font-size: 13px;
+}
+
+/* A button's name under its icon: shown in the toolbar while Settings → Toolbar says "Icons with
+   text below" (ui/topbar.ts, ui/iconButton.ts); otherwise only the tooltip names it. */
+.iconBtnCaption {
+  display: none;
+}
+
+.topbar--text .iconBtn:not(.iconBtn--menuArrow) {
+  flex-direction: column;
+  gap: 2px;
+  width: auto;
+  min-width: 38px;
+  height: auto;
+  padding: 4px 5px 3px;
+}
+
+.topbar--text .iconBtnCaption {
+  display: block;
+  font-size: 11px;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.topbar--text .iconBtn.iconBtn--menuArrow {
+  align-self: stretch;
+  height: auto;
+}
+
+.iconBtn--menuArrow .iconBtnCaption {
+  display: none !important;
 }
 
 /* A short message at the bottom of the window (ui/toast.ts). */
