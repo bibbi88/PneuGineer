@@ -1,4 +1,5 @@
 import { JUNCTION_TYPE, readJunctionHost, remapJunctionHost } from '../components/junction';
+import { getSettings } from '../app/settings';
 import { restoreFlowRating, snapshotWithFlowRating } from '../sim/flowRatings';
 import type { ComponentFactoryContext } from '../components/registry';
 import type { ViewportAdapter } from '../ui/viewport';
@@ -143,8 +144,9 @@ function loadProjectUnchecked(
     appState.pageFrameSize = file.pageFrame?.size ?? 'none';
     appState.pageFrameX = file.pageFrame?.x ?? 0;
     appState.pageFrameY = file.pageFrame?.y ?? 0;
-    // Flow is the default; only a project saved in logic mode opens in it.
-    appState.simulationMode = file.simulation?.mode === 'logic' ? 'logic' : 'flow';
+    // The simulation model is the viewer's setting (Settings → Simulation), not the file's: the
+    // file still records the one it was saved with, for older versions.
+    appState.simulationMode = getSettings().simulationModel;
     appState.lineJumps = file.lineJumps !== false;
     appState.projectOriginDeviceId = file.os ?? file.origin ?? null;
     appState.projectLastSavedDeviceId = file.LS ?? file.lastSaved ?? null;

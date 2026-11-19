@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { resetSettings, updateSettings } from '../app/settings';
 import { appState } from '../app/AppState';
 import { initWires, createConnection } from '../wires/connection';
 import { stepSimulation } from '../sim/engine';
@@ -168,11 +169,20 @@ describe('simulation mode in the project file', () => {
     expect(appState.simulationMode).toBe('flow');
   });
 
-  it('opens a project saved in logic mode in logic mode', () => {
+  it("the model is the viewer's setting, not the file's: Flow unless Settings says Logic", () => {
     appState.simulationMode = 'logic';
     const file = serializeProject('test');
-    appState.simulationMode = 'flow';
+    expect(file.simulation).toEqual({ mode: 'logic' });
     loadProject(file, { compLayer: layer() }, viewport);
-    expect(appState.simulationMode).toBe('logic');
+    expect(appState.simulationMode).toBe('flow');
+
+    updateSettings({ simulationModel: 'logic' });
+    try {
+      appState.simulationMode = 'flow';
+      loadProject(serializeProject('test'), { compLayer: layer() }, viewport);
+      expect(appState.simulationMode).toBe('logic');
+    } finally {
+      resetSettings();
+    }
   });
 });

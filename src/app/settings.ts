@@ -18,6 +18,9 @@ export interface Settings {
   checkUpdates: boolean;
   /** The toolbar's buttons: an icon with its name under it, or the icon alone. */
   toolbarStyle: 'text' | 'icons';
+  /** The simulation model: flow (pressures, throttles, loads) or the older logic model (a line
+   * has air or it has not), kept for a while as an option. */
+  simulationModel: 'flow' | 'logic';
 }
 
 const STORAGE_KEY = 'pneugineer.settings';
@@ -29,6 +32,7 @@ const DEFAULTS: Settings = {
   showTips: false,
   checkUpdates: true,
   toolbarStyle: 'text',
+  simulationModel: 'flow',
 };
 
 let settings: Settings = load();
@@ -46,6 +50,7 @@ function load(): Settings {
       checkUpdates:
         typeof saved.checkUpdates === 'boolean' ? saved.checkUpdates : DEFAULTS.checkUpdates,
       toolbarStyle: saved.toolbarStyle === 'icons' ? 'icons' : DEFAULTS.toolbarStyle,
+      simulationModel: saved.simulationModel === 'logic' ? 'logic' : DEFAULTS.simulationModel,
     };
   } catch {
     return { ...DEFAULTS };

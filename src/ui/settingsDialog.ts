@@ -105,6 +105,34 @@ export function openSettingsDialog(): void {
   styleRow.append(styleLabel, style);
   dialog.appendChild(styleRow);
 
+  const simHeading = document.createElement('div');
+  simHeading.className = 'inspectorSectionHeading';
+  simHeading.textContent = 'Simulation';
+  dialog.appendChild(simHeading);
+  const modelRow = document.createElement('label');
+  modelRow.className = 'inspectorRow';
+  const modelLabel = document.createElement('span');
+  modelLabel.textContent = 'Model';
+  const model = document.createElement('select');
+  const models: Array<{ value: Settings['simulationModel']; label: string }> = [
+    { value: 'flow', label: 'Flow - pressures, throttles and loads' },
+    { value: 'logic', label: 'Logic - a line has air or not (older)' },
+  ];
+  for (const m of models) model.appendChild(new Option(m.label, m.value));
+  model.value = settings.simulationModel;
+  model.addEventListener('change', () =>
+    updateSettings({ simulationModel: model.value as Settings['simulationModel'] }),
+  );
+  modelRow.append(modelLabel, model);
+  dialog.appendChild(modelRow);
+  const modelHint = document.createElement('p');
+  modelHint.className = 'inspectorHint';
+  modelHint.textContent =
+    'Flow: pressures build up and fall, and throttles and loads set the speed. Logic is the ' +
+    'older, simpler model and may be removed in a later version. Changing it stops a running ' +
+    'simulation.';
+  dialog.appendChild(modelHint);
+
   const heading = document.createElement('div');
   heading.className = 'inspectorSectionHeading';
   heading.textContent = 'Documents';

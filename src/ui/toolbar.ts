@@ -4,6 +4,7 @@ import { requestSingleStep } from '../sim/loop';
 import { stopSimulation } from '../sim/stopSimulation';
 import { undo, redo, canUndo, canRedo, onHistoryChange } from '../history/historyStore';
 import { iconButton, setIconButtonLabel } from './iconButton';
+import { getSettings, onSettingsChange } from '../app/settings';
 import { formatSimSpeed, getSimSpeed, setSimSpeed, SIM_SPEEDS } from '../app/simSpeed';
 
 /** The toolbar's simulation section: run/stop, pause and single-step the simulation, then undo
@@ -52,6 +53,18 @@ export function renderToolbar(container: HTMLElement): void {
   updatePlayStopButton();
   appState.onModeChange(updatePlayStopButton);
 
+  // The simulation model is a setting (Settings → Simulation): flow by default, logic for a
+  // while longer as an option. Changing it stops a running simulation first - switching models
+  // mid-run would leave each half-way through the other's state.
+  function followSimulationModel(): void {
+    const model = getSettings().simulationModel;
+    if (appState.simulationMode === model) return;
+    if (appState.mode !== Modes.STOP) stopSimulation();
+    appState.simulationMode = model;
+  }
+  followSimulationModel();
+  onSettingsChange(followSimulationModel);
+
   // Undo and redo rebuild the circuit: only while it's stopped.
   function updateUndoRedoButtons(): void {
     undoBtn.disabled = !canUndo() || !canEdit(appState.mode);
@@ -61,19 +74,19 @@ export function renderToolbar(container: HTMLElement): void {
   appState.onModeChange(updateUndoRedoButtons);
   updateUndoRedoButtons();
 
-  container.append(
-    playStopBtn,
-    pauseBtn,
-    stepBtn,
-    renderSimulationModeSwitch(),
-    renderSimulationSpeed(),
-    undoBtn,
-    redoBtn,
-  );
+  // The speed slider is shown only while simulating (running or paused), like Record.
+  const speed = renderSimulationSpeed();
+  const followSimulating = (): void => {
+    speed.hidden = appState.mode === Modes.STOP;
+  };
+  followSimulating();
+  appState.onModeChange(followSimulating);
+
+  container.append(playStopBtn, pauseBtn, stepBtn, speed, undoBtn, redoBtn);
 }
 
 /** Simulation speed: a slider stepping through SIM_SPEEDS, with the current speed beside it.
- * Changeable any time, including while the simulation runs. */
+ * Shown while simulating, and changeable while it runs. */
 function renderSimulationSpeed(): HTMLElement {
   const wrap = document.createElement('label');
   wrap.className = 'simSpeed';
@@ -106,56 +119,4 @@ function renderSimulationSpeed(): HTMLElement {
   show();
   wrap.append(slider, value);
   return wrap;
-}
-
-/** Logic / Flow switch: which model the simulation runs (see AppState.simulationMode). Only
- * changeable while stopped - switching models mid-run would leave each half-way through the
- * other's state. */
-function renderSimulationModeSwitch(): HTMLElement {
-  const group = document.createElement('div');
-  group.className = 'simModeSwitch';
-  group.setAttribute('role', 'radiogroup');
-  group.setAttribute('aria-label', 'Simulation model');
-
-  const options: Array<{ mode: 'logic' | 'flow'; label: string; title: string }> = [
-    { mode: 'logic', label: 'Logic', title: 'Logic: a line has air or it has not' },
-    {
-      mode: 'flow',
-      label: 'Flow',
-      title: 'Flow: pressures build up and fall, throttles and loads set the speed',
-    },
-  ];
-  const buttons = options.map(({ mode, label, title }) => {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'simModeBtn';
-    btn.textContent = label;
-    btn.title = title;
-    btn.setAttribute('role', 'radio');
-    btn.dataset.mode = mode;
-    btn.addEventListener('click', () => {
-      if (appState.mode !== Modes.STOP || appState.simulationMode === mode) return;
-      appState.simulationMode = mode;
-      appState.markDirty();
-      update();
-    });
-    group.appendChild(btn);
-    return btn;
-  });
-
-  function update(): void {
-    const stopped = appState.mode === Modes.STOP;
-    for (const btn of buttons) {
-      const active = btn.dataset.mode === appState.simulationMode;
-      btn.classList.toggle('simModeBtn--active', active);
-      btn.setAttribute('aria-checked', String(active));
-      btn.disabled = !stopped && !active;
-    }
-    group.classList.toggle('simModeSwitch--locked', !stopped);
-  }
-  update();
-  appState.onModeChange(update);
-  // A loaded project brings its own mode with it.
-  appState.onChange(update);
-  return group;
 }
