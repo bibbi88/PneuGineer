@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- AppStream metadata for Flathub and software centres (see flathub/README.md). -->
+<component type="desktop-application">
+  <id>io.github.bibbi88.PneuGineer</id>
+  <name>PneuGineer</name>
+  <summary>Draw and simulate pneumatic circuits</summary>
+  <developer id="io.github.bibbi88">
+    <name>bibbi88</name>
+  </developer>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <launchable type="desktop-id">io.github.bibbi88.PneuGineer.desktop</launchable>
+  <description>
+    <p>
+      PneuGineer is a pneumatic circuit editor and simulator for learning and teaching pneumatics
+      and electro-pneumatics. Drag valves, cylinders and air supplies onto a canvas, wire them
+      together with ISO 1219 symbols and run the simulation: pressures build up and fall, and
+      throttles and loads set how fast the cylinders move.
+    </p>
+    <ul>
+      <li>Directional valves operated by hand, by air, by solenoid or by roller</li>
+      <li>AND and OR valves, timers, counters and pressure sequence valves</li>
+      <li>Flow controls, quick exhaust valves, pressure regulators and flow meters</li>
+      <li>Cylinders with loads, moving masses, friction or efficiency, and sensors</li>
+      <li>Electrical control: push buttons, relays, solenoids, sensors and a small PLC</li>
+      <li>Ready-made example circuits to start from, and several circuits open at once in tabs</li>
+      <li>Export to PDF, PNG and SVG, one circuit or many, and record a video of a simulation</li>
+    </ul>
+    <p>
+      The simulation is a simplified model for education. It is not a design or safety tool.
+    </p>
+  </description>
+  <categories>
+    <category>Education</category>
+    <category>Engineering</category>
+  </categories>
+  <keywords>
+    <keyword>pneumatics</keyword>
+    <keyword>circuit</keyword>
+    <keyword>simulation</keyword>
+    <keyword>ISO 1219</keyword>
+  </keywords>
+  <url type="homepage">https://bibbi88.github.io/PneuGineer/</url>
+  <url type="bugtracker">https://github.com/bibbi88/PneuGineer/issues</url>
+  <url type="vcs-browser">https://github.com/bibbi88/PneuGineer</url>
+  <screenshots>
+    <screenshot type="default">
+      <caption>A circuit being simulated, with the pressures in the lines</caption>
+      <image>https://raw.githubusercontent.com/bibbi88/PneuGineer/main/docs/screenshots/simulation.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Drawing a circuit, with the component library and the inspector</caption>
+      <image>https://raw.githubusercontent.com/bibbi88/PneuGineer/main/docs/screenshots/editor.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Exporting several circuits, with a preview of each page</caption>
+      <image>https://raw.githubusercontent.com/bibbi88/PneuGineer/main/docs/screenshots/export.png</image>
+    </screenshot>
+  </screenshots>
+  <content_rating type="oars-1.1"/>
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+  </supports>
+  <requires>
+    <display_length compare="ge">768</display_length>
+  </requires>
+  <provides>
+    <mediatype>application/x-pneugineer</mediatype>
+  </provides>
+  <releases>
+    <!-- Newest first. Add one for each version tag before pushing the tag (flathub/README.md). -->
+    <release version="26.1201.0" date="2026-12-01">
+      <description>
+        <p>First release on Flathub.</p>
+      </description>
+    </release>
+  </releases>
+</component>

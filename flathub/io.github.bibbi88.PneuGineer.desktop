@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=PneuGineer
+GenericName=Pneumatic circuit simulator
+Comment=Draw pneumatic circuits with ISO 1219 symbols and simulate their pressures and flows
+Exec=pneugineer @@u %U @@
+Icon=io.github.bibbi88.PneuGineer
+Terminal=false
+Categories=Education;Engineering;
+Keywords=pneumatics;pneumatic;circuit;simulation;ISO 1219;cylinder;valve;compressed air;
+MimeType=application/x-pneugineer;
+StartupWMClass=PneuGineer

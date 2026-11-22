@@ -97,15 +97,21 @@ file) and never goes online.
 Both are built by GitHub Actions ([`.github/workflows/desktop.yml`](.github/workflows/desktop.yml))
 from [`desktop/`](desktop/) - an Electron shell around the built `dist/index.html` - on every push
 to `main`, into the [latest release](https://github.com/bibbi88/PneuGineer/releases/latest). The
-links above always fetch the newest. For a numbered release of its own, push a version tag:
+links above always fetch the newest. For a numbered release of its own (what Flathub packages),
+push a version tag named after the day, in the same form as the builds' versions:
 
 ```bash
-git tag v1.0.0
-git push origin v1.0.0
+git tag v26.1201.0
+git push origin v26.1201.0
 ```
 
 The workflow can also be run by hand on any branch (**Actions → Desktop apps → Run workflow**);
 such a run keeps the installer and the Flatpak as downloadable artifacts, without a release.
+
+**Flathub.** [`flathub/`](flathub/) has everything needed to publish PneuGineer on Flathub - the
+manifest, the store listing, the file type - and how to release and submit it
+([`flathub/README.md`](flathub/README.md)). The **Flathub check** workflow builds and lints the
+package exactly as Flathub would, on every push to `dev` that touches the desktop app.
 
 ### 4. From source
 

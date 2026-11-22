@@ -11,7 +11,8 @@
     "start": "electron .",
     "dist:win": "electron-builder --win nsis --publish never",
     "dist:flatpak": "electron-builder --linux flatpak --publish never",
-    "dist:appimage": "electron-builder --linux AppImage --publish never"
+    "dist:appimage": "electron-builder --linux AppImage --publish never",
+    "dist:tarball": "electron-builder --linux tar.gz --publish never -c.linux.artifactName='PneuGineer-linux-x64.${ext}'"
   },
   "devDependencies": {
     "electron": "45.3.2",
@@ -56,7 +57,8 @@
       "category": "Education",
       "synopsis": "Pneumatic circuit editor and simulator",
       "description": "Draw pneumatic and electro-pneumatic circuits with ISO 1219 symbols and simulate them.",
-      "artifactName": "PneuGineer.${ext}"
+      "artifactName": "PneuGineer.${ext}",
+      "executableName": "pneugineer"
     },
     "flatpak": {
       "runtime": "org.freedesktop.Platform",

@@ -7,7 +7,10 @@
 #     https://github.com/bibbi88/PneuGineer/releases/latest/download/PneuGineer.flatpak
 #     https://github.com/bibbi88/PneuGineer/releases/latest/download/PneuGineer.AppImage
 #     https://github.com/bibbi88/PneuGineer/releases/latest/download/PneuGineer.html
-# - pushing a version tag (git tag v1.2.3 && git push origin v1.2.3) makes a release of its own.
+#     https://github.com/bibbi88/PneuGineer/releases/latest/download/PneuGineer-linux-x64.tar.gz
+#   (the last one is what the Flathub package installs - see flathub/README.md)
+# - pushing a version tag (git tag v26.1201.0 && git push origin v26.1201.0) makes a release of
+#   its own, with that version - what Flathub packages (flathub/README.md).
 #
 # Can also be started by hand on any branch (Actions > Desktop apps > Run workflow); such runs
 # keep both files as downloadable artifacts without publishing a release.
@@ -113,7 +116,7 @@ jobs:
           if-no-files-found: error
 
   appimage:
-    name: Linux AppImage
+    name: Linux AppImage and tar.gz
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -136,6 +139,8 @@ jobs:
           npm ci
           npm pkg set version="$(../.github/desktop-version.sh)"
           npm run dist:appimage
+          # The same build as a plain tar.gz - what the Flathub package installs (flathub/).
+          npm run dist:tarball
       # latest-linux.yml is what an installed AppImage reads to find a newer version.
       - name: Check the update file is there
         run: test -f desktop/release/latest-linux.yml && cat desktop/release/latest-linux.yml
@@ -145,6 +150,7 @@ jobs:
           path: |
             desktop/release/*.AppImage
             desktop/release/latest-linux.yml
+            desktop/release/PneuGineer-linux-x64.tar.gz
           if-no-files-found: error
 
   release:
@@ -188,10 +194,12 @@ jobs:
               It's the whole app in one file, and works offline - from a USB stick, too.
 
             Or use it online: https://bibbi88.github.io/PneuGineer/
+      # A release of its own - not marked "latest", so the links above (and the installed apps'
+      # update check) keep following main.
       - name: Versioned release (from a tag)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          make_latest: true
+          make_latest: false
           files: artifacts/*
           generate_release_notes: true
