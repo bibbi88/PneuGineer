@@ -38,6 +38,12 @@ modeled as a simple pressurized/not-pressurized graph, not real fluid dynamics.
 - **Export** the circuit as PDF, SVG or PNG, with a zoom (fit to page, or 25-400 %). The ▾
   beside it has **Export several circuits**: tick which open circuits, one PDF with a page each,
   a PDF each, or PNG/SVG images, with a page preview and settings of its own per circuit.
+- **Diagrams** (toolbar) plots what each run recorded - cylinder position, speed, chamber
+  pressures, force and air used, the supply's air, flow meters, valves switching over, and every
+  sensor, relay and solenoid - between any two events (e.g. from A0 turning off to it turning on
+  again: one cycle, a displacement-step diagram). It lists start, end, min, max, average and
+  integral (the air in Nl, energy in J), works out ratios, is saved with the circuit, and the
+  whole run exports as CSV. The automatic-cycle example comes with one set up.
 - Each cylinder's losses are typical seal friction, or an efficiency η (the rod gives
   F = p·A·η).
 - The toolbar shows each button's name under its icon; **Settings → Toolbar** can show icons

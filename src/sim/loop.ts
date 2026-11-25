@@ -8,6 +8,7 @@ import { resetFlowNetwork } from './flowNetwork';
 import { MAX_DT } from './constants';
 import { redrawMovedConnections } from '../wires/connection';
 import { getSimSpeed } from '../app/simSpeed';
+import { initRecorder, recordStep } from './recorder';
 
 let lastTime = performance.now();
 let stepOnce = false;
@@ -35,6 +36,7 @@ function tick(now: number): void {
   // zero time step is one the flow model can't take.
   if ((appState.mode === Modes.PLAY || stepOnce) && dt > 0) {
     const graph = stepSimulation(dt);
+    recordStep(dt, graph.pressurized);
     applyToDom(graph);
     // A component can move its own ports in response to simulation state (a valve's spool
     // sliding its pilot ports along) without any of the edit-time triggers that redraw wires -
@@ -55,6 +57,7 @@ function tick(now: number): void {
 
 export function startSimLoop(): void {
   lastTime = performance.now();
+  initRecorder();
   // Shown at rest again after any change or mode switch.
   appState.onChange(() => {
     restShown = false;

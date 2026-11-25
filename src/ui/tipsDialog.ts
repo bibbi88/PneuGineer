@@ -53,6 +53,9 @@ const TIP_SECTIONS: TipSection[] = [
       'The ▾ beside Open lists your five most recent files and the examples - ready-made ' +
         'circuits to start from, each in a new tab, like a loaded file.',
       'Settings → Toolbar chooses icons with their names below, or icons only.',
+      'Diagrams (toolbar) plots what each run recorded - cylinder positions, speeds, pressures ' +
+        'and forces, the air used, valves switching, sensors, relays and solenoids - between any ' +
+        'two events, and works out figures such as the air a cycle uses.',
       'Tabs above the canvas hold several circuits at once, each with its own undo history. ' +
         'Click + (or the New circuit button) for a new one, double-click a tab to rename it, ' +
         'middle-click or × to close it, right-click for more. They are kept in the browser, so ' +

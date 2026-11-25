@@ -1,4 +1,5 @@
-import type { Component, SimStepContext, PortConnection } from '../core/types';
+import type { Component, Probe, SimStepContext, PortConnection } from '../core/types';
+import { cylinderProbes } from './cylinderProbes';
 import { defaultLosses, lossSpec, readLosses, rodForce } from './cylinderLosses';
 import { uid } from '../core/ids';
 import {
@@ -15,6 +16,7 @@ import {
   P_ATM,
   stepSingleCylinder,
   toGaugeBar,
+  toNormalLitresPerMinute,
   type SingleCylinderSpec,
   type SingleCylinderState,
 } from '../sim/flowModel';
@@ -597,6 +599,41 @@ export function createCylinderSingle(compLayer: HTMLElement, x: number, y: numbe
       redrawAllConnections();
       appState.markDirty();
     },
+  };
+
+  // What it measured, for the diagram recorder (components/cylinderProbes.ts) - after each
+  // step, in either simulation model.
+  let probeList: Probe[] = [];
+  comp.probes = () => probeList;
+  const stepModel = comp.step!;
+  comp.step = (dt: number, ctx: SimStepContext): void => {
+    const before = pos;
+    stepModel(dt, ctx);
+    const v = dt > 0 ? ((pos - before) * strokeMm) / 1000 / dt : 0;
+    if (ctx.flowMode) {
+      const spec = flowSpec();
+      const t = frameFlow.time || 1;
+      probeList = cylinderProbes({
+        xMm: pos * strokeMm,
+        v,
+        pA: toGaugeBar(flow.p),
+        force: spec.airDirection * rodForce(losses, (flow.p - P_ATM) * spec.area),
+        airNlpm: toNormalLitresPerMinute(Math.max(0, frameFlow.q / t)),
+        load: loadN,
+      });
+    } else {
+      const pA = ctx.pressureAt('A');
+      const area =
+        mode === 'push' ? boreAreaMm2(boreDiameter) : annularAreaMm2(boreDiameter, rodDiameter);
+      probeList = cylinderProbes({
+        xMm: pos * strokeMm,
+        v,
+        pA,
+        force: (mode === 'push' ? 1 : -1) * rodForce(losses, forceFromArea(area, pA)),
+        airNlpm: Number.NaN,
+        load: loadN,
+      });
+    }
   };
 
   return comp;

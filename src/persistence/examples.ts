@@ -1,6 +1,7 @@
 import { unixNow } from './project';
 import type { ProjectFileV1, ComponentSnapshot, ConnectionSnapshot } from './schema';
 import { CURRENT_SCHEMA_VERSION } from './schema';
+import type { DiagramConfig } from '../app/diagrams';
 import { createComponent } from '../components/registry';
 
 /** Each component type's own data as freshly placed, built once from a throwaway instance (like
@@ -27,8 +28,12 @@ function defaultData(type: string): Record<string, unknown> {
 function circuit(name: string, build: (b: Builder) => void): ProjectFileV1 {
   const comps: ComponentSnapshot[] = [];
   const conns: ConnectionSnapshot[] = [];
+  const diagrams: DiagramConfig[] = [];
   let next = 1;
   const b: Builder = {
+    diagram(d) {
+      diagrams.push({ id: `example${diagrams.length + 1}`, ratios: [], ...d });
+    },
     add(type, x, y, data = {}, rot) {
       const id = next++;
       comps.push({
@@ -53,18 +58,28 @@ function circuit(name: string, build: (b: Builder) => void): ProjectFileV1 {
   };
   build(b);
   // Opening an example starts a new project: created now.
-  return { schemaVersion: CURRENT_SCHEMA_VERSION, name, ct: unixNow(), comps, conns };
+  return {
+    schemaVersion: CURRENT_SCHEMA_VERSION,
+    name,
+    ct: unixNow(),
+    comps,
+    conns,
+    ...(diagrams.length ? { diagrams } : {}),
+  };
 }
 
 interface Builder {
   add(type: string, x: number, y: number, data?: Record<string, unknown>, rot?: number): number;
   wire(a: number, ap: string, b: number, bp: string): void;
+  /** A diagram of the recorded run, set up and saved with the example (app/diagrams.ts). */
+  diagram(d: Omit<DiagramConfig, 'id' | 'ratios'> & { ratios?: DiagramConfig['ratios'] }): void;
 }
 
 /** A pressure source whose outlet sits `below` px under the port at (x, y), feeding it. */
-function supply(b: Builder, id: number, port: string, x: number, y: number, below = 40): void {
+function supply(b: Builder, id: number, port: string, x: number, y: number, below = 40): number {
   const source = b.add('source', x, y + below + 20);
   b.wire(source, 'OUT', id, port);
+  return source;
 }
 
 export const EXAMPLES: Array<{ title: string; file: () => ProjectFileV1 }> = [
@@ -104,7 +119,8 @@ export const EXAMPLES: Array<{ title: string; file: () => ProjectFileV1 }> = [
     file: () =>
       // Press Start while the cylinder is in (limit valve A0 held down): the AND valve passes
       // the signal to pilot 14 and the cylinder extends. At the end of the stroke limit valve A1
-      // pilots 12 and it comes back. Hold Start down for continuous cycling.
+      // pilots 12 and it comes back. Hold Start down for continuous cycling. Diagrams (toolbar) plots
+      // one cycle.
       circuit('Example - automatic cycle', (b) => {
         const cyl = b.add('cylinderDouble', 480, 100, { letter: 'A' });
         const valve = b.add('valve52', 470, 300);
@@ -118,10 +134,23 @@ export const EXAMPLES: Array<{ title: string; file: () => ProjectFileV1 }> = [
         b.wire(a0, '2', and, 'B');
         b.wire(and, 'OUT', valve, '14');
         b.wire(a1, '2', valve, '12');
-        supply(b, valve, '1', 490, 340, 50);
+        const mainSupply = supply(b, valve, '1', 490, 340, 50);
         supply(b, start, '1', 120, 580);
         supply(b, a0, '1', 420, 580);
         supply(b, a1, '1', 670, 490);
+        // Diagrams (toolbar): one cycle, from the rod leaving A0 to it being back - where the
+        // rod is, the valve switching, and the air the cylinder takes over the cycle.
+        b.diagram({
+          title: 'One cycle: displacement-step diagram and air used',
+          series: [
+            { compId: cyl, key: 'x' },
+            { compId: valve, key: 'switched' },
+            { compId: cyl, key: 'air' },
+            { compId: mainSupply, key: 'q' },
+          ],
+          from: { kind: 'signal', name: 'A0', edge: 'off', n: 1 },
+          to: { kind: 'signal', name: 'A0', edge: 'on', n: 1 },
+        });
       }),
   },
 ];

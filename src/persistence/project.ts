@@ -1,3 +1,4 @@
+import { restoreDiagrams, serializeDiagrams } from '../app/diagrams';
 import { JUNCTION_TYPE, readJunctionHost, remapJunctionHost } from '../components/junction';
 import { getSettings } from '../app/settings';
 import { restoreFlowRating, snapshotWithFlowRating } from '../sim/flowRatings';
@@ -64,6 +65,7 @@ export function serializeProject(name: string): ProjectFileV1 {
     },
     simulation: { mode: appState.simulationMode },
     ...(appState.lineJumps ? {} : { lineJumps: false }),
+    ...(serializeDiagrams() ? { diagrams: serializeDiagrams() } : {}),
     comps: appState.components.map((c) => ({
       id: c.id,
       type: c.type,
@@ -173,6 +175,7 @@ function loadProjectUnchecked(
       idMap.set(snap.id, comp.id);
     }
     retargetTaps(idMap);
+    restoreDiagrams(file.diagrams, idMap);
 
     for (const snap of file.conns) {
       const fromId = idMap.get(snap.from.id);
@@ -222,5 +225,9 @@ export function projectSignature(file: ProjectFileV1): string {
     meta: file.meta ?? null,
     pageFrame: file.pageFrame ?? null,
     lineJumps: file.lineJumps ?? true,
+    // Components referred to by their place in the file, as the wires are.
+    diagrams: JSON.stringify(file.diagrams ?? null, (k, v: unknown) =>
+      k === 'compId' && typeof v === 'number' ? index.get(v) : v,
+    ),
   });
 }

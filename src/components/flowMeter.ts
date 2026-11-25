@@ -1,4 +1,5 @@
-import type { Component, PortConnection, SimStepContext } from '../core/types';
+import type { Component, PortConnection, Probe, SimStepContext } from '../core/types';
+import { cleanZero } from './cylinderProbes';
 import { uid } from '../core/ids';
 import { buildComponentShell, createPort, createSvgEl } from './shared/svgHelpers';
 import { flowThrough } from '../sim/flowNetwork';
@@ -101,9 +102,13 @@ export function createFlowMeter(compLayer: HTMLElement, x: number, y: number): C
     reading.style.display = 'none';
   }
 
+  // What it measured, for the diagram recorder (sim/recorder.ts).
+  let probeList: Probe[] = [];
+
   const comp: Component = {
     id: uid(),
     type: FLOW_METER_TYPE,
+    probes: () => probeList,
     el: shell.el,
     x,
     y,
@@ -120,9 +125,18 @@ export function createFlowMeter(compLayer: HTMLElement, x: number, y: number): C
     step(dt: number, ctx: SimStepContext): void {
       if (!ctx.flowMode) {
         hide();
+        probeList = [];
         return;
       }
       const massFlow = flowThrough(comp.id, 'IN', 'OUT') ?? 0;
+      probeList = [
+        {
+          key: 'q',
+          label: 'Flow',
+          unit: 'Nl/min',
+          value: cleanZero(toNormalLitresPerMinute(massFlow)),
+        },
+      ];
       totalLitres += Math.abs(massFlow) * dt * LITRES_PER_KG;
       smoothed += (massFlow - smoothed) * Math.min(1, dt / SMOOTHING);
       rateEl.textContent = formatRate(toNormalLitresPerMinute(smoothed));

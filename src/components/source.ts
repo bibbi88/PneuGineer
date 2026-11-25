@@ -1,4 +1,5 @@
-import type { Component, PortConnection, SimStepContext } from '../core/types';
+import type { Component, PortConnection, Probe, SimStepContext } from '../core/types';
+import { cleanZero } from './cylinderProbes';
 import { uid } from '../core/ids';
 import { buildComponentShell, createSvgEl, createPort } from './shared/svgHelpers';
 import { flowSupplyRate } from '../sim/flowNetwork';
@@ -110,6 +111,8 @@ export function createSource(compLayer: HTMLElement, x: number, y: number): Comp
   consumptionEl.style.display = 'none';
   shell.el.appendChild(consumptionEl);
   let smoothed = 0;
+  // What it measured, for the diagram recorder (sim/recorder.ts): the air it supplies.
+  let probeList: Probe[] = [];
 
   const comp: Component = {
     id: uid(),
@@ -130,6 +133,7 @@ export function createSource(compLayer: HTMLElement, x: number, y: number): Comp
     sourcePorts(): string[] {
       return ['OUT'];
     },
+    probes: () => probeList,
 
     snapshot(): Record<string, unknown> {
       return { showName: shell.getNameVisible(), customName: shell.getCustomName() };
@@ -141,11 +145,20 @@ export function createSource(compLayer: HTMLElement, x: number, y: number): Comp
     step(dt: number, ctx: SimStepContext): void {
       if (!ctx.flowMode) {
         consumptionEl.style.display = 'none';
+        probeList = [];
         return;
       }
       const rate = flowSupplyRate(portKey(comp.id, 'OUT')) ?? 0;
       smoothed += (rate - smoothed) * Math.min(1, dt / CONSUMPTION_SMOOTHING);
       const lpm = Math.max(0, toNormalLitresPerMinute(smoothed));
+      probeList = [
+        {
+          key: 'q',
+          label: 'Air supplied',
+          unit: 'Nl/min',
+          value: cleanZero(Math.max(0, toNormalLitresPerMinute(rate))),
+        },
+      ];
       consumptionEl.textContent = `${lpm < 0.5 ? 0 : lpm.toFixed(0)} l/min`;
       consumptionEl.style.display = '';
     },

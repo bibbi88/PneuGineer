@@ -1,4 +1,5 @@
-import type { Component, SimStepContext, PortConnection } from '../core/types';
+import type { Component, Probe, SimStepContext, PortConnection } from '../core/types';
+import { cylinderProbes } from './cylinderProbes';
 import { defaultLosses, lossSpec, readLosses, rodForce } from './cylinderLosses';
 import { uid } from '../core/ids';
 import {
@@ -16,6 +17,7 @@ import {
   P_ATM,
   stepCylinder,
   toGaugeBar,
+  toNormalLitresPerMinute,
   type CylinderSpec,
   type PortFeed,
 } from '../sim/flowModel';
@@ -558,6 +560,47 @@ export function createCylinderDouble(compLayer: HTMLElement, x: number, y: numbe
       appState.markDirty();
       return true;
     },
+  };
+
+  // What it measured, for the diagram recorder (components/cylinderProbes.ts) - after each
+  // step, in either simulation model.
+  let probeList: Probe[] = [];
+  comp.probes = () => probeList;
+  const stepModel = comp.step!;
+  comp.step = (dt: number, ctx: SimStepContext): void => {
+    const before = pos;
+    stepModel(dt, ctx);
+    const v = dt > 0 ? ((pos - before) * strokeMm) / 1000 / dt : 0;
+    if (ctx.flowMode) {
+      const spec = flowSpec();
+      const fA = (flow.pA - P_ATM) * spec.areaA;
+      const fB = (flow.pB - P_ATM) * spec.areaB;
+      const t = frameFlow.time || 1;
+      const inflow = Math.max(0, frameFlow.A / t) + Math.max(0, frameFlow.B / t);
+      probeList = cylinderProbes({
+        xMm: pos * strokeMm,
+        v,
+        pA: toGaugeBar(flow.pA),
+        pB: toGaugeBar(flow.pB),
+        force: rodForce(losses, fA - fB, Math.max(fA, fB)),
+        airNlpm: toNormalLitresPerMinute(inflow),
+        load: loadN,
+      });
+    } else {
+      const pA = ctx.pressureAt('A');
+      const pB = ctx.pressureAt('B');
+      const fA = forceFromArea(boreAreaMm2(boreDiameter), pA);
+      const fB = forceFromArea(annularAreaMm2(boreDiameter, rodDiameter), pB);
+      probeList = cylinderProbes({
+        xMm: pos * strokeMm,
+        v,
+        pA,
+        pB,
+        force: rodForce(losses, fA - fB, Math.max(fA, fB)),
+        airNlpm: Number.NaN,
+        load: loadN,
+      });
+    }
   };
 
   return comp;
